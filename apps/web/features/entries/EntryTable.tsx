@@ -95,21 +95,38 @@ export function EntryTable({
               {/* Grades */}
               <td className="px-4 py-2">
                 <div className="space-y-2">
-                  {entry.players.map((player) =>
-                    player.grade ? (
-                      <GradeBand
-                        key={player.userId}
-                        lower={player.grade.lower}
-                        upper={player.grade.upper}
-                        score={player.grade.score}
-                        label={player.grade.label}
-                      />
-                    ) : (
-                      <span key={player.userId} data-testid="entry-grade-hidden">
-                        ซ่อนอยู่
-                      </span>
-                    )
-                  )}
+                  {entry.players.map((player, idx) => (
+                    <div key={player.userId ?? idx} className="space-y-1">
+                      {player.grade ? (
+                        <>
+                          <div className="text-sm flex flex-wrap items-center gap-1.5">
+                            {player.displayName ? (
+                              <span className="font-medium">{player.displayName}</span>
+                            ) : null}
+                            <span data-testid="entry-grade-text">
+                              <span className="font-bold">{player.grade.label}</span>
+                              {` · ช่วง ${player.grade.lower}–${player.grade.upper}`}
+                            </span>
+                          </div>
+                          <GradeBand
+                            lower={player.grade.lower}
+                            upper={player.grade.upper}
+                            score={player.grade.score}
+                            label={player.grade.label}
+                          />
+                        </>
+                      ) : (
+                        <div className="text-sm flex flex-wrap items-center gap-1.5">
+                          {player.displayName ? (
+                            <span className="font-medium">{player.displayName}</span>
+                          ) : null}
+                          <span data-testid="entry-grade-hidden" className="text-muted-foreground">
+                            ซ่อนอยู่
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </td>
 
@@ -118,7 +135,7 @@ export function EntryTable({
                 {entry.warnings && entry.warnings.length > 0 ? (
                   <ul data-testid="entry-warnings" className="space-y-1">
                     {entry.warnings.map((warning) => (
-                      <li key={warning} className="text-sm px-2 py-1 bg-yellow-100 text-yellow-900 rounded">
+                      <li key={warning} className="text-sm px-2 py-1 bg-warning text-warning-foreground rounded">
                         {WARNING_LABELS[warning] || warning}
                       </li>
                     ))}

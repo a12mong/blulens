@@ -190,8 +190,8 @@ describe('EntryTable', () => {
     render(<EntryTable entries={entries} mode="admin" />);
 
     expect(screen.getByText('Mixed Doubles A')).toBeInTheDocument();
-    expect(screen.getByText(/Alice/)).toBeInTheDocument();
-    expect(screen.getByText(/Bob/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Alice/)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Bob/)[0]).toBeInTheDocument();
     expect(screen.getByText(/\(2\)/)).toBeInTheDocument(); // Alice's teamCount
   });
 
@@ -266,5 +266,57 @@ describe('EntryTable', () => {
     expect(screen.getByTestId('entry-forward')).toBeInTheDocument();
     rerender(<EntryTable entries={[draft]} mode="admin" onForward={vi.fn()} onEdit={vi.fn()} />);
     expect(screen.getByTestId('entry-edit')).toBeInTheDocument();
+  });
+
+  it('shows the grade label and range as text for each player', () => {
+    const entry = createMockEntry({
+      players: [
+        {
+          userId: 'p1',
+          displayName: 'สมชาย',
+          grade: {
+            score: 7.5,
+            lower: 'S-',
+            upper: 'S+',
+            center: 'S',
+            tier: 'Standard',
+            kind: 'exact',
+            label: 'S',
+          },
+        },
+        {
+          userId: 'p2',
+          displayName: 'วิภา',
+          grade: null,
+        },
+      ],
+    });
+
+    render(<EntryTable entries={[entry]} mode="admin" />);
+
+    const gradeText = screen.getByTestId('entry-grade-text');
+    expect(gradeText).toHaveTextContent('S');
+    expect(gradeText).toHaveTextContent('S-');
+    expect(gradeText).toHaveTextContent('S+');
+    expect(gradeText).toHaveTextContent('S · ช่วง S-–S+');
+
+    const hidden = screen.getByTestId('entry-grade-hidden');
+    expect(hidden).toHaveTextContent('ซ่อนอยู่');
+
+    expect(screen.getAllByText('สมชาย')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('วิภา')[0]).toBeInTheDocument();
+  });
+
+  it('warning chip uses theme tokens and has no raw yellow classes', () => {
+    const entry = createMockEntry({
+      warnings: ['MULTI_TEAM'],
+    });
+
+    render(<EntryTable entries={[entry]} mode="admin" />);
+
+    const chip = screen.getByTestId('entry-warnings').querySelector('li');
+    expect(chip).toHaveClass('bg-warning');
+    expect(chip).toHaveClass('text-warning-foreground');
+    expect(chip?.className).not.toMatch(/yellow/);
   });
 });
