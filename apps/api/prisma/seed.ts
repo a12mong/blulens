@@ -3,6 +3,7 @@
  * Roles are a fixed enum (A2), so there is nothing to seed for them.
  * Run: pnpm db:seed   (reads ../../.env; SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD)
  */
+import { randomUUID } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/common/crypto/password';
 import { normalizeTeamName } from '@blulens/shared';
@@ -53,7 +54,9 @@ async function seedAdmin(): Promise<string> {
 }
 
 async function seedRubric(): Promise<string> {
-  const existing = await prisma.rubric.findUnique({ where: { methodVersion: GRADING_V1.methodVersion } });
+  const existing = await prisma.rubric.findUnique({
+    where: { methodVersion: GRADING_V1.methodVersion },
+  });
   if (existing) return 'rubric grading-v1: exists';
   const anyActive = await prisma.rubric.findFirst({ where: { active: true } });
   await prisma.rubric.create({ data: { ...GRADING_V1, active: !anyActive } });
@@ -62,7 +65,23 @@ async function seedRubric(): Promise<string> {
 
 // ---------------------------------------------------------------- demo data (dev only: SEED_DEMO=1)
 
-const GRADE_KEYS = ['RK1', 'RK2', 'RK3', 'BG1', 'BG2', 'BG3', 'S-', 'S', 'S+', 'N-', 'N', 'N+', 'P-', 'P', 'P+'];
+const GRADE_KEYS = [
+  'RK1',
+  'RK2',
+  'RK3',
+  'BG1',
+  'BG2',
+  'BG3',
+  'S-',
+  'S',
+  'S+',
+  'N-',
+  'N',
+  'N+',
+  'P-',
+  'P',
+  'P+',
+];
 
 /** name_key / alias_key are already normalised (lower-case, single spaces). */
 const DEMO_TEAMS = [
@@ -94,10 +113,18 @@ const DEMO_MEMBERS = [
   { n: 14, name: 'ปิยะพัฒน์ เกิดสถาน', grade: 6, teams: ['สโมสรลูกขนไก่นนทบุรี'] },
 ];
 
-async function upsertUser(email: string, displayName: string, password: string, roles: Array<'Committee' | 'Member'>) {
+async function upsertUser(
+  email: string,
+  displayName: string,
+  password: string,
+  roles: Array<'Admin' | 'Committee' | 'Member' | 'Reviewer'>,
+) {
   const existing = await prisma.user.findUnique({ where: { email } });
   const user =
-    existing ?? (await prisma.user.create({ data: { email, displayName, passwordHash: await hashPassword(password) } }));
+    existing ??
+    (await prisma.user.create({
+      data: { email, displayName, passwordHash: await hashPassword(password) },
+    }));
   for (const role of roles) {
     await prisma.userRole.upsert({
       where: { userId_role: { userId: user.id, role } },
@@ -129,17 +156,31 @@ async function createDemoEntry(
       forwardedAt: now,
       ...(status === 'approved' ? { decidedAt: now, decidedBy: adminId } : {}),
       players: {
-        create: rows.map(({ c, teamId }) => ({ userId: c.userId, eventId, gradeResultId: c.resultId, teamId, gradeConsent: false })),
+        create: rows.map(({ c, teamId }) => ({
+          userId: c.userId,
+          eventId,
+          gradeResultId: c.resultId,
+          teamId,
+          gradeConsent: false,
+        })),
       },
     },
   });
 }
 
 /** Candidates whose grade index lies in [min, max], in seed order. */
-const inBand = (map: Map<string, Omit<DemoCandidate, 'userId'>>, min: number, max: number): DemoCandidate[] =>
-  [...map.entries()].filter(([, i]) => i.grade >= min && i.grade <= max).map(([userId, i]) => ({ userId, ...i }));
+const inBand = (
+  map: Map<string, Omit<DemoCandidate, 'userId'>>,
+  min: number,
+  max: number,
+): DemoCandidate[] =>
+  [...map.entries()]
+    .filter(([, i]) => i.grade >= min && i.grade <= max)
+    .map(([userId, i]) => ({ userId, ...i }));
 
-async function seedDemoTournament(adminId: string | null): Promise<{ created: number; draftCreated: boolean }> {
+async function seedDemoTournament(
+  adminId: string | null,
+): Promise<{ created: number; draftCreated: boolean }> {
   const tournamentName = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3';
   const draftTournamentName = 'แบดมินตันสัมพันธ์ประจำเดือน';
 
@@ -246,7 +287,15 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
     // MD (doubles, 2 players each): 3 approved + 2 pending pairs from S-..S+ players
     const md = inBand(userGradeMap, 6, 8);
     for (let i = 0; i < 5 && 2 * i + 1 < md.length; i++) {
-      await createDemoEntry(tx, mdEvent.id, [md[2 * i]!, md[2 * i + 1]!], teamByKey, i < 3 ? 'approved' : 'pending_committee', adminId, now);
+      await createDemoEntry(
+        tx,
+        mdEvent.id,
+        [md[2 * i]!, md[2 * i + 1]!],
+        teamByKey,
+        i < 3 ? 'approved' : 'pending_committee',
+        adminId,
+        now,
+      );
     }
 
     // MS (singles): 2 approved from S..N players
@@ -350,7 +399,15 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
       const md2027 = inBand(userGradeMap, 7, 10);
       const now = new Date();
       for (let i = 0; i < 2 && 2 * i + 1 < md2027.length; i++) {
-        await createDemoEntry(tx, mdEvent2027.id, [md2027[2 * i]!, md2027[2 * i + 1]!], teamByKey, 'approved', adminId, now);
+        await createDemoEntry(
+          tx,
+          mdEvent2027.id,
+          [md2027[2 * i]!, md2027[2 * i + 1]!],
+          teamByKey,
+          'approved',
+          adminId,
+          now,
+        );
       }
 
       return 1;
@@ -380,6 +437,12 @@ async function seedDemo(): Promise<string> {
 
   await upsertUser('committee@blulens.local', 'คณะกรรมการ (เดโม)', password, ['Committee']);
 
+  const reviewers = [
+    await upsertUser('reviewer1@blulens.local', 'ผู้ตรวจ 1', password, ['Reviewer']),
+    await upsertUser('reviewer2@blulens.local', 'ผู้ตรวจ 2', password, ['Reviewer']),
+    await upsertUser('reviewer3@blulens.local', 'ผู้ตรวจ 3', password, ['Reviewer']),
+  ];
+
   const teamIdByKey = new Map<string, string>();
   for (const t of DEMO_TEAMS) {
     const team = await prisma.team.upsert({
@@ -402,7 +465,9 @@ async function seedDemo(): Promise<string> {
     const user = await upsertUser(`member${m.n}@blulens.local`, m.name, password, ['Member']);
     for (const key of m.teams) {
       const teamId = teamIdByKey.get(key)!;
-      const open = await prisma.teamMembership.findFirst({ where: { userId: user.id, teamId, validTo: null } });
+      const open = await prisma.teamMembership.findFirst({
+        where: { userId: user.id, teamId, validTo: null },
+      });
       if (!open) await prisma.teamMembership.create({ data: { userId: user.id, teamId } });
     }
     // D-S3: an official grade so entries pass the grade checks (an override result: margin 0, exact)
@@ -411,7 +476,12 @@ async function seedDemo(): Promise<string> {
     });
     if (!graded) {
       const assessment = await prisma.assessment.create({
-        data: { subjectUserId: user.id, rubricId: rubric?.id, status: 'overridden', submittedAt: new Date() },
+        data: {
+          subjectUserId: user.id,
+          rubricId: rubric?.id,
+          status: 'overridden',
+          submittedAt: new Date(),
+        },
       });
       await prisma.assessmentResult.create({
         data: {
@@ -437,6 +507,10 @@ async function seedDemo(): Promise<string> {
     }
   }
 
+  // Create demo reviews (open review queue for reviewer1 & reviewer2)
+  const reviewsMsg = await seedDemoReviews(admin?.id ?? null, reviewers);
+  console.log(reviewsMsg);
+
   // Create demo tournament (open and draft)
   const tourResult = await seedDemoTournament(admin?.id ?? null);
   const tournamentsMsg =
@@ -444,7 +518,102 @@ async function seedDemo(): Promise<string> {
       ? `tournaments: ${tourResult.created + (tourResult.draftCreated ? 1 : 0)} created`
       : 'tournaments: exists';
 
-  return `demo: ok (committee + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg})`;
+  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg})`;
+}
+
+async function seedDemoReviews(
+  adminId: string | null,
+  reviewers: Array<{ id: string; email: string }>,
+): Promise<string> {
+  const activeRubric =
+    (await prisma.rubric.findFirst({ where: { active: true } })) ??
+    (await prisma.rubric.findUnique({ where: { methodVersion: 'grading-v1' } }));
+
+  const subjectEmails = ['member7@blulens.local', 'member8@blulens.local'];
+  let created = 0;
+
+  for (const email of subjectEmails) {
+    const subject = await prisma.user.findUnique({ where: { email } });
+    if (!subject) continue;
+
+    // Idempotency marker: an Assessment with note 'demo-seed: review queue' for that subject
+    const existing = await prisma.assessment.findFirst({
+      where: {
+        subjectUserId: subject.id,
+        note: 'demo-seed: review queue',
+      },
+    });
+    if (existing) continue;
+
+    await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const dueAt = new Date(now.getTime() + 48 * 3600 * 1000);
+
+      const assessment = await tx.assessment.create({
+        data: {
+          subjectUserId: subject.id,
+          rubricId: activeRubric?.id,
+          status: 'in_review',
+          submittedAt: now,
+          note: 'demo-seed: review queue',
+        },
+      });
+
+      const clipId = randomUUID();
+      await tx.clip.create({
+        data: {
+          id: clipId,
+          assessmentId: assessment.id,
+          objectKey: `/e2e/sample.mp4?c=${clipId}`,
+          status: 'uploaded',
+          contentType: 'video/mp4',
+          durationSec: 4,
+        },
+      });
+
+      await tx.assessmentTransition.create({
+        data: {
+          assessmentId: assessment.id,
+          fromStatus: 'draft',
+          toStatus: 'submitted',
+          actorId: null,
+          reason: 'demo seed',
+          createdAt: now,
+        },
+      });
+
+      await tx.assessmentTransition.create({
+        data: {
+          assessmentId: assessment.id,
+          fromStatus: 'submitted',
+          toStatus: 'in_review',
+          actorId: null,
+          reason: 'demo seed',
+          createdAt: now,
+        },
+      });
+
+      // open ReviewAssignments for reviewer1 and reviewer2 (dueAt now + 48h, assignedBy admin id or null)
+      // Never assign a reviewer to an assessment of themselves.
+      const assignedReviewers = [reviewers[0]!, reviewers[1]!].filter((r) => r.id !== subject.id);
+      for (const rev of assignedReviewers) {
+        await tx.reviewAssignment.create({
+          data: {
+            kind: 'assessment',
+            assessmentId: assessment.id,
+            reviewerId: rev.id,
+            state: 'open',
+            dueAt,
+            assignedBy: adminId,
+          },
+        });
+      }
+    });
+
+    created++;
+  }
+
+  return created > 0 ? `demo reviews: ${created} created` : 'demo reviews: exists';
 }
 
 async function main() {
