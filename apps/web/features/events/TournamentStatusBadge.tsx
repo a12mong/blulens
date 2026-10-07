@@ -7,7 +7,7 @@ export type TournamentStatusBadgeProps = {
   status: TournamentStatus;
 };
 
-export const STATUS_CONFIG: Record<
+const STATUS_CONFIG: Record<
   TournamentStatus,
   { label: string; symbol: string; className: string }
 > = {
