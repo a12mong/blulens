@@ -656,7 +656,47 @@ paths:
             schema: { $ref: '#/components/schemas/TournamentInput' }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Tournament' } } } }
+  /tournaments/{tournamentId}:
+    get:
+      tags: [tournaments]
+      summary: Tournament detail with its events (bl-21 slice)
+      x-roles: [Guest, Member, Reviewer, Umpire, Committee, Admin]
+      description: Guest/Member see only tournaments that are not draft.
+      parameters: [{ $ref: '#/components/parameters/TournamentId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TournamentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tournaments/{tournamentId}/status:
+    post:
+      tags: [tournaments]
+      summary: 'Move the tournament through its lifecycle: draft -> open (entries accepted) -> closed (entries locked; also automatic at entriesCloseAt) -> running -> finished'
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/TournamentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { type: string, enum: [open, closed, running, finished] }
+                reason: { type: string, description: required when re-opening is ever allowed (not in v1) }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TournamentDetail' } } } }
+        '409': { description: 'TOURNAMENT_INVALID_TRANSITION (allowed: draft->open, open->closed, closed->running, running->finished)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /tournaments/{tournamentId}/events:
+    get:
+      tags: [tournaments]
+      summary: Events of a tournament (bl-21 slice)
+      x-roles: [Guest, Member, Reviewer, Umpire, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/TournamentId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Event' } }
     post:
       tags: [tournaments]
       summary: Add an event (e.g. men's singles, grade band S-..S+)
@@ -669,6 +709,15 @@ paths:
             schema: { $ref: '#/components/schemas/EventInput' }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
+  /events/{eventId}:
+    get:
+      tags: [tournaments]
+      summary: Event detail incl. tournament status and entry count (bl-21 slice)
+      x-roles: [Guest, Member, Reviewer, Umpire, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/EventDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /events/{eventId}/entries:
     get:
       tags: [tournaments]
@@ -683,7 +732,7 @@ paths:
               schema: { type: array, items: { $ref: '#/components/schemas/Entry' } }
     post:
       tags: [tournaments]
-      summary: Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band.
+      summary: 'Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band; tournament must be open (ENTRIES_CLOSED otherwise). No clip on entries: clips belong to assessments (A13 fresh assessment).'
       x-roles: [Member, Committee]
       parameters: [{ $ref: '#/components/parameters/EventId' }]
       requestBody:
@@ -1335,6 +1384,20 @@ components:
           properties:
             id: { type: string, format: uuid }
             status: { type: string, enum: [draft, open, closed, running, finished] }
+    TournamentDetail:
+      allOf:
+        - { $ref: '#/components/schemas/Tournament' }
+        - type: object
+          properties:
+            events: { type: array, items: { $ref: '#/components/schemas/Event' } }
+    EventDetail:
+      allOf:
+        - { $ref: '#/components/schemas/Event' }
+        - type: object
+          properties:
+            tournamentName: { type: string }
+            tournamentStatus: { type: string, enum: [draft, open, closed, running, finished] }
+            entryCount: { type: integer }
     TournamentPage:
       type: object
       required: [items]
