@@ -16,7 +16,7 @@ pnpm --filter @blulens/web exec playwright install chromium
 ตัวแปรที่ต้องมีในสภาพแวดล้อมตอนรัน test (อ่านจาก `.env`, **ห้ามพิมพ์ค่าลง log/แชท**): `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD`
 
 ## 2. เปิดเซิร์ฟเวอร์ (ต้องใช้พอร์ตของตัวเอง ห้าม restart API กลางที่ 3101)
-กฎ Origin: API ยอมรับเฉพาะ `WEB_URL` ที่ตั้งไว้ และ web ต้อง rewrite `/api/*` ไป API ของตัวเอง (ค่า `API_URL` ถูกอ่านตอน start ของ Next)
+กฎ Origin: ตั้งแต่ develop 76a2270 (bl-21-10) เมื่อ `NODE_ENV=development` (ค่าเริ่มต้นใน `.env.example`) API ยอมรับ origin `http://localhost:<พอร์ตใดก็ได้>` — ไม่ต้องตั้ง `WEB_URL` ต่อพอร์ตอีก (ถ้าไม่ใช่ dev ให้ตั้ง `WEB_URLS` เป็นรายการคั่นด้วยจุลภาค); web ต้อง rewrite `/api/*` ไป API ของตัวเอง (ค่า `API_URL` ถูกอ่านตอน start ของ Next) — รีสตาร์ท API หลัง pull
 
 ตัวอย่าง (web 3190, api 3191):
 ```bash
@@ -57,7 +57,7 @@ pnpm exec playwright test --project=setup --project=chromium   # ส่วน UI
 ## 6. ห้ามรันบน DB เดโมที่ใช้ร่วมกัน — ใช้ DB แยกของ e2e (ตัดสินใจโดย god)
 การรัน e2e ทุกรอบสร้างทัวร์นาเมนต์/entry ใหม่ จึงทำให้หน้า `/events` ของเดโมรก (Pam review #12-13) — ให้ใช้ฐานข้อมูลแยกชื่อ `blulens_e2e`:
 ```bash
-docker exec blulens-postgres psql -U blulens -c "CREATE DATABASE blulens_e2e;"      # ครั้งแรก
+docker exec blulens-postgres psql -U blulens -d postgres -c "CREATE DATABASE blulens_e2e OWNER blulens_app;"   # ครั้งแรก — ต้อง OWNER blulens_app ไม่งั้น migrate ขึ้น 'permission denied for schema public'
 export DATABASE_URL="postgresql://<user>:<pass>@localhost:5442/blulens_e2e?schema=public"   # ใช้ user/pass จาก .env (อย่าพิมพ์ค่า)
 pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ของ e2e (ตัวแปรนี้ใช้กับ API process ของ e2e เท่านั้น)
 ```
@@ -73,3 +73,7 @@ pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ขอ�
 | API jest | `<DB ใน DATABASE_URL>_test` (override ด้วย `TEST_DATABASE_URL`) เช่น `blulens_demo_test` | สร้าง/migrate/seed (admin + rubric) อัตโนมัติ (bl-21-9) |
 | Playwright e2e | `blulens_e2e` (seed ด้วย `SEED_DEMO=1`) | ตามข้อ 6 |
 ก่อนรัน e2e ให้ตรวจ `DATABASE_URL` ของ API process ที่ใช้: ต้องลงท้าย `/blulens_e2e` เท่านั้น
+
+## 9. หมายเหตุ UI ที่ test ต้องรู้
+- กด Approve ใน Committee queue จะเปิด dialog ยืนยัน (`approve-confirm` / `approve-cancel`, bl-26-3) — test ต้องกดยืนยันก่อนรอ POST `/approve`
+- Approve ของ entry ที่เกรดนอกช่วงใช้ dialog เหตุผล ≥ 20 ตัวอักษร
