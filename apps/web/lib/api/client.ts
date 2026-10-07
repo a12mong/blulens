@@ -61,6 +61,25 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
 }
 
+async function readBody(response: Response): Promise<unknown> {
+  if (response.status === 204) {
+    return undefined;
+  }
+
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType?.includes('application/json');
+
+  if (!isJson) {
+    throw new ApiRequestError(0, 'NETWORK_ERROR', 'Invalid response format');
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    throw new ApiRequestError(0, 'NETWORK_ERROR', 'Failed to parse response JSON');
+  }
+}
+
 function parseResponse(response: Response, body: unknown): unknown {
   // 204 No Content - return undefined
   if (response.status === 204) {
@@ -122,24 +141,7 @@ export async function apiFetch<T>(
 
   try {
     const response = await fetch(url, fetchInit);
-
-    // Handle response based on status and content
-    let body: unknown;
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
-
-    if (response.status === 204) {
-      // No content
-      body = undefined;
-    } else if (isJson) {
-      try {
-        body = await response.json();
-      } catch {
-        throw new ApiRequestError(0, 'NETWORK_ERROR', 'Failed to parse response JSON');
-      }
-    } else {
-      throw new ApiRequestError(0, 'NETWORK_ERROR', 'Invalid response format');
-    }
+    const body = await readBody(response);
 
     // Handle 401 with refresh and retry
     if (response.status === 401 && !path.includes('/auth/refresh') && !path.includes('/auth/login')) {
@@ -148,23 +150,7 @@ export async function apiFetch<T>(
       if (refreshed) {
         // Retry the original request
         const retryResponse = await fetch(url, fetchInit);
-
-        let retryBody: unknown;
-        const retryContentType = retryResponse.headers.get('content-type');
-        const retryIsJson = retryContentType?.includes('application/json');
-
-        if (retryResponse.status === 204) {
-          retryBody = undefined;
-        } else if (retryIsJson) {
-          try {
-            retryBody = await retryResponse.json();
-          } catch {
-            throw new ApiRequestError(0, 'NETWORK_ERROR', 'Failed to parse response JSON');
-          }
-        } else {
-          throw new ApiRequestError(0, 'NETWORK_ERROR', 'Invalid response format');
-        }
-
+        const retryBody = await readBody(retryResponse);
         return parseResponse(retryResponse, retryBody) as T;
       } else {
         // Refresh failed, call handler and throw the original 401 error
