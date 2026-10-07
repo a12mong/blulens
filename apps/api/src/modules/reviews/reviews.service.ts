@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  aggregateAssessment,
   GRADE_KEYS,
   reviewerScore,
   type CriterionScore,
@@ -156,6 +157,126 @@ export class ReviewsService {
           'REVIEW_ALREADY_SUBMITTED',
           'ส่งผลการประเมินแล้ว ไม่สามารถแก้ไขได้',
         );
+      }
+
+      if (assignment.kind === 'assessment' && assignment.assessmentId) {
+        const openLeft = await tx.reviewAssignment.count({
+          where: {
+            assessmentId: assignment.assessmentId,
+            state: 'open',
+          },
+        });
+
+        if (openLeft === 0) {
+          const submittedReviews = await tx.review.findMany({
+            where: {
+              assignment: {
+                assessmentId: assignment.assessmentId,
+                state: 'submitted',
+              },
+              abstained: false,
+            },
+            orderBy: [{ submittedAt: 'asc' }, { id: 'asc' }],
+          });
+
+          const reviewIds = submittedReviews.map((rev) => rev.id);
+          const scores = submittedReviews.map((rev) => Number(rev.overall));
+
+          const assessment = await tx.assessment.findUnique({
+            where: { id: assignment.assessmentId },
+            include: {
+              event: {
+                select: { minReviewers: true },
+              },
+            },
+          });
+
+          if (!assessment) {
+            throw ApiException.notFound('ไม่พบการประเมินที่ต้องการ', 'ASSESSMENT_NOT_FOUND');
+          }
+
+          const minReviewers = assessment.event?.minReviewers ?? 2;
+          const agg = aggregateAssessment(scores, minReviewers);
+
+          const maxResult = await tx.assessmentResult.findFirst({
+            where: { assessmentId: assessment.id },
+            orderBy: { version: 'desc' },
+            select: { version: true },
+          });
+          const version = (maxResult?.version ?? 0) + 1;
+
+          await tx.assessmentResult.create({
+            data: {
+              assessmentId: assessment.id,
+              version,
+              source: 'computed',
+              status: agg.status,
+              score: agg.score,
+              margin: agg.margin,
+              lowerIndex: agg.grade ? GRADE_KEYS.indexOf(agg.grade.lower) : null,
+              centerIndex: agg.grade ? GRADE_KEYS.indexOf(agg.grade.center) : null,
+              upperIndex: agg.grade ? GRADE_KEYS.indexOf(agg.grade.upper) : null,
+              kind: agg.grade?.kind ?? null,
+              label: agg.grade?.label ?? null,
+              nRaters: agg.nRaters,
+              nExcluded: agg.nExcluded,
+              spread: agg.spread,
+              flags: agg.flags,
+              methodVersion: 'grading-v2',
+              inputs: {
+                reviewIds,
+                scores,
+                excludedIndexes: agg.excludedIndexes,
+                minReviewers,
+                suggestThirdReviewer: agg.suggestThirdReviewer,
+              },
+              computedBy: null,
+            },
+          });
+
+          const { count: assessmentCount } = await tx.assessment.updateMany({
+            where: {
+              id: assessment.id,
+              status: assessment.status,
+            },
+            data: {
+              status: agg.status,
+            },
+          });
+
+          if (assessmentCount === 0) {
+            throw ApiException.conflict(
+              'ASSESSMENT_STATE_CHANGED',
+              'สถานะการประเมินเปลี่ยนไปแล้ว กรุณาโหลดใหม่',
+            );
+          }
+
+          await tx.assessmentTransition.create({
+            data: {
+              assessmentId: assessment.id,
+              fromStatus: assessment.status,
+              toStatus: agg.status,
+              actorId: null,
+              reason: 'aggregate',
+            },
+          });
+
+          await this.audit.record(
+            {
+              actorId: actor.id,
+              action: 'assessment.result',
+              entityType: 'assessment',
+              entityId: assessment.id,
+              after: {
+                version,
+                status: agg.status,
+                label: agg.grade?.label ?? null,
+              },
+              ip,
+            },
+            tx,
+          );
+        }
       }
 
       await this.audit.record(
