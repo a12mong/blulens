@@ -15,11 +15,11 @@ export function ReviewQueue() {
 
   if (isError) {
     return (
-      <div role="alert" data-testid="review-error" className="bg-red-50 border border-red-200 rounded p-4 space-y-3">
-        <p className="text-red-800">{thaiError(error, 'เกิดข้อผิดพลาดในการโหลดงาน')}</p>
+      <div role="alert" data-testid="review-error" className="bg-destructive/10 border border-destructive rounded p-4 space-y-3">
+        <p className="text-destructive">{thaiError(error, 'เกิดข้อผิดพลาดในการโหลดงาน')}</p>
         <button
           onClick={() => refetch()}
-          className="inline-block min-h-[44px] px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          className="inline-block min-h-[44px] px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90 transition-opacity"
         >
           ลองใหม่
         </button>
@@ -58,8 +58,8 @@ export function ReviewQueue() {
             data-testid={`review-tab-${state}`}
             className={`min-h-[44px] px-4 py-2 rounded font-medium transition-all ${
               selectedState === state
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
             }`}
           >
             {stateLabels[state]} {stateCounts[state]}
@@ -71,9 +71,9 @@ export function ReviewQueue() {
       {total > 0 && (
         <div data-testid="review-progress" className="space-y-2">
           <div className="text-sm font-medium">เสร็จ {submitted}/{total}</div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="w-full bg-secondary rounded-full h-2">
             <div
-              className="bg-green-500 h-2 rounded-full"
+              className="bg-success h-2 rounded-full"
               style={{ width: `${total > 0 ? (submitted / total) * 100 : 0}%` }}
               role="progressbar"
               aria-label={`เสร็จ ${submitted} จาก ${total} งาน`}
@@ -92,7 +92,7 @@ export function ReviewQueue() {
             <div
               key={i}
               data-testid="review-skeleton"
-              className="border rounded-lg p-4 bg-gray-100 h-24 animate-pulse"
+              className="border border-border rounded-lg p-4 bg-secondary h-24 animate-pulse"
             />
           ))}
         </div>
@@ -102,9 +102,9 @@ export function ReviewQueue() {
       {!isPending && (
         <>
           {total === 0 ? (
-            <p className="text-center text-gray-600 py-8">ยังไม่มีงานที่มอบหมายให้คุณ</p>
+            <p className="text-center text-muted-foreground py-8">ยังไม่มีงานที่มอบหมายให้คุณ</p>
           ) : sorted.length === 0 ? (
-            <p className="text-center text-gray-600 py-8">ไม่มีงานในหมวดนี้</p>
+            <p className="text-center text-muted-foreground py-8">ไม่มีงานในหมวดนี้</p>
           ) : (
             <div className="space-y-3">
               {sorted.map((assignment) => (
