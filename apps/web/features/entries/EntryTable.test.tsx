@@ -256,4 +256,15 @@ describe('EntryTable', () => {
     expect(row).toHaveAttribute('data-entry-id', 'uuid-123');
     expect(row).toHaveAttribute('data-status', 'draft');
   });
+  it('renders edit and forward buttons only when their callbacks are provided', () => {
+    const draft = createMockEntry({ status: 'draft' });
+    const { rerender } = render(<EntryTable entries={[draft]} mode="admin" />);
+    expect(screen.queryByTestId('entry-edit')).toBeNull();
+    expect(screen.queryByTestId('entry-forward')).toBeNull();
+    rerender(<EntryTable entries={[draft]} mode="admin" onForward={vi.fn()} />);
+    expect(screen.queryByTestId('entry-edit')).toBeNull();
+    expect(screen.getByTestId('entry-forward')).toBeInTheDocument();
+    rerender(<EntryTable entries={[draft]} mode="admin" onForward={vi.fn()} onEdit={vi.fn()} />);
+    expect(screen.getByTestId('entry-edit')).toBeInTheDocument();
+  });
 });
