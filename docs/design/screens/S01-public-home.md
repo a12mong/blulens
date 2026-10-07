@@ -1,5 +1,7 @@
 # S01 หน้าแรกสาธารณะ / รายการอีเวนต์
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 - **วัตถุประสงค์:** ให้ทุกคนเห็นอีเวนต์ที่เปิดอยู่ และพาไปสมัคร (Member) หรือดูสายแข่ง (Guest)
 - **บทบาท:** Guest ✓ Member ✓ Reviewer ✓ Committee ✓ Admin ✓ (ทุกคนเห็นหน้าเดียวกัน; ต่างกันที่ปุ่ม CTA และเมนู)
 - **Route (เสนอ):** `/`  · **ข้อมูล:** `Event[] {id,title,date,venue,status,registrationDeadline}` (TBD-API)

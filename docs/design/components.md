@@ -1,5 +1,7 @@
 # Component guidelines — blulens
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 > สำหรับ Andy แตกเป็น packet 1 component = 1 งาน. ชื่อ props เป็นข้อเสนอ (TS-style ในตาราง = ชนิดข้อมูลเพื่ออธิบาย ไม่ใช่โค้ด). สถานะ: ร่างรออนุมัติ.
 
 ## กฎทั่วไป

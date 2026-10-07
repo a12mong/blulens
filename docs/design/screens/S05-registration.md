@@ -1,5 +1,7 @@
 # S05 ฟอร์มสมัคร + คลิป (mobile-first)
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 - **บทบาท:** Member (และบทบาทสูงกว่าที่ไม่ได้ขัดกฎ conflict) · Guest ถูกชวนล็อกอิน (F2) · **Route:** `/events/:id/register`
 - **เงื่อนไข:** อีเวนต์ `registration_open` เท่านั้น; แก้ไขได้จนปิดรับ
 

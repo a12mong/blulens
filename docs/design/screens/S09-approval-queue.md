@@ -1,5 +1,7 @@
 # S09 คิวอนุมัติ
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 - **บทบาท:** Committee, Admin · **Route:** `/committee/events/:id/approvals`
 - **หลักการ:** ผลของผู้สมัครเผยแพร่ไม่ได้จนกว่า Committee อนุมัติ (D4); outlier ที่เปิดอยู่บล็อกการอนุมัติของผู้สมัครคนนั้น (D5)
 

@@ -1,5 +1,7 @@
 # FE questions (P1–P5 จาก `docs/frontend/architecture-notes.md` §9)
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 > ตอบโดย Pam · ฉบับร่าง รออนุมัติเจ้าของพร้อมชุดสเปก bl-05 · ไม่ต้องตอบ Andy ตรง god จะส่งต่อหลังอนุมัติ
 
 | # | คำถาม | คำตอบ | อ้างอิง |

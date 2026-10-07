@@ -1,5 +1,7 @@
 # S08 Dashboard Super-Committee
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 - **บทบาท:** Committee, Admin เท่านั้น · **Route:** `/committee/events/:id`
 - **ข้อมูลสถิติทั้งหมดมาจาก API (bl-03); UI แสดงอย่างเดียว ห้ามคำนวณ kappa/outlier เอง**
 - เกณฑ์ดี/เตือน/แย่ของ kappa = O9 (รอ bl-03). ใน spec ใช้ชื่อ `agreementLevel: good|warn|poor` เป็นตัวแทน

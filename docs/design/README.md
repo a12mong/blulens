@@ -1,5 +1,7 @@
 # blulens — ชุดสเปกดีไซน์ (bl-05)
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 > ผู้เขียน: Pam (Lead Design) · สถานะ: **ฉบับร่างรออนุมัติ — [WAITING FOR OWNER APPROVAL]**
 > ห้ามสร้าง task ให้ Dev จากเอกสารนี้ จนกว่า god จะแจ้งว่าเจ้าของอนุมัติ
 > ชื่อฟิลด์/endpoint ทั้งหมดที่ติด `TBD-API` ยังไม่ผูกกับ `openapi.yaml` ของ Jim (ยังไม่ออก ณ 2026-10-07) — ต้องจัดให้ตรงกันก่อนส่ง Andy
@@ -10,6 +12,7 @@
 |---|---|
 | `flows.md` | flow ครบทุกบทบาท (mermaid) |
 | `screens/S01-public-home.md` … `S12-rubric-editor.md` | สเปกต่อหน้าจอ: วัตถุประสงค์ · บทบาท · wireframe · states · empty/error · ข้อมูล |
+| `contract-alignment.md` | **v2: จัดให้ตรง API contract (ยึดไฟล์นี้ก่อน)** |
 | `fe-questions.md` | คำตอบ P1–P5 ของ Andy |
 | `components.md` | ชื่อ component · props · variants · state (หน่วยงานของ Andy → 1 component = 1 packet) |
 

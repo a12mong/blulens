@@ -1,5 +1,7 @@
 # S03 สร้างอีเวนต์ (wizard 5 ขั้น)
 
+> ⚠ **ถูกกำกับโดย `contract-alignment.md` (v2)** — ข้อความที่ขัดกับไฟล์นั้น (สเกล 15 ขั้น, upload-only, สิทธิ์ Admin/Committee, outlier, สถานะรีวิว/อีเวนต์, การมองเห็นเกรดของ Guest) ให้ยึดไฟล์นั้น
+
 - **บทบาท:** Admin เท่านั้น (Committee เห็นผลลัพธ์ใน S04 แต่สร้างไม่ได้) · **Route:** `/admin/events/new`
 - **Flow:** ดู F1 ใน `flows.md`
 
