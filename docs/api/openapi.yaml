@@ -91,6 +91,27 @@ paths:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
 
   # ---------------- users / teams ----------------
+  /users:
+    get:
+      tags: [teams]
+      summary: 'User search for pickers (bl-21 slice: Committee registers a player on behalf)'
+      x-roles: [Committee, Admin]
+      parameters:
+        - { name: role, in: query, schema: { $ref: '#/components/schemas/Role' } }
+        - { name: q, in: query, schema: { type: string, description: display name or email prefix } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/UserSummary' } }
+                  nextCursor: { type: [string, 'null'] }
   /users/{userId}/roles:
     put:
       tags: [teams]
