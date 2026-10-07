@@ -245,7 +245,7 @@ paths:
                 properties:
                   teams: { type: array, items: { $ref: '#/components/schemas/Team' } }
                   teamCount: { type: integer }
-                  warnings: { type: array, items: { type: string, enum: [MULTI_TEAM] } }
+                  warnings: { type: array, items: { type: string, enum: [MULTI_TEAM, NO_APPROVED_GRADE, GRADE_OUT_OF_BAND, FRESH_ASSESSMENT_REQUIRED] }, description: 'computed live; shown to Admin/Committee' }
   /teams/{teamId}/members:
     post:
       tags: [teams]
@@ -721,9 +721,11 @@ paths:
   /events/{eventId}/entries:
     get:
       tags: [tournaments]
-      summary: Entries of an event
-      x-roles: [Guest, Member, Reviewer, Committee, Admin]
-      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      summary: 'Entries of an event. Guest/Member/Reviewer/Umpire see approved entries only; Admin/Committee see every status (filter with ?status=)'
+      x-roles: [Guest, Member, Reviewer, Umpire, Committee, Admin]
+      parameters:
+        - { $ref: '#/components/parameters/EventId' }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/EntryStatus' } }
       responses:
         '200':
           description: ok
@@ -732,21 +734,91 @@ paths:
               schema: { type: array, items: { $ref: '#/components/schemas/Entry' } }
     post:
       tags: [tournaments]
-      summary: 'Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band; tournament must be open (ENTRIES_CLOSED otherwise). No clip on entries: clips belong to assessments (A13 fresh assessment).'
-      x-roles: [Member, Committee]
+      summary: 'Create an entry on behalf of players (architecture §6.10): status draft. Doubles = exactly 2 players, singles = 1. Grade/team problems do NOT block creation; they come back as warnings for the Committee. Member self-registration (x-roles Member) is reserved for later and OUT of Demo Slice 1. No clip on entries.'
+      x-roles: [Admin, Committee, Member]
       parameters: [{ $ref: '#/components/parameters/EventId' }]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [playerIds]
-              properties:
-                playerIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 2 }
+            schema: { $ref: '#/components/schemas/EntryInput' }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
-        '409': { description: 'ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE | FRESH_ASSESSMENT_REQUIRED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '409': { description: 'ENTRIES_CLOSED | ENTRY_PLAYER_COUNT (2 for doubles, 1 for singles) | ENTRY_DUPLICATE_PLAYER (a player already has a non-withdrawn entry in this event)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /entries:
+    get:
+      tags: [tournaments]
+      summary: 'Committee queue across events, e.g. ?status=pending_committee (bl-21)'
+      x-roles: [Committee, Admin]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/EntryStatus' } }
+        - { name: eventId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+                  nextCursor: { type: [string, 'null'] }
+  /entries/{entryId}:
+    patch:
+      tags: [tournaments]
+      summary: Edit a draft or rejected entry (a rejected entry returns to draft)
+      x-roles: [Admin, Committee]
+      parameters: [{ name: entryId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EntryInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+        '409': { description: 'ENTRY_NOT_EDITABLE', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /entries/{entryId}/forward:
+    post:
+      tags: [tournaments]
+      summary: Forward a draft entry to the Committee (draft -> pending_committee)
+      x-roles: [Admin, Committee]
+      parameters: [{ name: entryId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+        '409': { description: 'ENTRY_NOT_DRAFT', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /entries/{entryId}/approve:
+    post:
+      tags: [tournaments]
+      summary: 'Committee approves eligibility (pending_committee -> approved). Blocked while any player lacks an approved grade; a grade outside the event band needs a reason (audited)'
+      x-roles: [Committee]
+      parameters: [{ name: entryId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, minLength: 20, maxLength: 2000, description: required when warnings include GRADE_OUT_OF_BAND }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+        '409': { description: 'ENTRY_NOT_PENDING | ENTRY_PLAYER_UNGRADED | ENTRY_OUT_OF_BAND_REASON_REQUIRED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /entries/{entryId}/reject:
+    post:
+      tags: [tournaments]
+      summary: Committee rejects (pending_committee -> rejected) with a reason; Admin may edit and forward again
+      x-roles: [Committee]
+      parameters: [{ name: entryId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+        '409': { description: 'ENTRY_NOT_PENDING', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /entries/{entryId}/grade-consent:
     put:
       tags: [tournaments]
@@ -1424,13 +1496,38 @@ components:
             tournamentId: { type: string, format: uuid }
             gradesDisclosedAt: { type: [string, 'null'], format: date-time, description: 'A14 transparency disclosure' }
             gradesDisclosedReason: { type: [string, 'null'] }
+    EntryStatus:
+      type: string
+      enum: [draft, pending_committee, approved, rejected, withdrawn]
+      description: 'architecture §6.10; draw/group draws use approved entries only'
+    EntryInput:
+      type: object
+      required: [players]
+      properties:
+        name: { type: string, maxLength: 80, description: optional pair/team display name }
+        players:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: object
+            required: [userId]
+            properties:
+              userId: { type: string, format: uuid }
+              teamId: { type: string, format: uuid, description: 'club picked via GET /teams/suggest (A8); added as a dated membership if new for the player (MULTI_TEAM warning applies)' }
     Entry:
       type: object
       required: [id, eventId, players, status]
       properties:
         id: { type: string, format: uuid }
         eventId: { type: string, format: uuid }
-        status: { type: string, enum: [active, withdrawn] }
+        status: { $ref: '#/components/schemas/EntryStatus' }
+        name: { type: [string, 'null'], description: optional pair/team display name }
+        createdBy: { type: string, format: uuid }
+        forwardedAt: { type: [string, 'null'], format: date-time }
+        decidedBy: { type: [string, 'null'], format: uuid }
+        decidedAt: { type: [string, 'null'], format: date-time }
+        decisionReason: { type: [string, 'null'] }
         players:
           type: array
           items:
