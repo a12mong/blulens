@@ -1,6 +1,22 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { z } from 'zod';
-import { entryApproveInputSchema, entryInputSchema, entryRejectInputSchema, entryStatusSchema } from '@blulens/shared';
+import {
+  entryApproveInputSchema,
+  entryInputSchema,
+  entryRejectInputSchema,
+  entryStatusSchema,
+} from '@blulens/shared';
 import type { AuthUser, AuthedRequest } from '../../common/auth/auth.types';
 import { CurrentUser, Roles } from '../../common/auth/decorators';
 import { Public } from '../../common/decorators/public.decorator';
@@ -30,13 +46,33 @@ export class EntriesController {
 
   @Roles('Admin', 'Committee')
   @Post('events/:eventId/entries')
-  create(@Param('eventId', uuid) eventId: string, @Body() body: EntryInputDto, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
+  create(
+    @Param('eventId', uuid) eventId: string,
+    @Body() body: EntryInputDto,
+    @CurrentUser() user: AuthUser,
+    @Req() req: AuthedRequest,
+  ) {
     return this.entries.create(eventId, body, user, req.ip);
+  }
+
+  @Roles('Admin', 'Committee')
+  @Patch('entries/:entryId')
+  update(
+    @Param('entryId', uuid) id: string,
+    @Body() body: EntryInputDto,
+    @CurrentUser() user: AuthUser,
+    @Req() req: AuthedRequest,
+  ) {
+    return this.entries.update(id, body, user, req.ip);
   }
 
   @Public()
   @Get('events/:eventId/entries')
-  list(@Param('eventId', uuid) eventId: string, @Query() q: EventEntriesQueryDto, @CurrentUser() user?: AuthUser) {
+  list(
+    @Param('eventId', uuid) eventId: string,
+    @Query() q: EventEntriesQueryDto,
+    @CurrentUser() user?: AuthUser,
+  ) {
     return this.entries.listForEvent(eventId, q.status, user);
   }
 
@@ -49,21 +85,35 @@ export class EntriesController {
   @Roles('Admin', 'Committee')
   @Post('entries/:entryId/forward')
   @HttpCode(200)
-  forward(@Param('entryId', uuid) id: string, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
+  forward(
+    @Param('entryId', uuid) id: string,
+    @CurrentUser() user: AuthUser,
+    @Req() req: AuthedRequest,
+  ) {
     return this.entries.forward(id, user, req.ip);
   }
 
   @Roles('Committee')
   @Post('entries/:entryId/approve')
   @HttpCode(200)
-  approve(@Param('entryId', uuid) id: string, @Body() body: ApproveDto, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
+  approve(
+    @Param('entryId', uuid) id: string,
+    @Body() body: ApproveDto,
+    @CurrentUser() user: AuthUser,
+    @Req() req: AuthedRequest,
+  ) {
     return this.entries.approve(id, body.reason, user, req.ip);
   }
 
   @Roles('Committee')
   @Post('entries/:entryId/reject')
   @HttpCode(200)
-  reject(@Param('entryId', uuid) id: string, @Body() body: RejectDto, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
+  reject(
+    @Param('entryId', uuid) id: string,
+    @Body() body: RejectDto,
+    @CurrentUser() user: AuthUser,
+    @Req() req: AuthedRequest,
+  ) {
     return this.entries.reject(id, body.reason, user, req.ip);
   }
 }
