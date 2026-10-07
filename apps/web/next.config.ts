@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 
+// อ่านตอน build เท่านั้น — rewrites() ถูก serialize ลง routes-manifest; ใน image ฝังเป็น http://api:3001
+// (ชื่อ service ภายใน compose เหมือนกันทั้ง live/dev) — ตั้ง env ตอน runtime จะไม่มีผล
 const API_URL = process.env.API_URL ?? 'http://localhost:3101';
 
 const nextConfig: NextConfig = {

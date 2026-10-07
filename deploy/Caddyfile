@@ -1,8 +1,9 @@
 # ประตูรับ 80/443 ของทั้งเครื่อง — รันเฉพาะ instance live (profile edge)
 # ค่า address มาจาก env ของ container caddy (ตั้งใน .env ฝั่ง live):
-#   SITE_ADDRESS=app.example.com  DEV_SITE_ADDRESS=dev.example.com
+#   SITE_ADDRESS=app.example.com    DEV_SITE_ADDRESS=dev.example.com
+#   FILES_ADDRESS=files.example.com DEV_FILES_ADDRESS=files-dev.example.com
 # ค่า default (http://*.localhost) = block นั้นไม่รับทราฟฟิกจริง — ทำให้เว้นว่าง
-# DEV_SITE_ADDRESS ได้โดย Caddy ไม่ parse error และไม่ไปขอ cert
+# DEV_SITE_ADDRESS / DEV_FILES_ADDRESS ได้โดย Caddy ไม่ parse error และไม่ไปขอ cert
 
 {$SITE_ADDRESS} {
 	encode gzip
@@ -12,4 +13,18 @@
 {$DEV_SITE_ADDRESS:http://dev-disabled.localhost} {
 	encode gzip
 	reverse_proxy dev-web:3000
+}
+
+# โดเมนไฟล์ → MinIO (S3 API) สำหรับ presigned URL อัป/ดูคลิป
+# - reverse_proxy ส่ง Host เดิมต่อให้ minio โดยไม่แก้ → ลายเซ็น SigV4 ที่ api เซ็นด้วย
+#   S3_PUBLIC_ENDPOINT (= โดเมนนี้) จึงตรวจผ่าน
+# - ไม่ encode gzip (วิดีโอบีบอัดแล้ว และต้องคง Range request / Content-Length ไว้)
+# - ไม่จำกัดขนาด body ที่ Caddy; เพดานขนาดคลิปบังคับตอน api ออก presigned URL
+# - bucket เป็น private ทั้งหมด — ไม่มี URL ไหนเข้าถึงได้โดยไม่มีลายเซ็น; console ของ minio ไม่เปิดออกเน็ต
+{$FILES_ADDRESS} {
+	reverse_proxy live-minio:9000
+}
+
+{$DEV_FILES_ADDRESS:http://files-dev-disabled.localhost} {
+	reverse_proxy dev-minio:9000
 }
