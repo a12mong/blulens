@@ -1,0 +1,15 @@
+# ประตูรับ 80/443 ของทั้งเครื่อง — รันเฉพาะ instance live (profile edge)
+# ค่า address มาจาก env ของ container caddy (ตั้งใน .env ฝั่ง live):
+#   SITE_ADDRESS=app.example.com  DEV_SITE_ADDRESS=dev.example.com
+# ค่า default (http://*.localhost) = block นั้นไม่รับทราฟฟิกจริง — ทำให้เว้นว่าง
+# DEV_SITE_ADDRESS ได้โดย Caddy ไม่ parse error และไม่ไปขอ cert
+
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy live-web:3000
+}
+
+{$DEV_SITE_ADDRESS:http://dev-disabled.localhost} {
+	encode gzip
+	reverse_proxy dev-web:3000
+}

@@ -1,0 +1,8 @@
+# บังคับ LF สำหรับไฟล์ที่ถูกส่งไปรันบน Linux (server/container)
+# — เครื่อง dev เป็น Windows ถ้าปล่อยเป็น CRLF script จะพังตอน execute
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf

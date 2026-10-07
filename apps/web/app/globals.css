@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+/*
+ * ธีมตั้งต้น (ยกมาจาก kpaccv2) — Pam จะแทนด้วย design tokens สไตล์ pixel ของ blulens
+ *
+ */
+
+@theme {
+  --font-sans: var(--font-thai), 'IBM Plex Sans Thai', 'Sarabun', ui-sans-serif, system-ui,
+    sans-serif;
+
+  --color-background: oklch(0.985 0.002 240);
+  --color-foreground: oklch(0.25 0.02 255);
+
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.25 0.02 255);
+
+  --color-primary: oklch(0.42 0.1 255);
+  --color-primary-foreground: oklch(0.99 0 0);
+
+  --color-secondary: oklch(0.94 0.01 250);
+  --color-secondary-foreground: oklch(0.32 0.03 255);
+
+  --color-muted: oklch(0.955 0.005 250);
+  --color-muted-foreground: oklch(0.48 0.02 255);
+
+  --color-accent: oklch(0.93 0.02 250);
+  --color-accent-foreground: oklch(0.3 0.05 255);
+
+  --color-destructive: oklch(0.55 0.2 27);
+  --color-destructive-foreground: oklch(0.99 0 0);
+
+  --color-success: oklch(0.55 0.13 155);
+  --color-success-foreground: oklch(0.99 0 0);
+
+  --color-warning: oklch(0.75 0.14 80);
+  --color-warning-foreground: oklch(0.3 0.05 80);
+
+  --color-border: oklch(0.9 0.01 250);
+  --color-input: oklch(0.88 0.01 250);
+  --color-ring: oklch(0.55 0.09 255);
+
+  --color-sidebar: oklch(0.28 0.045 260);
+  --color-sidebar-foreground: oklch(0.93 0.01 250);
+  --color-sidebar-active: oklch(0.38 0.07 255);
+
+  /* Admin console — โทนม่วงเข้มแยกจากฝั่ง tenant ชัดเจน (blulens-ui SKILL §1) */
+  --color-sidebar-admin: oklch(0.22 0.03 280);
+  --color-sidebar-admin-active: oklch(0.32 0.05 280);
+
+  --radius-lg: 0.6rem;
+  --radius-md: 0.45rem;
+  --radius-sm: 0.3rem;
+}
+
+html {
+  /* ตัวอักษรฐานใหญ่ อ่านง่ายสำหรับผู้ใช้ทุกวัย */
+  font-size: 16.5px;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ตัวเลขในตาราง/ช่องเงินให้เรียงหลักตรงกันแบบ Excel */
+.tabular-nums,
+table td.text-right,
+input[inputmode='decimal'] {
+  font-variant-numeric: tabular-nums;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}

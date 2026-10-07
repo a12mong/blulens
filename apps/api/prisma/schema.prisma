@@ -1,0 +1,12 @@
+// blulens — Prisma schema
+// โมเดลจริง (ผู้ใช้/บทบาท, งานแข่ง, การสมัคร, คลิป, การประเมิน, คะแนน, การจับสาย)
+// มาในการ์ดถัดไปของ Kevin ตามสเปกที่เจ้าของอนุมัติ — skeleton นี้ยังไม่มี model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

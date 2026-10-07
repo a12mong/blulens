@@ -1,0 +1,926 @@
+openapi: 3.1.0
+info:
+  title: blulens API
+  version: 0.1.0-draft
+  description: |
+    Single source of truth for the Web <-> API contract (bl-02). DRAFT — waiting for owner approval.
+    Specs: docs/specs/architecture.md, docs/specs/grading.md, docs/specs/draw.md.
+    Conventions:
+      - Auth via httpOnly cookies (bl_access / bl_refresh); no Authorization header.
+      - Every response is wrapped in an envelope: { success: true, data } or { success: false, error }.
+        Schemas below describe `data` only; see components.schemas.Envelope* for the wrapper.
+      - Times are ISO-8601 UTC. Lists use cursor pagination (?cursor=&limit=) -> { items, nextCursor }.
+      - x-roles lists the roles allowed to call an operation (Admin, Committee, Reviewer, Member, Guest).
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: teams
+  - name: assessments
+  - name: reviews
+  - name: rater-stats
+  - name: tournaments
+  - name: draws
+  - name: audit
+
+paths:
+  /health:
+    get:
+      tags: [auth]
+      summary: Liveness probe (no DB access)
+      x-roles: [Guest]
+      responses:
+        '200': { description: ok }
+
+  # ---------------- auth ----------------
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Create a Member account
+      x-roles: [Guest]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in; sets auth cookies
+      x-roles: [Guest]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate refresh token (reuse detection revokes the family)
+      x-roles: [Member, Reviewer, Committee, Admin]
+      responses:
+        '204': { description: rotated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke session and clear cookies
+      x-roles: [Member, Reviewer, Committee, Admin]
+      responses:
+        '204': { description: logged out }
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Current user, roles, permissions, current approved grade
+      x-roles: [Member, Reviewer, Committee, Admin]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+
+  # ---------------- users / teams ----------------
+  /users/{userId}/roles:
+    put:
+      tags: [teams]
+      summary: Replace a user's roles
+      x-roles: [Admin]
+      parameters: [{ $ref: '#/components/parameters/UserId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles: { type: array, items: { $ref: '#/components/schemas/Role' }, minItems: 1 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/UserSummary' } } } }
+  /teams:
+    get:
+      tags: [teams]
+      summary: List teams/clubs
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TeamPage' } } } }
+    post:
+      tags: [teams]
+      summary: Create a team
+      x-roles: [Committee, Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                shortName: { type: string, maxLength: 16 }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Team' } } } }
+  /teams/{teamId}/members:
+    post:
+      tags: [teams]
+      summary: Add a user to a team from a date (memberships are dated; draw uses membership on draw date)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/TeamId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, validFrom]
+              properties:
+                userId: { type: string, format: uuid }
+                validFrom: { type: string, format: date }
+      responses:
+        '201': { description: created }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ---------------- assessments (grading.md) ----------------
+  /assessments:
+    post:
+      tags: [assessments]
+      summary: Member opens an assessment request (status draft)
+      x-roles: [Member]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Assessment' } } } }
+    get:
+      tags: [assessments]
+      summary: List assessments (Member sees own; Committee sees all, filter by status)
+      x-roles: [Member, Committee, Admin]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AssessmentStatus' } }
+        - { name: subjectUserId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentPage' } } } }
+  /assessments/{assessmentId}:
+    get:
+      tags: [assessments]
+      summary: Assessment detail incl. latest result (per-reviewer scores only for Committee)
+      x-roles: [Member, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /assessments/{assessmentId}/clips/upload-url:
+    post:
+      tags: [assessments]
+      summary: Get a presigned PUT URL for one clip (draft only; max 3 clips, 500 MB, mp4/mov)
+      x-roles: [Member]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, sizeBytes]
+              properties:
+                fileName: { type: string }
+                contentType: { type: string, enum: [video/mp4, video/quicktime] }
+                sizeBytes: { type: integer, maximum: 524288000 }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clipId, uploadUrl, expiresAt]
+                properties:
+                  clipId: { type: string, format: uuid }
+                  uploadUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '422': { $ref: '#/components/responses/Validation' }
+  /assessments/{assessmentId}/submit:
+    post:
+      tags: [assessments]
+      summary: Member submits the request (draft -> submitted); requires >= 1 uploaded clip
+      x-roles: [Member]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Assessment' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /assessments/{assessmentId}/assign:
+    post:
+      tags: [assessments]
+      summary: Committee assigns reviewers (conflict-of-interest checked server-side)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewerIds]
+              properties:
+                reviewerIds: { type: array, items: { type: string, format: uuid }, minItems: 1 }
+                dueAt: { type: string, format: date-time, description: default now + 72h }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+        '409': { description: 'REVIEWER_CONFLICT_OF_INTEREST | ASSESSMENT_NOT_ASSIGNABLE', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /assessments/{assessmentId}/approve:
+    post:
+      tags: [assessments]
+      summary: Committee approves the latest computed result (pending_approval|disputed -> approved)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resultVersion: { type: integer, description: optimistic check — must equal the latest version }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /assessments/{assessmentId}/return:
+    post:
+      tags: [assessments]
+      summary: Committee sends back for more reviews (-> in_review) with a reason
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+  /assessments/{assessmentId}/override:
+    post:
+      tags: [assessments]
+      summary: Super-Committee override — writes a new result version with source=override (see grading.md §8)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [centerKey, reason]
+              properties:
+                centerKey: { $ref: '#/components/schemas/GradeKey' }
+                reason: { type: string, minLength: 20, maxLength: 2000 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+        '403': { description: 'OVERRIDE_CONFLICT_OF_INTEREST', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /assessments/{assessmentId}/results:
+    get:
+      tags: [assessments]
+      summary: Full result history (append-only versions)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AssessmentResult' } }
+
+  # ---------------- reviews ----------------
+  /reviews/assignments/me:
+    get:
+      tags: [reviews]
+      summary: My open/finished review assignments
+      x-roles: [Reviewer]
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [open, submitted, expired] } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ReviewAssignment' } }
+  /reviews/assignments/{assignmentId}:
+    get:
+      tags: [reviews]
+      summary: Assignment detail with clip view URLs and the rubric (never other reviewers' scores)
+      x-roles: [Reviewer]
+      parameters: [{ $ref: '#/components/parameters/AssignmentId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewAssignmentDetail' } } } }
+    put:
+      tags: [reviews]
+      summary: Submit the review (once; immutable after submit)
+      x-roles: [Reviewer]
+      parameters: [{ $ref: '#/components/parameters/AssignmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewAssignment' } } } }
+        '409': { description: 'REVIEW_ALREADY_SUBMITTED | ASSIGNMENT_EXPIRED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /reviews/assignments/{assignmentId}/decline:
+    post:
+      tags: [reviews]
+      summary: Reviewer declines (conflict, cannot judge clip) — Committee reassigns
+      x-roles: [Reviewer]
+      parameters: [{ $ref: '#/components/parameters/AssignmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '204': { description: declined }
+  /rubric:
+    get:
+      tags: [reviews]
+      summary: Active rubric (criteria, weights, anchors) and method version
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Rubric' } } } }
+
+  # ---------------- rater stats ----------------
+  /rater-stats:
+    get:
+      tags: [rater-stats]
+      summary: Rater agreement (Cohen weighted kappa per pair, Fleiss kappa for the panel, bias per rater)
+      x-roles: [Committee, Reviewer]
+      description: Reviewer receives only their own row and the panel figure.
+      parameters:
+        - { name: window, in: query, schema: { type: string, enum: [30d, 90d, 365d, all], default: 90d } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/RaterStats' } } } }
+
+  # ---------------- tournaments ----------------
+  /tournaments:
+    get:
+      tags: [tournaments]
+      summary: List tournaments
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TournamentPage' } } } }
+    post:
+      tags: [tournaments]
+      summary: Create a tournament
+      x-roles: [Committee]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TournamentInput' }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Tournament' } } } }
+  /tournaments/{tournamentId}/events:
+    post:
+      tags: [tournaments]
+      summary: Add an event (e.g. men's singles, grade band S-..S+)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/TournamentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventInput' }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
+  /events/{eventId}/entries:
+    get:
+      tags: [tournaments]
+      summary: Entries of an event
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Entry' } }
+    post:
+      tags: [tournaments]
+      summary: Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band.
+      x-roles: [Member, Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [playerIds]
+              properties:
+                playerIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 2 }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+        '409': { description: 'ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /entries/{entryId}/withdraw:
+    post:
+      tags: [tournaments]
+      summary: Withdraw an entry (after publish -> walkover/replacement per draw.md §7, never a silent redraw)
+      x-roles: [Member, Committee]
+      parameters: [{ name: entryId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '204': { description: withdrawn }
+
+  # ---------------- draws (draw.md) ----------------
+  /events/{eventId}/draws/preview:
+    post:
+      tags: [draws]
+      summary: Generate a draw preview (status preview; logged with its seed)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seed: { type: string, pattern: '^[0-9a-f]{32}$', description: omit to let the server generate one (CSPRNG) }
+                seedCount: { type: integer, minimum: 0, description: omit to use the ruleset default }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+        '409': { description: 'ENTRIES_NOT_CLOSED | DRAW_ALREADY_LOCKED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /events/{eventId}/draws:
+    get:
+      tags: [draws]
+      summary: All draw versions of an event (previews + published + superseded)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/DrawSummary' } }
+  /draws/{drawId}:
+    get:
+      tags: [draws]
+      summary: Draw detail (slots, round-1 matches, conflicts, seed, input hash)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/DrawId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+  /draws/{drawId}/publish:
+    post:
+      tags: [draws]
+      summary: Publish a preview. Requires acknowledgeConflicts=true when the draw has unavoidable same-team R1 matches.
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/DrawId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acknowledgeConflicts: { type: boolean, default: false }
+                reason: { type: string, description: required when this supersedes an already-published draw }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+        '409': { description: 'DRAW_INPUT_CHANGED | DRAW_CONFLICTS_NOT_ACKNOWLEDGED | DRAW_ALREADY_LOCKED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /draws/{drawId}/verify:
+    get:
+      tags: [draws]
+      summary: Re-run the solver from the stored seed + input snapshot and compare (reproducibility check)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/DrawId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [identical]
+                properties:
+                  identical: { type: boolean }
+  /events/{eventId}/bracket:
+    get:
+      tags: [draws]
+      summary: Public bracket of the published draw
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Bracket' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------- audit ----------------
+  /audit-logs:
+    get:
+      tags: [audit]
+      summary: Append-only audit trail
+      x-roles: [Admin]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: entityType, in: query, schema: { type: string } }
+        - { name: entityId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AuditPage' } } } }
+
+components:
+  parameters:
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    UserId: { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    TeamId: { name: teamId, in: path, required: true, schema: { type: string, format: uuid } }
+    AssessmentId: { name: assessmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    AssignmentId: { name: assignmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    TournamentId: { name: tournamentId, in: path, required: true, schema: { type: string, format: uuid } }
+    EventId: { name: eventId, in: path, required: true, schema: { type: string, format: uuid } }
+    DrawId: { name: drawId, in: path, required: true, schema: { type: string, format: uuid } }
+
+  responses:
+    Unauthorized: { description: UNAUTHENTICATED, content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+    NotFound: { description: NOT_FOUND, content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+    Conflict: { description: state conflict (code says which), content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+    Validation: { description: VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+
+  schemas:
+    # ---- envelope ----
+    EnvelopeError:
+      type: object
+      required: [success, error]
+      properties:
+        success: { const: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: REVIEW_ALREADY_SUBMITTED }
+            message: { type: string, description: Thai, safe to show to the user }
+            details: { type: object, additionalProperties: true }
+
+    # ---- identity ----
+    Role: { type: string, enum: [Admin, Committee, Reviewer, Member] }
+    RegisterInput:
+      type: object
+      required: [email, password, displayName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 10 }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+    LoginInput:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier: { type: string }
+        password: { type: string }
+    UserSummary:
+      type: object
+      required: [id, displayName, roles]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+        teamId: { type: [string, 'null'], format: uuid }
+    Me:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            email: { type: string, format: email }
+            permissions: { type: array, items: { type: string } }
+            currentGrade: { oneOf: [{ $ref: '#/components/schemas/GradeView' }, { type: 'null' }] }
+    Team:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        shortName: { type: string }
+    TeamPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Team' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ---- grading output shape (bad8bit-style; grading.md §6) ----
+    GradeKey:
+      type: string
+      description: 15-rung ladder, index 0..14, ASCII hyphen
+      enum: [RK1, RK2, RK3, BG1, BG2, BG3, S-, S, S+, N-, N, N+, P-, P, P+]
+    Tier: { type: string, enum: [Rookie, Beginner, Standard, Neutral, Professional] }
+    GradeView:
+      type: object
+      description: |
+        The assessment result shape every client renders. score is continuous in ladder units [0, 15);
+        lower/upper are grade keys of floor(score - margin) / floor(score + margin), clamped;
+        center = grade key of floor(score). label derives from lower/upper/kind.
+      required: [score, lower, upper, center, kind, label]
+      properties:
+        score: { type: number, minimum: 0, maximum: 15, example: 7.4 }
+        margin: { type: number, minimum: 0, example: 0.6 }
+        lower: { $ref: '#/components/schemas/GradeKey' }
+        upper: { $ref: '#/components/schemas/GradeKey' }
+        center: { $ref: '#/components/schemas/GradeKey' }
+        tier: { $ref: '#/components/schemas/Tier' }
+        kind: { type: string, enum: [exact, straddle, wide] }
+        label: { type: string, example: S/S+, description: 'exact "S" | straddle "S/S+" | wide "S-–N" (en dash)' }
+
+    # ---- assessments ----
+    AssessmentStatus:
+      type: string
+      enum: [draft, submitted, in_review, needs_reviewers, disputed, pending_approval, approved, overridden, rejected, withdrawn]
+    Assessment:
+      type: object
+      required: [id, subjectUserId, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        subjectUserId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AssessmentStatus' }
+        reviewsSubmitted: { type: integer }
+        reviewsRequired: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AssessmentPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Assessment' } }
+        nextCursor: { type: [string, 'null'] }
+    AssessmentResult:
+      type: object
+      required: [version, source, grade, nRaters, nExcluded, methodVersion, computedAt]
+      properties:
+        version: { type: integer }
+        source: { type: string, enum: [computed, override] }
+        grade: { $ref: '#/components/schemas/GradeView' }
+        nRaters: { type: integer, description: valid reviews used after exclusion }
+        nExcluded: { type: integer, description: reviews excluded as outliers }
+        spread: { type: number, description: max - min of used rater scores (ladder units) }
+        flags: { type: array, items: { type: string, enum: [OUTLIER_EXCLUDED, HIGH_DISAGREEMENT, LOW_RATER_COUNT, OVERRIDE] } }
+        methodVersion: { type: string, example: grading-v1 }
+        reason: { type: string, description: override only }
+        computedAt: { type: string, format: date-time }
+        computedBy: { type: [string, 'null'], format: uuid, description: null for computed }
+    ReviewerScoreRow:
+      type: object
+      description: Committee-only view of one reviewer's contribution
+      properties:
+        reviewerId: { type: string, format: uuid }
+        reviewerName: { type: string }
+        overall: { type: number }
+        excluded: { type: boolean }
+        robustZ: { type: [number, 'null'] }
+        criteria: { type: array, items: { $ref: '#/components/schemas/CriterionScore' } }
+    AssessmentDetail:
+      allOf:
+        - { $ref: '#/components/schemas/Assessment' }
+        - type: object
+          properties:
+            clips: { type: array, items: { $ref: '#/components/schemas/Clip' } }
+            latestResult: { oneOf: [{ $ref: '#/components/schemas/AssessmentResult' }, { type: 'null' }] }
+            reviewerRows: { type: array, items: { $ref: '#/components/schemas/ReviewerScoreRow' }, description: Committee only }
+    Clip:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending_upload, uploaded, rejected] }
+        viewUrl: { type: string, format: uri, description: presigned GET, short-lived }
+        durationSec: { type: integer }
+
+    # ---- reviews ----
+    Rubric:
+      type: object
+      required: [methodVersion, criteria]
+      properties:
+        methodVersion: { type: string }
+        criteria:
+          type: array
+          items:
+            type: object
+            required: [key, nameTh, weight]
+            properties:
+              key: { type: string, example: footwork }
+              nameTh: { type: string }
+              weight: { type: number }
+              anchorsTh: { type: object, additionalProperties: { type: string }, description: tier -> description }
+    CriterionScore:
+      type: object
+      required: [criterion]
+      properties:
+        criterion: { type: string }
+        gradeKey: { oneOf: [{ $ref: '#/components/schemas/GradeKey' }, { type: 'null' }], description: null = cannot assess from clip }
+    ReviewInput:
+      type: object
+      required: [scores]
+      properties:
+        scores: { type: array, items: { $ref: '#/components/schemas/CriterionScore' }, minItems: 1 }
+        comment: { type: string, maxLength: 2000 }
+    ReviewAssignment:
+      type: object
+      required: [id, assessmentId, state, dueAt]
+      properties:
+        id: { type: string, format: uuid }
+        assessmentId: { type: string, format: uuid }
+        state: { type: string, enum: [open, submitted, expired, declined] }
+        dueAt: { type: string, format: date-time }
+        submittedAt: { type: [string, 'null'], format: date-time }
+    ReviewAssignmentDetail:
+      allOf:
+        - { $ref: '#/components/schemas/ReviewAssignment' }
+        - type: object
+          properties:
+            clips: { type: array, items: { $ref: '#/components/schemas/Clip' } }
+            rubric: { $ref: '#/components/schemas/Rubric' }
+            myScores: { type: array, items: { $ref: '#/components/schemas/CriterionScore' } }
+
+    # ---- rater stats ----
+    AgreementValue:
+      type: object
+      properties:
+        kappa: { type: [number, 'null'], description: null when below minimum shared subjects }
+        n: { type: integer, description: subjects used }
+        band: { type: string, enum: [poor, fair, moderate, substantial, almost_perfect, insufficient] }
+    RaterStats:
+      type: object
+      properties:
+        window: { type: string }
+        methodVersion: { type: string }
+        panel:
+          type: object
+          properties:
+            fleissKappaTier: { $ref: '#/components/schemas/AgreementValue' }
+        raters:
+          type: array
+          items:
+            type: object
+            properties:
+              reviewerId: { type: string, format: uuid }
+              reviews: { type: integer }
+              bias: { type: number, description: mean(rater - leave-one-out consensus), ladder units }
+              kappaVsConsensus: { $ref: '#/components/schemas/AgreementValue' }
+              outlierRate: { type: number }
+              flagged: { type: boolean }
+        pairs:
+          type: array
+          items:
+            type: object
+            properties:
+              a: { type: string, format: uuid }
+              b: { type: string, format: uuid }
+              cohenKappaQuadratic: { $ref: '#/components/schemas/AgreementValue' }
+
+    # ---- tournaments ----
+    TournamentInput:
+      type: object
+      required: [name, startsOn, entriesCloseAt]
+      properties:
+        name: { type: string }
+        venue: { type: string }
+        startsOn: { type: string, format: date }
+        entriesCloseAt: { type: string, format: date-time }
+    Tournament:
+      allOf:
+        - { $ref: '#/components/schemas/TournamentInput' }
+        - type: object
+          required: [id, status]
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [draft, open, closed, running, finished] }
+    TournamentPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Tournament' } }
+        nextCursor: { type: [string, 'null'] }
+    EventInput:
+      type: object
+      required: [discipline, gradeMin, gradeMax]
+      properties:
+        discipline: { type: string, enum: [MS, WS, MD, WD, XD] }
+        gradeMin: { $ref: '#/components/schemas/GradeKey' }
+        gradeMax: { $ref: '#/components/schemas/GradeKey' }
+        maxEntries: { type: integer, maximum: 256 }
+    Event:
+      allOf:
+        - { $ref: '#/components/schemas/EventInput' }
+        - type: object
+          required: [id, tournamentId]
+          properties:
+            id: { type: string, format: uuid }
+            tournamentId: { type: string, format: uuid }
+    Entry:
+      type: object
+      required: [id, eventId, players, status]
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        status: { type: string, enum: [active, withdrawn] }
+        players:
+          type: array
+          items:
+            type: object
+            properties:
+              userId: { type: string, format: uuid }
+              displayName: { type: string }
+              teamId: { type: [string, 'null'], format: uuid }
+              grade: { $ref: '#/components/schemas/GradeView' }
+        seedScore: { type: number, description: singles = player score; doubles = mean of both (draw.md §3) }
+
+    # ---- draws ----
+    DrawSummary:
+      type: object
+      required: [id, eventId, version, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        version: { type: integer }
+        status: { type: string, enum: [preview, published, superseded, locked] }
+        sameTeamR1Count: { type: integer }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: string, format: uuid }
+    Draw:
+      allOf:
+        - { $ref: '#/components/schemas/DrawSummary' }
+        - type: object
+          properties:
+            seed: { type: string }
+            inputHash: { type: string }
+            rulesetVersion: { type: string, example: draw-v1 }
+            size: { type: integer, description: bracket size (power of two) }
+            slots:
+              type: array
+              items:
+                type: object
+                properties:
+                  position: { type: integer, description: 1..size }
+                  entryId: { type: [string, 'null'], format: uuid, description: null = bye }
+                  seedNo: { type: [integer, 'null'] }
+            conflicts:
+              type: array
+              description: unavoidable same-team round-1 matches (empty in the normal case)
+              items:
+                type: object
+                properties:
+                  matchNo: { type: integer }
+                  teamId: { type: string, format: uuid }
+            minimumPossibleConflicts: { type: integer }
+    Bracket:
+      type: object
+      properties:
+        eventId: { type: string, format: uuid }
+        drawVersion: { type: integer }
+        rounds:
+          type: array
+          items:
+            type: object
+            properties:
+              round: { type: integer }
+              matches:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    matchNo: { type: integer }
+                    top: { type: [string, 'null'], format: uuid, description: entryId }
+                    bottom: { type: [string, 'null'], format: uuid }
+                    winner: { type: [string, 'null'], format: uuid }
+                    status: { type: string, enum: [scheduled, bye, walkover, finished] }
+
+    # ---- audit ----
+    AuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              actorId: { type: [string, 'null'], format: uuid }
+              action: { type: string, example: assessment.override }
+              entityType: { type: string }
+              entityId: { type: string }
+              before: { type: object }
+              after: { type: object }
+              reason: { type: [string, 'null'] }
+              createdAt: { type: string, format: date-time }
+        nextCursor: { type: [string, 'null'] }
+    ReasonInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 5, maxLength: 2000 }

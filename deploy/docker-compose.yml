@@ -1,0 +1,121 @@
+# Production compose — ใช้ทั้ง live (/opt/blulens) และ dev (/opt/blulens-dev)
+# identity ของแต่ละ instance มาจาก .env ข้าง ๆ ไฟล์นี้ (ดู deploy/.env.example)
+# - live: COMPOSE_PROJECT_NAME=blulens,     EDGE_ALIAS=live, COMPOSE_PROFILES=edge (รัน caddy)
+# - dev:  COMPOSE_PROJECT_NAME=blulens-dev, EDGE_ALIAS=dev,  COMPOSE_PROFILES=     (ไม่รัน caddy)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # ใช้โดย postgres-init.sh ตอนสร้าง data volume ครั้งแรก (role blulens_app)
+      BLULENS_APP_PASSWORD: ${BLULENS_APP_PASSWORD}
+    ports:
+      # เปิดเฉพาะ localhost ของ server — ต่อจากภายนอกผ่าน SSH tunnel เท่านั้น (seed)
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/blulens-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL_SEC: ${JWT_ACCESS_TTL_SEC:-900}
+      JWT_REFRESH_TTL_SEC: ${JWT_REFRESH_TTL_SEC:-604800}
+      API_PORT: "3001"
+      WEB_URL: ${WEB_URL}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-blulens}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  web:
+    image: ghcr.io/${GHCR_OWNER}/blulens-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      default: {}
+      # caddy (ฝั่ง live) เรียกหา web ของแต่ละ instance ข้าม compose project
+      # ผ่าน network กลาง `edge` ด้วยชื่อ live-web / dev-web
+      edge:
+        aliases:
+          - ${EDGE_ALIAS}-web
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["edge"] # รันเฉพาะ instance live (COMPOSE_PROFILES=edge ใน .env)
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+      DEV_SITE_ADDRESS: ${DEV_SITE_ADDRESS:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - default
+      - edge
+
+networks:
+  edge:
+    external: true # สร้างครั้งเดียวโดย setup-server.sh: docker network create edge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
