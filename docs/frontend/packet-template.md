@@ -17,6 +17,7 @@ STATE:
   Depends on (merged): <packet ids or "none">
 
 SOURCES:
+  - Visual source: docs/design/stitch/<screen>/ (Stitch HTML/CSS + screenshots). PORT it into our Next.js component using our tokens; do NOT copy-paste Stitch markup.
   - Design spec section: <path#section>   (copy of the relevant tokens/layout pasted below if short)
   - API endpoint(s): <METHOD /api/...> + response zod schema: <path in packages/shared>
   - Sibling component to copy the pattern from: <path>
