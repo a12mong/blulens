@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import { allowedOrigins, isAllowedOrigin } from './common/auth/allowed-origins';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -14,8 +15,10 @@ async function bootstrap() {
   app.getHttpAdapter().get('/api/health', (_req: unknown, res: { json: (b: unknown) => void }) =>
     res.json({ success: true, data: { status: 'ok' } }),
   );
+  const allowed = allowedOrigins(process.env);
+  const nodeEnv = process.env.NODE_ENV;
   app.enableCors({
-    origin: process.env.WEB_URL ?? 'http://localhost:3100',
+    origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin, allowed, nodeEnv)),
     credentials: true,
   });
   // ให้ req.ip ถูกต้องเมื่ออยู่หลัง proxy (Next.js rewrite / Caddy)
