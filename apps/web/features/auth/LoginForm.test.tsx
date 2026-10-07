@@ -12,6 +12,8 @@ vi.mock('./api', () => ({ useLogin: () => ({ mutate, error: null, isPending: fal
 describe('LoginForm', () => {
   it('submits identifier and password', () => {
     render(<LoginForm />);
+    expect(screen.getByTestId('login-identifier')).toBeInTheDocument();
+    expect(screen.getByTestId('login-password')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/อีเมลหรือชื่อผู้ใช้/), { target: { value: 'a@b.c' } });
     fireEvent.change(screen.getByLabelText(/รหัสผ่าน/), { target: { value: 'secret-pass-1' } });
     fireEvent.click(screen.getByRole('button', { name: 'เข้าสู่ระบบ' }));
