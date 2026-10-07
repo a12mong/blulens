@@ -225,6 +225,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** User search for pickers (bl-21 slice: Committee registers a player on behalf) */
+        get: {
+            parameters: {
+                query?: {
+                    role?: components["schemas"]["Role"];
+                    q?: string;
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["UserSummary"][];
+                            nextCursor?: string | null;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{userId}/roles": {
         parameters: {
             query?: never;
@@ -996,6 +1040,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assessments/{assessmentId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Committee confirms a provisional single-reviewer result (provisional -> approved; flag SINGLE_REVIEWER kept) (grading.md §12, G17) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    assessmentId: components["parameters"]["AssessmentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        resultVersion?: number;
+                        note?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssessmentDetail"];
+                    };
+                };
+                /** @description ASSESSMENT_NOT_PROVISIONAL */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assessments/{assessmentId}/second-opinion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request one more reviewer (G20): the subject Member once per request within 14 days of the result; Committee any time */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    assessmentId: components["parameters"]["AssessmentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReasonInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AssessmentDetail"];
+                    };
+                };
+                /** @description SECOND_OPINION_ALREADY_USED | SECOND_OPINION_WINDOW_CLOSED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assessments/{assessmentId}/override": {
         parameters: {
             query?: never;
@@ -1313,6 +1462,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calibration-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calibration clip sets (reference grades visible to the Committee only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CalibrationSet"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a calibration set (e.g. 5 clips per quarter); clips are uploaded via /calibration-sets/{setId}/clips/upload-url */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @example 2026-Q4 */
+                        period?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CalibrationSet"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calibration-sets/{setId}/clips/upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Presigned PUT for one calibration clip + its Committee reference grade */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        fileName: string;
+                        /** @enum {string} */
+                        contentType: "video/mp4" | "video/quicktime";
+                        sizeBytes: number;
+                        referenceKey: components["schemas"]["GradeKey"];
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            clipId?: string;
+                            /** Format: uri */
+                            uploadUrl?: string;
+                            /** Format: date-time */
+                            expiresAt?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calibration-sets/{setId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assign the set to reviewers (blind; each clip appears as a normal review task flagged calibration) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reviewerIds: string[];
+                        /** Format: date-time */
+                        dueAt?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description assigned */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calibration-sets/{setId}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-reviewer bias vs the reference grades for this set */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            reviewerId?: string;
+                            clipsScored?: number;
+                            /** @description mean(reviewer overall - (idx(referenceKey) + 0.5)), ladder units */
+                            biasVsReference?: number;
+                            meanAbsError?: number;
+                        }[];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tournaments": {
         parameters: {
             query?: never;
@@ -1376,7 +1733,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tournaments/{tournamentId}/events": {
+    "/tournaments/{tournamentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tournament detail with its events (bl-21 slice)
+         * @description Guest/Member see only tournaments that are not draft.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tournamentId: components["parameters"]["TournamentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TournamentDetail"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tournaments/{tournamentId}/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -1384,6 +1783,84 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        put?: never;
+        /** Move the tournament through its lifecycle: draft -> open (entries accepted) -> closed (entries locked; also automatic at entriesCloseAt) -> running -> finished */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tournamentId: components["parameters"]["TournamentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        to: "open" | "closed" | "running" | "finished";
+                        /** @description required when re-opening is ever allowed (not in v1) */
+                        reason?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TournamentDetail"];
+                    };
+                };
+                /** @description TOURNAMENT_INVALID_TRANSITION (allowed: draft->open, open->closed, closed->running, running->finished) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tournaments/{tournamentId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events of a tournament (bl-21 slice) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tournamentId: components["parameters"]["TournamentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Event"][];
+                    };
+                };
+            };
+        };
         put?: never;
         /** Add an event (e.g. men's singles, grade band S-..S+) */
         post: {
@@ -1412,6 +1889,45 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{eventId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Event detail incl. tournament status and entry count (bl-21 slice) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    eventId: components["parameters"]["EventId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EventDetail"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1449,7 +1965,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band. */
+        /** Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band; tournament must be open (ENTRIES_CLOSED otherwise). No clip on entries: clips belong to assessments (A13 fresh assessment). */
         post: {
             parameters: {
                 query?: never;
@@ -2644,8 +3160,11 @@ export interface components {
              */
             label: string;
         };
-        /** @enum {string} */
-        AssessmentStatus: "draft" | "submitted" | "in_review" | "needs_reviewers" | "disputed" | "pending_approval" | "approved" | "overridden" | "rejected" | "withdrawn";
+        /**
+         * @description provisional = single-reviewer result awaiting Committee confirm (grading.md §12, G17)
+         * @enum {string}
+         */
+        AssessmentStatus: "draft" | "submitted" | "in_review" | "needs_reviewers" | "provisional" | "disputed" | "pending_approval" | "approved" | "overridden" | "rejected" | "withdrawn";
         Assessment: {
             /** Format: uuid */
             id: string;
@@ -2684,7 +3203,7 @@ export interface components {
             nExcluded: number;
             /** @description max - min of used rater scores (ladder units) */
             spread?: number;
-            flags?: ("OUTLIER_EXCLUDED" | "HIGH_DISAGREEMENT" | "LOW_RATER_COUNT" | "OVERRIDE")[];
+            flags?: ("OUTLIER_EXCLUDED" | "HIGH_DISAGREEMENT" | "LOW_RATER_COUNT" | "OVERRIDE" | "SINGLE_REVIEWER" | "PAIR_DISAGREEMENT")[];
             /** @example grading-v1 */
             methodVersion: string;
             /** @description override only */
@@ -2704,7 +3223,12 @@ export interface components {
             reviewerName?: string;
             overall?: number;
             excluded?: boolean;
+            /** @description null when n < 3 (no outlier rule) */
             robustZ?: number | null;
+            /** @description cross-event bias vs consensus/calibration, ladder units; null below minimum sample (§12.4) */
+            reviewerBias?: number | null;
+            /** @description n = 2 only: Cohen quadratic weighted kappa history of this reviewer pair (>= 10 shared cases) */
+            pairKappa?: number | null;
             criteria?: components["schemas"]["CriterionScore"][];
         };
         AssessmentDetail: components["schemas"]["Assessment"] & {
@@ -2743,6 +3267,19 @@ export interface components {
             /** @description null = cannot assess from clip */
             gradeKey?: components["schemas"]["GradeKey"] | null;
         };
+        CalibrationSet: {
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+            period?: string;
+            clips?: {
+                /** Format: uuid */
+                clipId?: string;
+                referenceKey?: components["schemas"]["GradeKey"];
+            }[];
+            /** Format: date-time */
+            createdAt?: string;
+        };
         ReviewInput: {
             scores: components["schemas"]["CriterionScore"][];
             comment?: string;
@@ -2754,6 +3291,12 @@ export interface components {
             assessmentId: string;
             /** @enum {string} */
             state: "open" | "submitted" | "expired" | "declined";
+            /**
+             * @description calibration tasks look identical to the reviewer (blind)
+             * @default assessment
+             * @enum {string}
+             */
+            kind: "assessment" | "calibration";
             /** Format: date-time */
             dueAt: string;
             /** Format: date-time */
@@ -2810,6 +3353,15 @@ export interface components {
             /** @enum {string} */
             status: "draft" | "open" | "closed" | "running" | "finished";
         };
+        TournamentDetail: components["schemas"]["Tournament"] & {
+            events?: components["schemas"]["Event"][];
+        };
+        EventDetail: components["schemas"]["Event"] & {
+            tournamentName?: string;
+            /** @enum {string} */
+            tournamentStatus?: "draft" | "open" | "closed" | "running" | "finished";
+            entryCount?: number;
+        };
         TournamentPage: {
             items: components["schemas"]["Tournament"][];
             nextCursor?: string | null;
@@ -2825,6 +3377,11 @@ export interface components {
              * @default false
              */
             requiresFreshAssessment: boolean;
+            /**
+             * @description G3prime: valid reviews needed before computing; >= 3 uses the full v1 pipeline
+             * @default 2
+             */
+            minReviewers: number;
         };
         Event: components["schemas"]["EventInput"] & {
             /** Format: uuid */

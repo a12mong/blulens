@@ -1,33 +1,38 @@
-# Demo slice 1 (bl-21): login → สร้างอีเวนต์ → สมัครพร้อม type-ahead ทีม → รายชื่อผู้สมัคร
+# Demo slice 1 (bl-21 v2): login → สร้างอีเวนต์ (wizard) → Admin สร้างคู่ → Committee ตรวจ/อนุมัติ
 
-> Pam · 2026-10-07 · **สเปกพร้อมสร้างทันที ไม่รอ Stitch** (ภาพสวยตามมาทีหลัง) · ใช้โทเคน daylight ของ bad8bit (T5) · ชื่อฟิลด์/endpoint ตาม `docs/api/openapi.yaml` บน develop
-> สถานะ: [WAITING FOR OWNER APPROVAL] เฉพาะ 4 หน้าจอนี้ (อนุมัติบางส่วน) · ยึด `contract-alignment.md` + `v3-umpire-grading-v2.md` เมื่อขัดกัน
+> Pam · 2026-10-07 · **v2 หลังเจ้าของตอบ**: (1) คู่ที่ลงแข่งสร้างโดย **Admin** แล้วส่งให้ Committee ประเมิน — ไม่มีการสมัครเองของผู้เล่นในสไลซ์ (2) ธีมอะไรก็ได้ เน้น UX (3) หน้าสร้างอีเวนต์ทำให้ถูกต้องตาม UX (4) **คู่ก่อน** เดี่ยวทีหลัง (5) seed ตามข้อเสนอ
+> สเปกพร้อมสร้างทันที ไม่รอ Stitch · ชื่อฟิลด์ตาม `docs/api/openapi.yaml` บน develop; ส่วนที่ contract ยังไม่มีติด **TBD-API** · ยึด `contract-alignment.md` + `v3-umpire-grading-v2.md` เมื่อขัดกัน
 
-## 0. ข้อขัดข้องที่ต้องตัดสินก่อนสร้าง (ให้ god/Jim ตอบ — ไม่ขวางหน้า login/รายการ)
+## 0. ข้อขัดกับ contract ที่ Jim ต้องตอบ (สไลซ์นี้เปลี่ยนจากข้อกำหนดเดิมของ API)
 
-| # | ประเด็น | ทางที่ผมสมมติในสเปกนี้ |
+| # | ประเด็น | ที่สมมติในสเปกนี้ |
 |---|---|---|
-| X1 | contract: สร้าง tournament/event = **Committee** เท่านั้น แต่ demo ต้อง "login ด้วย admin ที่ seed ไว้ → สร้างอีเวนต์" | seed ผู้ใช้ demo ให้มีบทบาท **Admin + Committee** (A9 หลายบทบาท = union) เมนู/ปุ่มสร้างโผล่ตามสิทธิ์จริงจาก `Me.permissions` |
-| X2 | `POST /events/{id}/entries` คืน 409 `NO_APPROVED_GRADE` ถ้าผู้เล่นไม่มีเกรดอนุมัติ | seed ผู้เล่นตัวอย่างให้มีเกรดอยู่ในช่วงอีเวนต์; ฟอร์มแสดง error 409 เป็นข้อความอ่านง่ายพร้อม CTA "ขอประเมินเกรด" (ยังไม่สร้างหน้าในสไลซ์) |
-| X3 | "Committee เห็นการสมัคร" | ใช้ `GET /events/{id}/entries` (หน้ารายชื่อ S04 แท็บผู้สมัคร) |
+| X1 | contract: สร้าง tournament/event = **Committee** | seed ผู้ใช้ demo = **Admin + Committee** (A9 union) |
+| X2 | contract: `POST /events/{id}/entries` อนุญาต Member, Committee ไม่ใช่ Admin และตรวจเกรดทันที (409 `NO_APPROVED_GRADE` / `ENTRY_GRADE_OUT_OF_BAND`) | owner สั่ง **Admin สร้าง entry** แล้ว "ส่งต่อ Committee ประเมิน" → ต้องมี (ก) สิทธิ์ Admin สร้าง entry (ข) สถานะ entry ก่อนอนุมัติ เช่น `draft → submitted → approved/rejected` + `rejectReason` (ตอนนี้ Entry.status = active/withdrawn) + endpoint submit/approve/reject — **TBD-API** |
+| X3 | ไม่มี endpoint ค้นหาผู้ใช้/ผู้เล่นสำหรับ picker | ต้องมี `GET /users/search?q=` คืน `userId, displayName, teamIds, teamCount, currentGrade\|null` — **TBD-API** |
+| X4 | ไม่มี endpoint เปลี่ยน tournament draft→open | **TBD-API** (demo ต้องการ open ทันทีหลังสร้าง หรือ toggle "เปิดรับ") |
+| X5 | เพิ่มผู้เล่นเข้าสโมสรแทนคนอื่น (`POST /me/teams` เป็นของ Member ตัวเอง) | **TBD-API** สำหรับ Admin ตั้งสโมสรให้ผู้เล่น |
+| X6 | "ส่งต่อประเมิน" | ตีความเป็น Committee อนุมัติ entry (ไม่ใช่ขอ assessment คลิป) — ถ้าไม่ใช่ ให้แจ้งกลับ |
 
 ## 1. ผังเส้นทาง
 
 ```mermaid
 flowchart LR
-  L[D1 Login] --> E[D2 รายการทัวร์นาเมนต์/อีเวนต์] --> C[D2b สร้างทัวร์นาเมนต์ + เพิ่มอีเวนต์]
-  E --> R[D3 สมัคร: เลือกทีม type-ahead + ผู้เล่น] --> N[D4 รายชื่อผู้สมัคร]
-  C --> N
+  L[D1 Login] --> E[D2 รายการทัวร์นาเมนต์] --> W[D2 Wizard สร้างทัวร์นาเมนต์+อีเวนต์]
+  E --> A[D3 Admin สร้างคู่ของอีเวนต์] --> F[ส่งต่อ Committee]
+  F --> Q[D4 คิว Committee: อนุมัติ/ปฏิเสธ]
+  A --> M[D4 รายการคู่ที่ Admin สร้าง]
+  Q --> M
 ```
 
-AppShell (ทุกหน้ายกเว้น D1): top bar = โลโก้ "blulens" + ชื่อผู้ใช้ + บทบาท + ออกจากระบบ; mobile มี bottom tab 2–3 ช่อง (อีเวนต์ / ฉัน). ธีม daylight, เมนูซ่อน/โชว์ตาม `Me.permissions`.
+AppShell (ยกเว้น D1): top bar = โลโก้ + ชื่อผู้ใช้/บทบาท + ออกจากระบบ; เมนูตาม `Me.permissions`; mobile มี bottom tab (อีเวนต์ / คิว). ธีม daylight (UX เป็นหลัก)
 
 ---
 
-## D1 เข้าสู่ระบบ (= S02 ส่วน login) — `/login`
+## D1 เข้าสู่ระบบ — `/login`
 
-- API: `POST /auth/login {identifier, password}` → `Me` (cookie) · หลังสำเร็จไป `returnTo` หรือ `/events`
-- ฟิลด์: ตัวระบุ (`identifier` อีเมลหรือชื่อผู้ใช้), รหัสผ่าน; ลิงก์ "สมัครสมาชิก" (`/register` → `POST /auth/register {email,password≥10,displayName}`)
+- API: `POST /auth/login {identifier, password}` → `Me` (cookie) · สำเร็จไป `returnTo` หรือ `/events`
+- ฟิลด์: ตัวระบุ (`identifier` อีเมลหรือชื่อผู้ใช้), รหัสผ่าน; ลิงก์ "สมัครสมาชิก" (`POST /auth/register {email,password≥10,displayName}`) — ไม่ใช่เส้นทางหลักของ demo
 
 ```
 ┌──────────────────────────┐
@@ -46,169 +51,159 @@ AppShell (ทุกหน้ายกเว้น D1): top bar = โลโก้
 |---|---|
 | ปกติ | ปุ่มหลักเปิด เมื่อกรอกครบ |
 | submitting | ปุ่ม disabled + spinner |
-| 401 | แบนเนอร์เดียว "อีเมล/ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" (ไม่บอกว่าผิดช่องไหน) |
-| เครือข่าย/5xx | "เชื่อมต่อไม่ได้ ลองใหม่" + ปุ่มลองใหม่ (ค่าที่กรอกคงอยู่) |
+| 401 | แบนเนอร์เดียว "อีเมล/ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" |
+| เครือข่าย/5xx | "เชื่อมต่อไม่ได้ ลองใหม่" + ปุ่มลองใหม่ (ค่าคงอยู่) |
 | ล็อกอินแล้ว | redirect `/events` |
 
-Components: AppShell(bare), TextField, Button, ErrorBanner · ทดสอบรับ: Enter ส่งฟอร์ม, ลำดับ Tab, error อ่านด้วย screen reader (role=alert)
+Components: AppShell(bare), TextField, Button, ErrorBanner · ทดสอบรับ: Enter ส่งฟอร์ม, ลำดับ Tab, error role=alert
 
 ---
 
-## D2 รายการทัวร์นาเมนต์/อีเวนต์ + สร้าง — `/events`, `/events/new`
+## D2 ทัวร์นาเมนต์ — รายการ + wizard สร้าง — `/events`, `/events/new`
 
-- API: `GET /tournaments` (cursor/limit) · สร้าง `POST /tournaments {name, venue?, startsOn(date), entriesCloseAt(date-time)}` · เพิ่มอีเวนต์ `POST /tournaments/{id}/events {discipline MS|WS|MD|WD|XD, gradeMin, gradeMax, maxEntries?, requiresFreshAssessment?, minReviewers?}`
-- บทบาท: ทุกคนที่ล็อกอินดูรายการ; ปุ่ม "สร้างทัวร์นาเมนต์" เห็นเฉพาะผู้มีสิทธิ์สร้าง (Committee) — Admin ล้วนเห็นรายการแต่ไม่เห็นปุ่ม
+- API: `GET /tournaments` · `POST /tournaments {name, venue?, startsOn, entriesCloseAt}` · `POST /tournaments/{id}/events {discipline, gradeMin, gradeMax, maxEntries?, requiresFreshAssessment?, minReviewers?}` · รูปแบบการแข่ง `PUT /events/{id}/format` (ถ้ารับตอนสร้างไม่ได้ ให้ wizard เรียกหลังสร้างอีเวนต์สำเร็จ) · เปิดรับ = TBD-API (X4)
+- สิทธิ์: ทุกคนที่ล็อกอินดูรายการ; wizard เฉพาะผู้มีสิทธิ์สร้าง
+
+### รายการ
 
 ```
 ┌────────────────────────────────────┐
-│ blulens        สมชาย ▾ [ออก]        │
-├────────────────────────────────────┤
 │ ทัวร์นาเมนต์            [+ สร้าง]    │
 │ ┌────────────────────────────────┐ │
-│ │ เชียงใหม่ โอเพ่น   [เปิดรับ]     │ │
+│ │ เชียงใหม่ โอเพ่น    [เปิดรับ]   │ │
 │ │ 12 พ.ย. · สนาม X · ปิดรับ 1 พ.ย. │ │
-│ │ อีเวนต์: MS S-–S+ · WD …         │ │
-│ │ [ดูผู้สมัคร] [สมัคร]            │ │
+│ │ อีเวนต์: MD S-–S+ · XD …        │ │
+│ │ [เปิด]                          │ │
 │ └────────────────────────────────┘ │
 └────────────────────────────────────┘
 ```
+States: loading skeleton · ว่าง "ยังไม่มีทัวร์นาเมนต์" + ปุ่มสร้าง · error + ลองใหม่ · ป้ายสถานะ draft/open/closed/running/finished (ข้อความ+ไอคอน)
 
-สร้างทัวร์นาเมนต์ (หน้าเดียว ไม่ใช่ wizard 5 ขั้นในสไลซ์ — wizard เต็มตาม S03 ทำภายหลัง):
+### Wizard 4 ขั้น
 
-| ฟิลด์ | กติกา |
-|---|---|
-| ชื่อ* | ≤ 80 ตัว |
-| สถานที่ | ไม่บังคับ |
-| วันแข่ง* (`startsOn`) | ต้องไม่ย้อนหลัง |
-| ปิดรับสมัคร* (`entriesCloseAt`) | ก่อนหรือเท่าวันแข่ง |
-| อีเวนต์ (เพิ่มได้หลายแถว) | ประเภท (MS/WS/MD/WD/XD แสดงชื่อไทยกำกับ), ช่วงเกรด `gradeMin`–`gradeMax` (เลือกจาก RK1..P+ จัดกลุ่ม 5 tier; min ≤ max), จำนวนสูงสุด (ไม่บังคับ ≤ 256), toggle "ต้องประเมินใหม่สำหรับอีเวนต์นี้" (A13) |
+เหตุผล UX: ข้อมูลต่างชนิด (ชื่อ / วันที่ / กติกา) อ่านและตรวจง่ายกว่าเมื่อแบ่งขั้น; ทุกขั้นสั้น ≤ 6 ช่อง; มีหน้าทบทวนก่อนสร้าง; ย้อนกลับได้โดยไม่เสียข้อมูล; ร่างเก็บอัตโนมัติ (ในเครื่อง)
 
 ```
- ชื่อ*        [__________________]
- สถานที่      [__________________]
- วันแข่ง*     [__/__/____]   ปิดรับ* [__/__/____ __:__]
- อีเวนต์
- ┌ ประเภท [MS ชายเดี่ยว▼]  เกรด [S- ▼] ถึง [S+ ▼]  สูงสุด [__] ┐ ✕
- [+ เพิ่มอีเวนต์]
- [ยกเลิก]  [สร้างทัวร์นาเมนต์]
+ ① พื้นฐาน ─ ② วันที่ ─ ③ ประเภทและกติกา ─ ④ ทบทวน    (stepper; คลิกย้อนขั้นที่ผ่านแล้วได้)
 ```
 
-| State | แสดง |
-|---|---|
-| โหลดรายการ | skeleton 3 การ์ด |
-| ว่าง | "ยังไม่มีทัวร์นาเมนต์" + (ผู้มีสิทธิ์) ปุ่ม "สร้างทัวร์นาเมนต์แรก" |
-| error รายการ | ErrorBanner + ลองใหม่ |
-| validation | error ใต้ช่อง + สรุปบนฟอร์ม, โฟกัสช่องแรกที่ผิด |
-| สร้างสำเร็จ | toast "สร้างแล้ว" → กลับ `/events` การ์ดใหม่ถูกไฮไลต์ |
-| 403 | ซ่อนปุ่ม; เข้า URL ตรง → หน้า "ไม่มีสิทธิ์" |
-| สถานะทัวร์นาเมนต์ | ป้ายตาม `draft/open/closed/running/finished` (ข้อความ+ไอคอน); "สมัคร" ใช้ได้เฉพาะ `open` และก่อน `entriesCloseAt` (ปุ่มปิดพร้อมเหตุผล) |
-| หมายเหตุ | ถ้า API ไม่มี endpoint เปลี่ยนสถานะ draft→open ให้ถามใน Open Q ของ Jim: demo ต้องการทัวร์นาเมนต์ที่ `open` ได้ทันทีหลังสร้าง |
+| ขั้น | ฟิลด์ | กติกา/ข้อความช่วย |
+|---|---|---|
+| ① พื้นฐาน | ชื่อ*, สถานที่ | ชื่อ ≤ 80 ตัว มีตัวนับ |
+| ② วันที่ | วันแข่ง* (`startsOn`), ปิดรับ* (`entriesCloseAt`) | ปิดรับ ≤ วันแข่ง; ปฏิทิน + พิมพ์ได้; แสดง "เหลืออีก N วัน" |
+| ③ ประเภทและกติกา | การ์ดต่อประเภท (เพิ่มได้หลายการ์ด): ประเภท* (**MD/WD/XD แสดงก่อน** ตามสไลซ์คู่ก่อน; MS/WS ตามหลัง), ช่วงเกรด* `gradeMin`–`gradeMax` (GradeRangeSelect), จำนวนสูงสุด, toggle "ต้องประเมินใหม่" (A13), **preset รูปแบบ**: น็อคเอาท์อย่างเดียว / แบ่งกลุ่ม + น็อคเอาท์ (แนะนำเมื่อ ≥ 6 คู่), **preset แมตช์**: รอบกลุ่ม 2×15 ไม่ดิวส์ / รอบน็อคเอาท์ 2 ใน 3 × 21 | ค่าเริ่มต้นตาม tournament-format §2; "ตั้งค่าขั้นสูง" พับไว้ (ขนาดกลุ่ม, ผ่านต่อกลุ่ม, อันดับ 3) |
+| ④ ทบทวน | สรุปทุกขั้นอ่านอย่างเดียว + ลิงก์ "แก้" ไปแต่ละขั้น | ปุ่ม "สร้างทัวร์นาเมนต์" (+ toggle "เปิดรับสมัครทันที" ถ้า X4 รองรับ) |
 
-Components: AppShell, EventCard(เป็น TournamentCard), StatusBadge, EmptyState, ErrorBanner, TextField, DateField/DateTimeField, GradeRangeSelect (ใหม่: 2 select เรียงตามบันได + จัดกลุ่ม tier), Select, Toggle, Button, Toast
+States: invalid → error ใต้ช่อง + สรุปบน + โฟกัสช่องแรกที่ผิด · ออกกลางคัน → dialog ยืนยัน (ร่างเก็บในเครื่อง "ร่างอยู่ในเครื่องนี้") · API error → แบนเนอร์ ค่าคงอยู่ · สำเร็จ → หน้าทัวร์นาเมนต์นั้นพร้อมปุ่ม "+ เพิ่มคู่" (D3) · 403 → ไม่เห็นปุ่ม/หน้า "ไม่มีสิทธิ์"
+
+Components: AppShell, TournamentCard, StatusBadge, Stepper, TextField, DateField/DateTimeField, EventTypeCard (ใหม่), GradeRangeSelect (ใหม่), PresetRadioCards (ใหม่), Toggle, SummaryList (ใหม่), Button, ConfirmDialog, Toast, EmptyState, ErrorBanner
 
 ---
 
-## D3 สมัครอีเวนต์ + ทีม type-ahead — `/events/:eventId/register`
+## D3 Admin สร้างคู่ของอีเวนต์ แล้วส่งต่อ Committee — `/events/:eventId/entries/new`
 
-- API: `GET /events/{eventId}/entries` (ตรวจซ้ำ) · เลือกทีม `GET /teams/suggest?q=&limit=8` · เข้าทีม `POST /me/teams {teamId}` → `{teams, teamCount, warnings[MULTI_TEAM]}` · ขอทีมใหม่ `POST /team-requests {name}` · สมัคร `POST /events/{eventId}/entries {playerIds[1..2]}` → `Entry` (409: `ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE | FRESH_ASSESSMENT_REQUIRED`)
-- บทบาท: Member (สมัครตนเอง), Committee (สมัครแทนผู้เล่น — เลือกผู้เล่นจากรายชื่อ; ดูข้อสมมติ X1)
-- รูปแบบเดี่ยว = ผู้เล่น 1 คน; คู่ (MD/WD/XD) = ผู้เล่น 2 คน (คนที่ 2 เลือกจากผู้ใช้ที่ค้นหา — TBD-API: endpoint ค้นหาผู้ใช้ ถ้ายังไม่มีให้สไลซ์รองรับแค่เดี่ยวก่อน)
+- ผู้ใช้: **Admin** (และ Committee) · API: `GET /teams/suggest?q=`, `POST /team-requests`, `POST /events/{id}/entries {playerIds}` (สิทธิ์/สถานะ ดู X2), ค้นหาผู้เล่น X3, ตั้งสโมสรแทนผู้เล่น X5
+- **คำศัพท์ (ข้อเสนอ):** "คู่" = entry ที่ลงแข่ง (2 ผู้เล่น) · "สโมสร/ทีม" = `teams` ที่ใช้กับกฎจับสาย
 
 ```
-┌──────────────────────────────┐
-│ ← สมัคร: เชียงใหม่ โอเพ่น      │
-│ อีเวนต์: MS ชายเดี่ยว S-–S+    │
-│ ปิดรับ 1 พ.ย.                  │
-├──────────────────────────────┤
-│ ผู้เล่น   สมชาย (คุณ)          │
-│ เกรดของคุณ [S] ช่วง S-–S+  ✓ในช่วง│
-│                               │
-│ ทีม/สโมสร                      │
-│ [เชียง____________      ▾]    │
-│  ┌─────────────────────────┐ │
-│  │ เชียงใหม่ แบด             │ │
-│  │ เชียงราย คลับ             │ │
-│  │ ไม่พบทีม? ขอเพิ่มทีมใหม่   │ │
-│  └─────────────────────────┘ │
-│ ทีมของคุณ: [เชียงใหม่ แบด ✕]   │
-│ ⚠ คุณสังกัด 2 ทีมแล้ว         │
-│ [        สมัคร        ]       │
-└──────────────────────────────┘
+┌────────────────────────────────────┐
+│ ← เพิ่มคู่: เชียงใหม่ โอเพ่น · MD S-–S+ │
+│ ① ผู้เล่น ─ ② สโมสร ─ ③ ตรวจ/ส่ง       │
+├────────────────────────────────────┤
+│ ผู้เล่นที่ 1                         │
+│ [ค้นหาชื่อ…______________  ▾]        │
+│   สมชาย ·  S · 2 สโมสร ⚠            │
+│ ผู้เล่นที่ 2                         │
+│ [ค้นหาชื่อ…______________  ▾]        │
+│   วิภา · S+ · 1 สโมสร                │
+│ เกรดของแต่ละคน S / S+   ✓ในช่วงอีเวนต์ │
+├────────────────────────────────────┤
+│ สโมสรของผู้เล่น (ใช้กับกฎจับสาย)      │
+│ สมชาย: [เชียง…     ▾] [เชียงใหม่ แบด ✕]│
+│ วิภา:  [__________ ▾] ไม่มี           │
+│ ⚠ สมชายสังกัด 2 สโมสร                │
+├────────────────────────────────────┤
+│ [บันทึกร่าง]   [ส่งให้ Committee →]    │
+└────────────────────────────────────┘
 ```
 
-พฤติกรรม TeamCombobox (A8/A11):
-- พิมพ์ ≥ 1 ตัว → เรียก suggest แบบ debounce 250 ms (ยกเลิกคำขอเก่า); แสดงชื่อทีม + ถ้าตรงกับ alias แสดง "(ชื่อเรียกอื่น: …)"
-- **ต้องเลือกจากรายการ** ข้อความที่พิมพ์เฉยๆ ไม่ถือว่าเลือก (แสดง error "กรุณาเลือกทีมจากรายการ")
-- keyboard: ↑/↓ เลื่อน, Enter เลือก, Esc ปิด; รองรับ role=combobox/listbox
-- ไม่พบ → แถวสุดท้าย "ขอเพิ่มทีมใหม่" → dialog ยืนยันชื่อ → `POST /team-requests` → ข้อความ "ส่งคำขอแล้ว รอ Committee" (ยังสมัครต่อโดยไม่มีทีมนี้ไม่ได้ถ้าทีมเป็นข้อบังคับ — ค่าเริ่มต้น: ทีมไม่บังคับ แต่แนะนำ)
-- เลือกทีม → `POST /me/teams` → แสดงชิปทีม; `teamCount > 1` หรือ `warnings` มี `MULTI_TEAM` → แบนเนอร์เตือน "คุณสังกัด N ทีมแล้ว" (เตือน ไม่บล็อก)
-- แสดงเกรดของผู้เล่นเองเท่านั้น (จาก `Me.currentGrade`); toggle "แสดงเกรดบนสายสาธารณะ" ค่าเริ่มต้นปิด → `POST /entries/{id}/grade-consent` หลังสมัคร (ในสไลซ์ใส่ได้แต่ไม่จำเป็น)
+พฤติกรรม:
+- **PlayerPicker** (ช่องผู้เล่น 2 ช่อง): พิมพ์ ≥ 2 ตัว debounce 250 ms ยกเลิกคำขอเก่า; แถวผลลัพธ์ = ชื่อ · เกรด (tier+ตัวย่อ) · จำนวนสโมสร; ห้ามเลือกคนเดียวกันซ้ำ (disabled "เลือกแล้ว"); คนที่มีคู่ในอีเวนต์นี้แล้ว → disabled "อยู่ในคู่อื่นแล้ว"; ผู้เล่นไม่มีเกรด → เลือกได้ พร้อมป้าย "ไม่มีเกรดอนุมัติ" (Committee เห็นตอนตรวจ)
+- XD: เพศผู้เล่นไม่อยู่ใน contract → ข้อความช่วย "ประเภทผสม: Committee ตรวจ" (Open Q)
+- เกรด: แสดงเฉพาะค่าที่ API ส่งมา; UI ไม่คำนวณสถิติ/เกรดคู่เอง; "ในช่วง/นอกช่วง" แสดงเมื่อมีข้อมูลจากเซิร์ฟเวอร์ (คำตัดสินจริงอยู่ที่เซิร์ฟเวอร์)
+- **TeamCombobox ต่อผู้เล่น** (A8/A11): ต้องเลือกจากรายการ; "ขอเพิ่มสโมสรใหม่" เมื่อไม่พบ; `teamCount > 1` / `MULTI_TEAM` → แบนเนอร์เตือน (ไม่บล็อก); keyboard ↑/↓/Enter/Esc, role=combobox
+- "บันทึกร่าง" = entry สถานะ `draft` (TBD-API; ไม่งั้นเก็บในเครื่อง) · "ส่งให้ Committee" → dialog สรุปคู่ + ผลตรวจ → ยืนยัน → `submitted` → ไป D4 พร้อม toast
 
 | State | แสดง |
 |---|---|
-| ปกติ | ปุ่มสมัครเปิด |
-| suggest โหลด | spinner เล็กในช่อง; ไม่พบ = "ไม่พบทีมที่ตรงกัน" |
-| suggest error | "ค้นหาทีมไม่สำเร็จ" + ลองใหม่; ยังสมัครได้ถ้าไม่ใส่ทีม |
-| 409 ENTRIES_CLOSED | แบนเนอร์ "ปิดรับสมัครแล้ว" (ฟอร์มปิด) |
-| 409 ENTRY_GRADE_OUT_OF_BAND | "เกรดของคุณอยู่นอกช่วงของอีเวนต์นี้" + แสดงช่วง |
-| 409 NO_APPROVED_GRADE | "คุณยังไม่มีเกรดที่อนุมัติ" + ลิงก์ "ขอประเมินเกรด" (ปลายทางยังไม่มีในสไลซ์: แสดงเป็นข้อความ) |
-| 409 FRESH_ASSESSMENT_REQUIRED | "อีเวนต์นี้ต้องประเมินใหม่" (ข้อความเดียวกัน) |
-| สมัครซ้ำ (มี entry active) | แสดง "คุณสมัครแล้ว" + ลิงก์ไป D4 |
-| สำเร็จ | หน้ายืนยัน + ปุ่ม "ดูรายชื่อผู้สมัคร" (D4) |
-| ออฟไลน์ | "ไม่มีการเชื่อมต่อ" ฟอร์มไม่หาย |
+| ปกติ | ปุ่มส่งเปิดเมื่อเลือกผู้เล่นครบ 2 |
+| ค้นหา loading / ว่าง / error | spinner / "ไม่พบผู้เล่น" / "ค้นหาไม่สำเร็จ" + ลองใหม่ |
+| `ENTRIES_CLOSED` | แบนเนอร์ + ฟอร์มปิด |
+| คู่ซ้ำ | "คู่นี้ถูกเพิ่มแล้ว" + ลิงก์ไปรายการ |
+| อีเวนต์เต็ม | "อีเวนต์เต็ม" |
+| เกรดนอกช่วง (409) | แสดงข้อความ error ตรง ๆ ตามที่ API ตอบ |
+| สำเร็จ | toast "ส่งให้ Committee แล้ว" → D4 |
+| ไม่มีสิทธิ์ | 403 |
 
-Components: AppShell, EventSummaryCard, PlayerGradeCard (แสดง GradeBand แบบ compact: `label`, `lower`–`upper`), **TeamCombobox** (props: `value`, `onSearch(q)`, `onSelect(team)`, `onRequestNew(name)`, `loading`, `error`), TeamChip, WarningBanner (variant multiTeam), Toggle, Button(sticky บนมือถือ), ConfirmDialog, ErrorBanner
+Components: AppShell, Stepper(compact), PlayerPicker (ใหม่; `value`, `onSearch`, `onSelect`, `excludeIds`, `loading`), PlayerResultRow, GradeChip/GradeBand(compact), TeamCombobox, TeamChip, WarningBanner(multiTeam), ConfirmDialog, Button(sticky บนมือถือ), Toast, ErrorBanner
 
 ---
 
-## D4 รายชื่อผู้สมัคร — `/events/:eventId/entries`
+## D4 คิวตรวจของ Committee + รายการคู่ที่ Admin สร้าง — `/events/:eventId/entries`
 
-- API: `GET /events/{eventId}/entries` → `Entry[] {id, status active|withdrawn, players[{userId, displayName, teamIds, teamCount, gradeConsent, grade|null}], seedScore|null, gradeVisibility hidden|public|disclosed, warnings[MULTI_TEAM]}`
-- บทบาท: ทุกคนที่ล็อกอิน (Guest ดูได้ตาม contract แต่สไลซ์บังคับล็อกอิน); **เกรด/seedScore แสดงเฉพาะเมื่อ API ส่งมา** (ซ่อน = null → แสดง "ซ่อนอยู่" ด้วยไอคอนล็อก+ข้อความ; Committee เห็นเกรดตามสิทธิ์) — UI ห้ามเดา/คำนวณ
-- Committee: คอลัมน์/ป้ายเพิ่ม: ⚠ MULTI_TEAM (ไอคอน+ข้อความ "หลายทีม") และปุ่ม "ถอนตัว" (`POST /entries/{id}/withdraw`; ต้องยืนยัน)
+แท็บ: **[คิวรอตรวจ] [ทั้งหมด] [ของฉัน (Admin)]**
+
+- API: `GET /events/{eventId}/entries` → `Entry {id, status, players[{userId, displayName, teamIds, teamCount, gradeConsent, grade|null}], seedScore|null, gradeVisibility, warnings[MULTI_TEAM]}` + ที่ต้องเพิ่ม (TBD-API): สถานะ `draft|submitted|approved|rejected`, `rejectReason`, `createdBy`, `submittedAt`, approve/reject
+- เกรดเห็นตามสิทธิ์ที่ API ส่ง (ซ่อน = null → ไอคอนล็อก + "ซ่อนอยู่"); UI ห้ามเดา
+
+### มุมมอง Committee
 
 ```
-┌─────────────────────────────────────────────┐
-│ ← ผู้สมัคร · MS ชายเดี่ยว S-–S+     12/32      │
-│ [ค้นหาชื่อ____]   [ทุกสถานะ ▼]                │
-├─────────────────────────────────────────────┤
-│ #  ชื่อ            ทีม            เกรด       │
-│ 1  สมชาย          เชียงใหม่ แบด   [S] S-–S+  │
-│ 2  วิภา           เชียงราย คลับ   🔒 ซ่อนอยู่  │
-│ 3  อนันต์ ⚠หลายทีม  A, B          [S+]       │
-│ ถอนตัวแล้ว: 1  (ขีดฆ่า + "ถอนตัว")             │
-└─────────────────────────────────────────────┘
+ [คิวรอตรวจ 5] [ทั้งหมด 12] [ของฉัน]        ค้นหา[____]  สถานะ[▼]
+┌───────────────────────────────────────────────────┐
+│ ☐ สมชาย + วิภา                 ส่งโดย ผู้ดูแล A 10:20  │
+│   สโมสร: เชียงใหม่ แบด / —   ⚠หลายสโมสร               │
+│   เกรด: S  +  S+  ✓ในช่วง                            │
+│   [อนุมัติ]  [ปฏิเสธ…เหตุผล]  [ดูรายละเอียด]           │
+└───────────────────────────────────────────────────┘
+ ☐ เลือกที่ไม่มีธง  [อนุมัติที่เลือก]
 ```
-(ใช้ไอคอน lucide แทนอีโมจิจริง)
+- อนุมัติรายตัว/กลุ่ม (กลุ่มเฉพาะแถวที่ไม่มีธง); **ปฏิเสธต้องมีเหตุผล ≥ 10 ตัวอักษร** → คู่กลับไปที่ Admin พร้อมเหตุผล แก้แล้วส่งใหม่ได้
+- ธง (ไอคอน+ข้อความ): `MULTI_TEAM` หลายสโมสร · ผู้เล่นไม่มีเกรด · เกรดนอกช่วง · ผู้เล่นซ้ำในอีเวนต์
+
+### มุมมอง Admin ("ของฉัน")
+
+- รายการคู่ที่ตนสร้าง: สถานะ draft/ส่งแล้ว/อนุมัติ/ปฏิเสธ (ข้อความ+ไอคอน), เหตุผลปฏิเสธในแถว + ปุ่ม "แก้ไขแล้วส่งใหม่"; draft แก้/ลบได้; `submitted` ดึงกลับได้ถ้ายังไม่ถูกตรวจ (TBD-API); `approved` ถอนตัวผ่าน `POST /entries/{id}/withdraw` (ยืนยัน)
+- ปุ่ม "+ เพิ่มคู่" → D3
 
 | State | แสดง |
 |---|---|
-| โหลด | skeleton แถว |
-| ว่าง | "ยังไม่มีผู้สมัคร" + ปุ่ม "สมัคร" (ถ้าสมัครได้) / "คัดลอกลิงก์สมัคร" (Committee) |
+| loading | skeleton แถว |
+| คิวว่าง | "ไม่มีคู่รอตรวจ" |
+| ทั้งหมดว่าง | "ยังไม่มีคู่" + (Admin) "เพิ่มคู่" |
 | error | ErrorBanner + ลองใหม่ |
-| ค้นหาไม่พบ | "ไม่พบผู้สมัครที่ตรงกับ …" |
-| ผู้สมัครของฉัน | แถวไฮไลต์ + ป้าย "คุณ" (ข้อความ) |
-| ถอนตัว | แถวขีดฆ่า + ข้อความ "ถอนตัว" (กรอง "ทั้งหมด/ใช้งาน/ถอนตัว") |
-| mobile | แถวเป็นการ์ด (ชื่อ, ทีม, เกรดบรรทัดล่าง) |
-| pagination | เรียงตามเวลาสมัคร; รายการ ≤ 256 โหลดครั้งเดียวแล้วกรองฝั่ง client |
+| ชนกัน | "ดำเนินการแล้วโดย X" รีเฟรชแถว |
+| กำลังอนุมัติ | แถว spinner; ล้มเหลว → คืนค่า + ข้อความ |
+| ถอนตัวแล้ว | ขีดฆ่า + ข้อความ "ถอนตัว" |
+| mobile | แถวเป็นการ์ด ปุ่มเต็มกว้าง ≥ 44px |
+| สิทธิ์ | Admin ที่ไม่มีบทบาท Committee: ซ่อนปุ่มอนุมัติ/ปฏิเสธ; อื่น ๆ 403 |
 
-Components: AppShell, DataTable(variant cards บนมือถือ), PlayerTag, TeamChip, GradeBand(compact) / GradeHiddenChip, FlagChip(MULTI_TEAM), StatusBadge, SearchField, Select(filter), ConfirmDialog, EmptyState, ErrorBanner
+Components: AppShell, Tabs, EntryApprovalRow (ใหม่; `entry`, `flags`, `onApprove`, `onReject(reason)`, `blocked`), EntryRow (Admin), PlayerTag, TeamChip, GradeBand(compact) / GradeHiddenChip, FlagChip, StatusBadge, ConfirmDialog(reason), DataTable(cards บนมือถือ), EmptyState, ErrorBanner
 
 ---
 
-## 2. รายการงานสำหรับ Andy (micro-task ลำดับสร้าง)
+## 2. ลำดับสร้างสำหรับ Andy (อัปเดต)
 
-1. โทเคน daylight + AppShell + Button/TextField/Select/Toggle/Toast/ErrorBanner/EmptyState/StatusBadge
-2. D1 login (+ guard/redirect, `Me` store, เมนูตามสิทธิ์)
-3. D2 รายการ + TournamentCard; ฟอร์มสร้าง + GradeRangeSelect + แถวอีเวนต์
-4. TeamCombobox (+ TeamChip, WarningBanner) แล้ว D3
-5. D4 DataTable/การ์ด + GradeBand compact + GradeHiddenChip + ถอนตัว
-6. ต่อ end-to-end ด้วย seed (X1, X2) แล้วตรวจเส้นทางทั้งหมดบน http://localhost:3100
+1. โทเคน daylight + AppShell + Button/TextField/Select/Toggle/Toast/ErrorBanner/EmptyState/StatusBadge/Tabs/Stepper
+2. D1 login (guard/redirect, `Me` store, เมนูตามสิทธิ์)
+3. D2 รายการ + TournamentCard; wizard 4 ขั้น (Stepper, DateField, EventTypeCard, GradeRangeSelect, PresetRadioCards, SummaryList)
+4. PlayerPicker + TeamCombobox (+ TeamChip, WarningBanner) แล้ว D3 (ต้อง X2/X3/X5 จาก Jim ก่อนต่อ API จริง; ระหว่างนี้ mock)
+5. D4: EntryApprovalRow / EntryRow + ConfirmDialog(reason) + FlagChip + GradeBand compact
+6. ต่อ end-to-end ด้วย seed แล้วเดินเส้นทางบน http://localhost:3100: login → สร้างทัวร์นาเมนต์ (wizard) → Admin เพิ่มคู่ → ส่ง → Committee อนุมัติ
 
-## 3. ตัวแปรการตัดสินใจเจ้าของ (อนุมัติบางส่วน)
+## 3. คำถามที่ยังเปิด (เจ้าของตอบหัวข้อหลักแล้ว ไม่ต้องอนุมัติซ้ำ)
 
-1. ยืนยันว่าสไลซ์นี้ใช้ daylight ธรรมดา (ไม่มี pixel) — pixel เฉพาะสายแข่งภายหลัง
-2. สไลซ์สร้างทัวร์นาเมนต์แบบหน้าเดียว (ไม่ใช่ wizard 5 ขั้น) ตกลงไหม
-3. ทีมไม่บังคับตอนสมัครใช่ไหม (แนะนำ: ไม่บังคับ แต่เตือนเมื่อไม่ใส่ เพราะกฎจับสายใช้ทีม)
-4. สไลซ์รองรับเฉพาะ "เดี่ยว" (ผู้เล่น 1 คน) ก่อน คู่ตามมา ตกลงไหม
-5. seed ผู้ใช้ demo = Admin+Committee และผู้เล่นตัวอย่างมีเกรด (X1, X2)
+1. คำศัพท์ "คู่" = entry, "สโมสร/ทีม" = teams — ยืนยัน
+2. XD ต้องตรวจเพศไหม (contract ไม่มีข้อมูล)
+3. "ส่งต่อประเมิน" = Committee อนุมัติ entry (X6) หรือขอ assessment คลิปจริง
+4. Admin แก้ส่งใหม่หลังถูกปฏิเสธได้ไม่จำกัดครั้งใช่ไหม
