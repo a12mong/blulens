@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { usePlayerSearch, type UserSummary } from './api';
+import type { components } from '@/lib/api/schema';
+import { usePlayerSearch } from './api';
+
+export type UserPickerItem = components['schemas']['UserPickerItem'];
 
 export type PlayerValue = {
   userId: string;
@@ -11,9 +14,14 @@ export type PlayerValue = {
 export type PlayerPickerProps = {
   value: PlayerValue | null;
   onChange: (v: PlayerValue | null) => void;
+  excludeUserIds?: string[];
 };
 
-export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
+export function PlayerPicker({
+  value,
+  onChange,
+  excludeUserIds,
+}: PlayerPickerProps) {
   const listboxId = useId();
   const [inputValue, setInputValue] = useState(value?.displayName ?? '');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -41,6 +49,10 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
     enabled: isOpen && debouncedQuery.trim().length >= 1,
   });
 
+  const filteredPlayers = ((players ?? []) as UserPickerItem[]).filter(
+    (item) => !excludeUserIds || !excludeUserIds.includes(item.id),
+  );
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     isTypingRef.current = true;
     const next = e.target.value;
@@ -50,7 +62,7 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
     setSelectedIndex(-1);
   };
 
-  const handleSelect = (item: UserSummary) => {
+  const handleSelect = (item: UserPickerItem) => {
     isTypingRef.current = false;
     onChange({ userId: item.id, displayName: item.displayName });
     setInputValue(item.displayName);
@@ -72,20 +84,24 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
       return;
     }
 
-    if (!players || players.length === 0) {
+    if (filteredPlayers.length === 0) {
       return;
     }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev < players.length - 1 ? prev + 1 : 0));
+      setSelectedIndex((prev) =>
+        prev < filteredPlayers.length - 1 ? prev + 1 : 0,
+      );
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : players.length - 1));
+      setSelectedIndex((prev) =>
+        prev > 0 ? prev - 1 : filteredPlayers.length - 1,
+      );
     } else if (e.key === 'Enter') {
-      if (selectedIndex >= 0 && selectedIndex < players.length) {
+      if (selectedIndex >= 0 && selectedIndex < filteredPlayers.length) {
         e.preventDefault();
-        handleSelect(players[selectedIndex]);
+        handleSelect(filteredPlayers[selectedIndex]);
       }
     }
   };
@@ -97,12 +113,14 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
     setIsOpen(false);
   };
 
+  const isAllExcluded = Boolean(
+    players && players.length > 0 && filteredPlayers.length === 0,
+  );
   const showEmpty = Boolean(
     isOpen &&
       debouncedQuery.trim().length >= 1 &&
       !isLoading &&
-      players &&
-      players.length === 0,
+      filteredPlayers.length === 0,
   );
 
   return (
@@ -113,7 +131,7 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-activedescendant={
-          selectedIndex >= 0 && players && selectedIndex < players.length
+          selectedIndex >= 0 && selectedIndex < filteredPlayers.length
             ? `${listboxId}-option-${selectedIndex}`
             : undefined
         }
@@ -126,20 +144,30 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
           }
         }}
         onKeyDown={handleKeyDown}
-        className="w-full border rounded px-3 py-2 text-sm bg-background text-foreground"
+        className="w-full border border-input rounded px-3 py-2 text-sm bg-background text-foreground"
       />
 
       {isOpen && debouncedQuery.trim().length >= 1 && (
-        <div className="absolute z-10 w-full mt-1 border rounded bg-card shadow-md">
-          {players && players.length > 0 ? (
+        <div className="absolute z-10 w-full mt-1 border border-border rounded bg-card shadow-md">
+          {filteredPlayers.length > 0 ? (
             <ul
               role="listbox"
               id={listboxId}
               data-testid="player-options"
               className="max-h-60 overflow-auto"
             >
-              {players.map((item, index) => {
+              {filteredPlayers.map((item, index) => {
                 const isSelected = selectedIndex === index;
+                const clubsText =
+                  item.teamNames && item.teamNames.length > 0
+                    ? item.teamNames.join(', ')
+                    : 'ไม่มีสโมสร';
+                const gradeBase = item.gradeLabel ?? 'ยังไม่มีเกรด';
+                const gradeText = item.gradeProvisional
+                  ? `${gradeBase} (ชั่วคราว)`
+                  : gradeBase;
+                const metaText = `${clubsText} · ${gradeText}`;
+
                 return (
                   <li
                     key={item.id}
@@ -147,7 +175,7 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
                     role="option"
                     aria-selected={isSelected}
                     data-testid="player-option"
-                    className={`px-3 py-1.5 text-sm cursor-pointer flex items-center justify-between ${
+                    className={`px-3 py-1.5 text-sm cursor-pointer flex flex-col justify-center gap-0.5 ${
                       isSelected
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-muted'
@@ -156,6 +184,16 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
                     onClick={() => handleSelect(item)}
                   >
                     <span>{item.displayName}</span>
+                    <span
+                      data-testid="player-option-meta"
+                      className={`text-xs ${
+                        isSelected
+                          ? 'text-primary-foreground/80'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {metaText}
+                    </span>
                   </li>
                 );
               })}
@@ -166,7 +204,7 @@ export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
                 data-testid="player-empty"
                 className="text-xs text-muted-foreground text-center"
               >
-                ไม่พบผู้เล่น
+                {isAllExcluded ? 'ผู้เล่นคนนี้ถูกเลือกไปแล้ว' : 'ไม่พบผู้เล่น'}
               </p>
             </div>
           ) : null}

@@ -168,7 +168,11 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
     <div className="space-y-4 p-4">
       <div data-testid="entry-player-1" className="space-y-2">
         <label className="block font-medium">ผู้เล่นคนที่ 1</label>
-        <PlayerPicker value={player1} onChange={setPlayer1} />
+        <PlayerPicker
+          value={player1}
+          onChange={setPlayer1}
+          excludeUserIds={player2 ? [player2.userId] : []}
+        />
       </div>
 
       <div data-testid="entry-team-1" className="space-y-2">
@@ -181,7 +185,11 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
 
       <div data-testid="entry-player-2" className="space-y-2">
         <label className="block font-medium">ผู้เล่นคนที่ 2</label>
-        <PlayerPicker value={player2} onChange={setPlayer2} />
+        <PlayerPicker
+          value={player2}
+          onChange={setPlayer2}
+          excludeUserIds={player1 ? [player1.userId] : []}
+        />
       </div>
 
       <div data-testid="entry-team-2" className="space-y-2">

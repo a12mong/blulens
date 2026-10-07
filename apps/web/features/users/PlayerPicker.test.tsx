@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiFetch } from '@/lib/api/client';
-import { PlayerPicker, type PlayerValue } from './PlayerPicker';
+import { PlayerPicker } from './PlayerPicker';
 
 vi.mock('@/lib/api/client');
 
@@ -185,5 +185,134 @@ describe('PlayerPicker', () => {
 
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(screen.queryByTestId('player-options')).not.toBeInTheDocument();
+  });
+
+  it('does not offer the player already chosen elsewhere', async () => {
+    const playerA = { id: 'u-a', displayName: 'สมชาย', roles: ['Member'] };
+    const playerB = { id: 'u-b', displayName: 'วิภา', roles: ['Member'] };
+
+    vi.mocked(apiFetch).mockResolvedValue({
+      items: [playerA, playerB],
+    });
+
+    // 1. With excludeUserIds=[playerA.id] -> only playerB is listed
+    const { rerender } = render(
+      <PlayerPicker
+        value={null}
+        onChange={vi.fn()}
+        excludeUserIds={[playerA.id]}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const input = screen.getByTestId('player-input');
+    fireEvent.change(input, { target: { value: 'สม' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    await waitFor(() => {
+      const options = screen.getAllByTestId('player-option');
+      expect(options).toHaveLength(1);
+      expect(options[0]).toHaveTextContent('วิภา');
+      expect(screen.queryByText('สมชาย')).toBeNull();
+    });
+
+    // 2. With no exclusion -> both are listed
+    rerender(
+      <PlayerPicker
+        value={null}
+        onChange={vi.fn()}
+        excludeUserIds={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      const options = screen.getAllByTestId('player-option');
+      expect(options).toHaveLength(2);
+      expect(screen.getByText('สมชาย')).toBeInTheDocument();
+      expect(screen.getByText('วิภา')).toBeInTheDocument();
+    });
+  });
+
+  it('shows option meta with club names and grade label, or default placeholders', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      items: [
+        {
+          id: 'u-1',
+          displayName: 'อนันต์',
+          teamNames: ['A', 'B'],
+          gradeLabel: 'S+',
+        },
+        {
+          id: 'u-2',
+          displayName: 'มาลี',
+          teamNames: [],
+          gradeLabel: null,
+        },
+        {
+          id: 'u-3',
+          displayName: 'ชูชีพ',
+          teamNames: ['ClubX'],
+          gradeLabel: 'A',
+          gradeProvisional: true,
+        },
+      ],
+    });
+
+    render(<PlayerPicker value={null} onChange={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    const input = screen.getByTestId('player-input');
+    fireEvent.change(input, { target: { value: 'test' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('player-option')).toHaveLength(3);
+    });
+
+    const metas = screen.getAllByTestId('player-option-meta');
+    expect(metas).toHaveLength(3);
+
+    // Option 1: teamNames ['A', 'B'] and gradeLabel 'S+'
+    expect(metas[0]).toHaveTextContent('A, B');
+    expect(metas[0]).toHaveTextContent('S+');
+    expect(metas[0]).toHaveTextContent('A, B · S+');
+
+    // Option 2: empty teamNames -> 'ไม่มีสโมสร', null gradeLabel -> 'ยังไม่มีเกรด'
+    expect(metas[1]).toHaveTextContent('ไม่มีสโมสร · ยังไม่มีเกรด');
+
+    // Option 3: provisional grade -> appends ' (ชั่วคราว)'
+    expect(metas[2]).toHaveTextContent('ClubX · A (ชั่วคราว)');
+  });
+
+  it('shows ผู้เล่นคนนี้ถูกเลือกไปแล้ว when all returned results are excluded', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      items: [{ id: 'u-x', displayName: 'สมชาย', roles: ['Member'] }],
+    });
+
+    render(
+      <PlayerPicker
+        value={null}
+        onChange={vi.fn()}
+        excludeUserIds={['u-x']}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    const input = screen.getByTestId('player-input');
+    fireEvent.change(input, { target: { value: 'สมชาย' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    const emptyEl = await waitFor(() => screen.getByTestId('player-empty'));
+    expect(emptyEl).toHaveTextContent('ผู้เล่นคนนี้ถูกเลือกไปแล้ว');
   });
 });
