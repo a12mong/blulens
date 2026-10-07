@@ -147,9 +147,9 @@ describe('EntryTable', () => {
     render(<EntryTable entries={entries} mode="admin" />);
 
     const warningsList = screen.getByTestId('entry-warnings');
-    expect(warningsList).toHaveTextContent('หลากลุ่ม');
-    expect(warningsList).toHaveTextContent('ยังไม่มีเกรดอนุมัติ');
-    expect(warningsList).toHaveTextContent('เกรดนอกช่วง');
+    expect(warningsList).toHaveTextContent('ผู้เล่นสังกัดหลายสโมสร');
+    expect(warningsList).toHaveTextContent('ผู้เล่นยังไม่มีเกรดที่อนุมัติ');
+    expect(warningsList).toHaveTextContent('เกรดอยู่นอกช่วงของประเภทนี้');
   });
 
   it('renders empty state when no entries', () => {

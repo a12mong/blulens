@@ -6,18 +6,12 @@ import { TeamCombobox, type TeamValue } from '@/features/teams/TeamCombobox';
 import { useCreateEntry, useForwardEntry, type Entry } from './api';
 import { ApiRequestError } from '@/lib/api/client';
 import { thaiError } from '@/lib/errors';
+import { warningLines } from './warningText';
 
 export interface AdminEntryFormProps {
   eventId: string;
   onDone?: (entry: Entry) => void;
 }
-
-const warningText: Record<string, string> = {
-  MULTI_TEAM: 'ผู้เล่นสังกัดหลายสโมสร',
-  NO_APPROVED_GRADE: 'ผู้เล่นยังไม่มีเกรดที่อนุมัติ',
-  GRADE_OUT_OF_BAND: 'เกรดอยู่นอกช่วงของประเภทนี้',
-  FRESH_ASSESSMENT_REQUIRED: 'ต้องประเมินใหม่ก่อนลงแข่ง',
-};
 
 export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
   const [player1, setPlayer1] = useState<PlayerValue | null>(null);
@@ -32,7 +26,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
 
   const createMutation = useCreateEntry(eventId, {
     onSuccess: async (entry) => {
-      setWarnings(entry.warnings || []);
+      setWarnings(warningLines(entry));
       setIsSubmitting(false);
     },
     onError: (err: ApiRequestError) => {
@@ -111,7 +105,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
   };
 
   if (forwardedEntry) {
-    const entryWarnings = forwardedEntry.warnings || [];
+    const entryWarnings = warningLines(forwardedEntry);
     const entryDisplayName =
       forwardedEntry.name ||
       forwardedEntry.players?.map((p) => p.displayName).filter(Boolean).join(' / ') ||
@@ -131,12 +125,12 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
 
         {entryWarnings.length > 0 && (
           <ul data-testid="entry-warnings" className="space-y-1">
-            {entryWarnings.map((w) => (
+            {entryWarnings.map((w, idx) => (
               <li
-                key={w}
+                key={`${w}-${idx}`}
                 className="bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/20 p-2 rounded text-sm"
               >
-                {warningText[w] || w}
+                {w}
               </li>
             ))}
           </ul>
@@ -238,12 +232,12 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
 
       {warnings.length > 0 && (
         <ul data-testid="entry-warnings" className="space-y-1">
-          {warnings.map((w) => (
+          {warnings.map((w, idx) => (
             <li
-              key={w}
+              key={`${w}-${idx}`}
               className="bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/20 p-2 rounded text-sm"
             >
-              {warningText[w] || w}
+              {w}
             </li>
           ))}
         </ul>
