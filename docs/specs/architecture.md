@@ -59,6 +59,20 @@ flowchart LR
 | **Member** | นักกีฬา/สมาชิก | โปรไฟล์, สังกัดทีม, ขอประเมิน+อัปคลิป, ดูผลของตัวเอง, สมัครแข่ง | เห็นคะแนนรายกรรมการ (เห็นแค่ผลรวม — ดู decision A4) |
 | **Guest** | ไม่ได้ล็อกอิน | ดูรายการแข่ง, สายแข่งที่เผยแพร่, ผลการแข่ง | ดูโปรไฟล์/เกรดรายบุคคล (เว้นแต่เจ้าของโปรไฟล์ตั้งเป็นสาธารณะ) |
 
+**ตารางสิทธิ์จริง (ไม่ใช่ลำดับชั้นแบบ superset — แต่ละ role มีชุดของตัวเอง ผู้ใช้หลาย role ได้สิทธิ์รวมแบบ union):**
+
+| ความสามารถ | Guest | Member | Reviewer | Committee | Admin |
+|---|---|---|---|---|---|
+| ดูรายการแข่ง/สายที่เผยแพร่/ผลแข่ง | ✓ | ✓ | ✓ | ✓ | ✓ |
+| ดู rubric ที่ใช้อยู่ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| โปรไฟล์ตัวเอง, ขอประเมิน, อัปคลิป, ดูผลตัวเอง (ผลรวม), สมัครแข่ง/ถอนตัว | – | ✓ | – | – | – |
+| คิวงานรีวิวของตัวเอง, ดูคลิปที่ได้รับมอบหมาย, ส่ง/ปฏิเสธรีวิว, ดูสถิติตัวเอง | – | – | ✓ | – | – |
+| มอบหมายกรรมการ, ดูคะแนนรายกรรมการ, อนุมัติ/ส่งกลับ/override, สถิติกรรมการทั้งหมด | – | – | – | ✓ | – |
+| สร้างทีม/ผูก alias ทีม, สร้างรายการแข่ง/ประเภท, จับสาย/เผยแพร่/สุ่มใหม่ | – | – | – | ✓ | ✓ (ทีมเท่านั้น) |
+| แก้ rubric (สร้างเวอร์ชันใหม่ — หน้า S12) | – | – | – | ✓ | – |
+| จัดการผู้ใช้/role, ดู audit log ทั้งหมด | – | – | – | – | ✓ |
+
+- Guest = ผู้ที่ไม่ได้ล็อกอิน ไม่มีบัญชีชนิด Guest ใน DB
 - ผู้ใช้ 1 คนถือได้หลาย role (เช่น Reviewer + Member) — สิทธิ์เป็น string `resource.action` แบบ kpaccv2 (ทะเบียนกลางใน `packages/shared`) แต่ **role ของ blulens ตายตัว 5 ตัว** ไม่ให้สร้าง role เอง (decision A2)
 - กฎ conflict of interest (บังคับที่ API ไม่ใช่แค่ซ่อนปุ่ม): กรรมการ/คณะกรรมการ ห้ามแตะผลของตัวเองหรือคนที่สังกัดทีมเดียวกัน ณ วันที่มอบหมาย
 
@@ -131,6 +145,61 @@ erDiagram
 | Draws | `POST /events/{id}/draws/preview`, `POST /draws/{id}/publish`, `GET /events/{id}/bracket` | Committee / Guest อ่าน |
 | Audit | `GET /audit-logs` | Admin |
 
+### 6.1 รูปแบบ envelope และ schema
+
+- envelope ตามข้างบน · zod schema ของ request/response + envelope อยู่ที่ `packages/shared/src/schemas` (web import ตัวเดียวกับ api) · ต้องตรงกับ openapi.yaml
+- โค้ด error เป็น `UPPER_SNAKE` คงที่ (FE ใช้ตัดสิน UI) · `message` เป็นภาษาไทยแสดงผู้ใช้ได้ทันที · validation ใส่ `details.fieldErrors`
+
+### 6.2 Auth / session
+
+| เรื่อง | ข้อกำหนด |
+|---|---|
+| Cookie | `bl_access` (JWT 15 นาที, path `/`) · `bl_refresh` (7 วัน, path `/api/v1/auth`, หมุนทุกครั้งที่ใช้ + จับการใช้ซ้ำ) · `bl_session` (marker ไม่มีความลับ ให้ Next middleware ใช้ redirect) — ทั้งหมด httpOnly ยกเว้น marker, `SameSite=Lax`, `Secure` ใน prod |
+| Endpoint | `POST /auth/register` · `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` (roles + permissions + เกรดปัจจุบัน) |
+| หมดอายุ | api client ฝั่ง web เจอ 401 → เรียก `/auth/refresh` อัตโนมัติ 1 ครั้ง → retry · refresh ล้มเหลว → ไปหน้า login |
+| CSRF | ไม่ใช้ token: เรียกแบบ same-origin ผ่าน rewrite + `SameSite=Lax` + api ปฏิเสธ request ที่เปลี่ยนข้อมูล (POST/PUT/PATCH/DELETE) ถ้า header `Origin` ไม่ใช่โดเมนเว็บ |
+
+### 6.3 Blind review และผลประเมิน
+
+- Blind บังคับที่ **API**: endpoint ของ Reviewer ไม่ส่งคะแนนคนอื่นเลย; `reviewerRows` ส่งเฉพาะ Committee
+- API ส่ง `GradeView` ครบ (`score`, `margin`, `lower`, `upper`, `center`, `tier`, `kind`, `label`) — **web ไม่ derive เอง** (`label` = `txt` ของ bad8bit)
+- ยังสรุปผลไม่ได้ (ไม่มีรีวิว/`needs_reviewers`) → `latestResult: null` + `status` — ไม่สร้างตัวเลขปลอม
+
+### 6.4 คลิป (อัปโหลด/เล่น)
+
+| เรื่อง | ข้อกำหนด |
+|---|---|
+| รูปแบบ | ไฟล์ MP4 (H.264 + AAC) ตรง ๆ ไม่ใช้ HLS · รับ `.mov` ได้เฉพาะที่เบราว์เซอร์เล่นได้ (หน้าอัปโหลดตรวจด้วย `<video>` ก่อนส่ง) |
+| ขนาด | ≤ 500 MB/ไฟล์ · ≤ 5 นาที/คลิป · ≤ 3 คลิป/คำขอ |
+| อัปโหลด | `POST /assessments/{id}/clips/upload-url` → presigned **PUT ครั้งเดียว** ตรงไป MinIO (ไม่ผ่าน api, ไม่มี multipart ในเฟสแรก) |
+| เล่น | `viewUrl` แนบมากับ detail · หมดอายุให้เรียก `GET /clips/{clipId}/playback-url` · host = `files.<โดเมน>` (dev `http://localhost:9100`) · อายุ 15 นาที · รองรับ Range (seek ได้) |
+
+### 6.5 รายการ / realtime
+
+- Pagination: cursor `?cursor=&limit=` (default 20, max 100) → `{ items, nextCursor }`
+- Sort: `?sort=<field>:<asc|desc>` เฉพาะฟิลด์ที่ endpoint อนุญาต (`x-sort` ใน openapi) · Filter: query param ตามชื่อ (เช่น `status=`)
+- Realtime: **ไม่มีในเฟสแรก** — หน้าที่ต้องการสถานะสด (สถานะการประเมิน, สาย) ใช้ polling 30 วินาที; SSE พิจารณาภายหลัง
+
+### 6.6 ทีมและการลงทะเบียนชื่อทีม
+
+- ผู้เล่น **เลือกทีมจากรายการ** (dropdown ค้นหาได้ทั้งชื่อไทย/อังกฤษ/alias) — ไม่พิมพ์ชื่อทีมอิสระตอนสมัครแข่ง
+- ไม่พบทีม → กด "ขอเพิ่มทีม" (พิมพ์ชื่อ) → สถานะรออนุมัติ → Committee/Admin **อนุมัติเป็นทีมใหม่ หรือ ผูกเป็น alias ของทีมเดิม** (เช่น `บลูวิง` = `Blue Wing`) — ระบบเดาไทย↔อังกฤษอัตโนมัติไม่ได้
+- ตรวจชื่อซ้ำด้วยการ normalize: Unicode NFC, ตัดช่องว่างหัวท้าย, ยุบช่องว่างซ้ำ (รวม NBSP/tab), ลบ zero-width, ตัวพิมพ์เล็ก — ถ้าตรงกับทีม/alias ที่มี → เสนอทีมนั้นแทน
+- ผู้เล่นสังกัดได้ 1 ทีม ณ เวลาหนึ่ง (มีประวัติย้ายทีมแบบมีวันที่) · ตาราง `team_aliases`
+
+### 6.7 ตอบคำถาม FE ของ Andy (`docs/frontend/architecture-notes.md` §9)
+
+| คำถาม | ตอบที่ |
+|---|---|
+| Q1 envelope / zod อยู่ไหน | §6.1 |
+| Q2 cookie, login/logout/me, CSRF, หมดอายุ | §6.2 |
+| Q3 ตารางสิทธิ์ 5 role, Guest, หลาย role | §3 (ตารางสิทธิ์) |
+| Q4 blind review, ผลมี lower/upper/score/kind/txt ครบไหม | §6.3 |
+| Q5 playback host / TTL / Range | §6.4 + `GET /clips/{clipId}/playback-url` |
+| Q6 mp4 vs HLS, ขนาด, presigned PUT vs multipart | §6.4 |
+| Q7 API_URL / MinIO หลัง Caddy | README (Kevin, Q7) + §7 |
+| Q8 pagination / sort / realtime | §6.5 |
+
 ## 7. Deploy บน Droplet เดียว
 
 | Service | Image | เปิดพอร์ตออกนอก? | หมายเหตุ |
@@ -140,7 +209,7 @@ erDiagram
 | `api` | `ghcr.io/<owner>/blulens-api` | ไม่ | รัน `prisma migrate deploy` ตอนเริ่ม; worker คิวรันใน process เดียวกัน (decision A3) |
 | `postgres` | `postgres:16-alpine` | ไม่ | volume ถาวร + `pg_dump` รายวันขึ้น DO Spaces (ต้องขออนุมัติค่าใช้จ่าย) |
 | `redis` | `redis:7-alpine` | ไม่ | AOF เปิด (คิวไม่หายตอนรีสตาร์ท) |
-| `minio` | `minio/minio` | ไม่ (ผ่าน Caddy) | bucket `clips` private; อัป/ดูผ่าน presigned URL อายุสั้น (15 นาที) |
+| `minio` | `minio/minio` | ไม่ (ผ่าน Caddy `FILES_ADDRESS`) | bucket `clips` private; อัป/ดูผ่าน presigned URL อายุ 15 นาที เซ็นด้วย `S3_PUBLIC_ENDPOINT` (รายละเอียดใน README หัวข้อ Q7 ของ Kevin) · console ไม่เปิดออกนอก |
 
 - ขนาดเครื่องเริ่มต้นที่เสนอ: 2 vCPU / 4 GB RAM / ดิสก์ 80 GB (คลิปคือส่วนที่กินที่ที่สุด — ดู decision A5 เรื่องจำกัดความยาวคลิป)
 - CI (GitHub Actions) build image → GHCR → SSH เข้า Droplet `docker compose pull && up -d` — **การ deploy จริงต้องผ่าน god → เจ้าของ** (bl-13)
@@ -170,6 +239,7 @@ erDiagram
 | A4 | Member เห็นอะไรในผลของตัวเอง | (ก) เห็นเฉพาะผลรวม score/lower/upper + จำนวนกรรมการ (ข) เห็นคะแนนรายกรรมการแบบไม่ระบุชื่อ (ค) เห็นพร้อมชื่อ | **(ก)** | (ข)/(ค) โปร่งใสขึ้นแต่เสี่ยงกดดันกรรมการ; (ค) ขัดหลัก blind review |
 | A5 | ที่เก็บคลิป | (ก) MinIO บน Droplet เดียวกัน (ข) DigitalOcean Spaces (S3) | **(ก)** ในเฟสแรก | (ข) มีค่าบริการรายเดือน (~$5+) แต่ดิสก์ Droplet ไม่เต็ม และ backup ง่ายกว่า — โค้ดเหมือนเดิม (S3 API) |
 | A6 | การเข้าถึงคลิป | (ก) subdomain `files.<โดเมน>` ผ่าน Caddy (ข) proxy ผ่าน api | **(ก)** | (ข) ไม่ต้องใช้ subdomain แต่ api ต้องส่งต่อวิดีโอเอง กิน CPU/แบนด์วิดท์ของ api |
+| A8 | ชื่อทีมตอนลงทะเบียน (คำถาม Q4 ของ Dwight) | (ก) **เลือกจากรายการ + ขอเพิ่มทีมให้ Committee/Admin อนุมัติหรือผูก alias** (ข) พิมพ์อิสระ ระบบ normalize แล้ว Admin ตามรวมทีมซ้ำภายหลัง | **(ก)** | (ข) สมัครสะดวกกว่า แต่ทีมซ้ำ (ไทย/อังกฤษ) จะทำให้กฎ "ทีมเดียวกันห้ามเจอกันรอบแรก" พลาด ถ้า Admin ไม่รวมก่อนจับสาย |
 | A7 | เวอร์ชัน API | (ก) `/api/v1` ตั้งแต่วันแรก (ข) `/api` ไม่มีเวอร์ชัน | **(ก)** | (ข) ง่ายกว่าเล็กน้อย แต่ถ้าต่อแอปมือถือภายหลังจะเปลี่ยนสัญญายาก |
 
-> **สิ่งที่เจ้าของต้องตอบ:** อนุมัติ A1–A7 (หรือเลือกตัวเลือกอื่น) + ตอบคำถามเปิด §9 ข้อ 1 (โดเมน) — หลังอนุมัติ Jim จะแตก packet ให้ Kevin (schema + api skeleton) และ Andy (web shell + api client จาก openapi.yaml)
+> **สิ่งที่เจ้าของต้องตอบ:** อนุมัติ A1–A8 (หรือเลือกตัวเลือกอื่น) + ตอบคำถามเปิด §9 ข้อ 1 (โดเมน) — หลังอนุมัติ Jim จะแตก packet ให้ Kevin (schema + api skeleton) และ Andy (web shell + api client จาก openapi.yaml)

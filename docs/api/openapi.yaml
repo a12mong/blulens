@@ -6,10 +6,15 @@ info:
     Single source of truth for the Web <-> API contract (bl-02). DRAFT — waiting for owner approval.
     Specs: docs/specs/architecture.md, docs/specs/grading.md, docs/specs/draw.md.
     Conventions:
-      - Auth via httpOnly cookies (bl_access / bl_refresh); no Authorization header.
+      - Auth via httpOnly cookies: bl_access (JWT 15 min, path /), bl_refresh (7 days, path /api/v1/auth),
+        bl_session (non-secret marker for Next middleware). SameSite=Lax, Secure in prod. No Authorization header.
+        No CSRF token: same-origin via Next rewrite + SameSite=Lax + API rejects mutating requests whose
+        Origin header is not the site origin (architecture.md §6.2).
+      - Sorting: ?sort=<field>:<asc|desc>, fields whitelisted per endpoint (x-sort). No realtime in v1 (poll).
       - Every response is wrapped in an envelope: { success: true, data } or { success: false, error }.
         Schemas below describe `data` only; see components.schemas.Envelope* for the wrapper.
       - Times are ISO-8601 UTC. Lists use cursor pagination (?cursor=&limit=) -> { items, nextCursor }.
+      - Envelope schemas and request/response zod live in packages/shared/src/schemas (must match this file).
       - x-roles lists the roles allowed to call an operation (Admin, Committee, Reviewer, Member, Guest).
 servers:
   - url: /api/v1
@@ -169,6 +174,8 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
         - { name: status, in: query, schema: { $ref: '#/components/schemas/AssessmentStatus' } }
         - { name: subjectUserId, in: query, schema: { type: string, format: uuid } }
+        - { name: sort, in: query, schema: { type: string, default: 'createdAt:desc' } }
+      x-sort: [createdAt, updatedAt, status]
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentPage' } } } }
   /assessments/{assessmentId}:
@@ -210,6 +217,27 @@ paths:
                   uploadUrl: { type: string, format: uri }
                   expiresAt: { type: string, format: date-time }
         '422': { $ref: '#/components/responses/Validation' }
+  /clips/{clipId}/playback-url:
+    get:
+      tags: [assessments]
+      summary: Fresh presigned GET URL for a clip (owner Member, assigned Reviewer, Committee)
+      description: |
+        URL host = S3_PUBLIC_ENDPOINT (prod https://files.<domain>, dev http://localhost:9100). TTL 15 min.
+        Byte-range requests supported (Caddy files block has no gzip). Web re-calls this when a URL expires.
+      x-roles: [Member, Reviewer, Committee]
+      parameters: [{ name: clipId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+        '403': { description: CLIP_FORBIDDEN, content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /assessments/{assessmentId}/submit:
     post:
       tags: [assessments]
@@ -278,12 +306,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [centerKey, reason]
-              properties:
-                centerKey: { $ref: '#/components/schemas/GradeKey' }
-                reason: { type: string, minLength: 20, maxLength: 2000 }
+            schema: { $ref: '#/components/schemas/OverrideInput' }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
         '403': { description: 'OVERRIDE_CONFLICT_OF_INTEREST', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
@@ -626,7 +649,8 @@ components:
       type: object
       description: |
         The assessment result shape every client renders. score is continuous in ladder units [0, 15);
-        lower/upper are grade keys of floor(score - margin) / floor(score + margin), clamped;
+        interval is half-open [score - margin, score + margin): lower = grade key of floor(score - margin),
+        upper = grade key of ceil(score + margin) - 1, both clamped to 0..14 (grading.md appendix B.4);
         center = grade key of floor(score). label derives from lower/upper/kind.
       required: [score, lower, upper, center, kind, label]
       properties:
@@ -666,6 +690,7 @@ components:
       properties:
         version: { type: integer }
         source: { type: string, enum: [computed, override] }
+        status: { type: string, enum: [pending, approved, superseded], description: approval state of this result row }
         grade: { $ref: '#/components/schemas/GradeView' }
         nRaters: { type: integer, description: valid reviews used after exclusion }
         nExcluded: { type: integer, description: reviews excluded as outliers }
@@ -919,6 +944,12 @@ components:
               reason: { type: [string, 'null'] }
               createdAt: { type: string, format: date-time }
         nextCursor: { type: [string, 'null'] }
+    OverrideInput:
+      type: object
+      required: [centerKey, reason]
+      properties:
+        centerKey: { $ref: '#/components/schemas/GradeKey' }
+        reason: { type: string, minLength: 20, maxLength: 2000 }
     ReasonInput:
       type: object
       required: [reason]
