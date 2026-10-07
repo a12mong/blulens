@@ -146,6 +146,20 @@ describe('entries (bl-21 demo slice)', () => {
       .send({ reason: 'เคยแข่งในช่วงเกรดนี้มาก่อนและคณะกรรมการรับรองแล้ว' }).expect(200);
   });
 
+  it('blocks approval while an event requiring a fresh assessment has a player without one (A13)', async () => {
+    const ev = await http().post(`/api/v1/tournaments/${tournamentId}/events`).set('Cookie', committee)
+      .send({ discipline: 'WD', gradeMin: 'S-', gradeMax: 'N', requiresFreshAssessment: true }).expect(201);
+    const x = await player('fresh-x', 8);
+    const y = await player('fresh-y', 8);
+    const e = (await http().post(`/api/v1/events/${ev.body.data.id}/entries`).set('Cookie', adminCommittee)
+      .send({ players: [{ userId: x }, { userId: y }] }).expect(201)).body.data;
+    expect(e.warnings).toEqual(['FRESH_ASSESSMENT_REQUIRED']);
+    await http().post(`/api/v1/entries/${e.id}/forward`).set('Cookie', adminCommittee).expect(200);
+    expect((await http().post(`/api/v1/entries/${e.id}/approve`).set('Cookie', committee).send({}).expect(409)).body.error.code)
+      .toBe('ENTRY_FRESH_ASSESSMENT_MISSING');
+    await prisma.entry.deleteMany({ where: { eventId: ev.body.data.id } });
+  });
+
   it('enforces player count, duplicate players and roles', async () => {
     const a = await player('a', 8);
     const b = await player('b', 8);

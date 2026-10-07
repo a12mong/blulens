@@ -131,6 +131,10 @@ export class EntriesService {
     if (entry!.warnings.includes('NO_APPROVED_GRADE')) {
       throw conflict('ENTRY_PLAYER_UNGRADED', 'มีผู้เล่นที่ยังไม่มีเกรดที่อนุมัติแล้ว กรุณาสั่งประเมินก่อน');
     }
+    // A13 (owner-approved): an event that requires a fresh assessment needs an approved event-bound result
+    if (entry!.warnings.includes('FRESH_ASSESSMENT_REQUIRED')) {
+      throw conflict('ENTRY_FRESH_ASSESSMENT_MISSING', 'ประเภทนี้ต้องมีผลประเมินใหม่ที่ผูกกับรายการแข่งนี้ก่อนอนุมัติ');
+    }
     if (entry!.warnings.includes('GRADE_OUT_OF_BAND') && !reason) {
       throw conflict('ENTRY_OUT_OF_BAND_REASON_REQUIRED', 'เกรดอยู่นอกช่วงของประเภทนี้ ต้องระบุเหตุผลอย่างน้อย 20 ตัวอักษร');
     }
