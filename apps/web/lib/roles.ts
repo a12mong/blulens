@@ -12,9 +12,9 @@ export const AREA_PATH: Record<Area, string> = {
 
 const ROLE_AREAS: Record<Role, Area[]> = {
   Member: ['member'],
-  Reviewer: ['member', 'reviewer'],
-  Committee: ['member', 'committee'],
-  Admin: ['member', 'admin'],
+  Reviewer: ['reviewer'],
+  Committee: ['committee'],
+  Admin: ['admin'],
 };
 
 /** Strict per architecture.md §3: Admin does NOT get committee/reviewer areas unless the user also holds that role.
