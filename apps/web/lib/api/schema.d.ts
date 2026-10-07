@@ -335,6 +335,212 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/teams/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Type-ahead team suggestions (names, aliases; tolerant to small typos). User must pick one (A8). */
+        get: {
+            parameters: {
+                query: {
+                    q: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            teamId: string;
+                            name: string;
+                            matchedAlias?: string | null;
+                            /** @description edit distance of the match (0 = exact/prefix) */
+                            distance?: number;
+                        }[];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pending team requests */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TeamRequest"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Request a new team when no suggestion matches (A8) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TeamRequest"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-requests/{requestId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve as a new team, alias to an existing team, or reject */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    requestId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        action: "create_team" | "alias_to_team" | "reject";
+                        /**
+                         * Format: uuid
+                         * @description required for alias_to_team
+                         */
+                        teamId?: string;
+                        reason?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TeamRequest"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Member joins a team (several teams allowed, A11). Response carries the resulting team count. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        teamId: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            teams?: components["schemas"]["Team"][];
+                            teamCount?: number;
+                            warnings?: "MULTI_TEAM"[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/teams/{teamId}/members": {
         parameters: {
             query?: never;
@@ -344,7 +550,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add a user to a team from a date (memberships are dated; draw uses membership on draw date) */
+        /** Add a user to a team from a date (several concurrent teams allowed; dated; draw uses memberships on draw date) */
         post: {
             parameters: {
                 query?: never;
@@ -428,6 +634,11 @@ export interface paths {
                 content: {
                     "application/json": {
                         note?: string;
+                        /**
+                         * Format: uuid
+                         * @description A13: event-bound assessment for an event with requiresFreshAssessment
+                         */
+                        eventId?: string;
                     };
                 };
             };
@@ -1265,7 +1476,7 @@ export interface paths {
                         "application/json": components["schemas"]["Entry"];
                     };
                 };
-                /** @description ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE */
+                /** @description ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE | FRESH_ASSESSMENT_REQUIRED */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1277,6 +1488,118 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entries/{entryId}/grade-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** A player of the entry gives/withdraws consent to show the entry grade (A14). Doubles = both must consent. */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        consent: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Entry"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{eventId}/grades/disclose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transparency function, disclose all entry grades of the event regardless of consent (A14; audited, players notified) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    eventId: components["parameters"]["EventId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AuditedReasonInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Event"];
+                    };
+                };
+            };
+        };
+        /** Revoke the disclosure (reason required; audited) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    eventId: components["parameters"]["EventId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AuditedReasonInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Event"];
+                    };
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -1870,7 +2193,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Enter/edit a match result (validated against the stage MatchFormat; audited) */
+        /** Enter/edit a match result (validated against the stage MatchFormat; audited). Umpire -> status reported; Committee -> confirmed directly (or correction of a confirmed result, reason required) */
         put: {
             parameters: {
                 query?: never;
@@ -1885,6 +2208,8 @@ export interface paths {
                     "application/json": {
                         /** @enum {string} */
                         outcome: "played" | "walkover_a" | "walkover_b";
+                        /** @description required when the Committee corrects a confirmed result */
+                        reason?: string;
                         games?: {
                             a: number;
                             b: number;
@@ -1902,7 +2227,16 @@ export interface paths {
                         "application/json": components["schemas"]["Match"];
                     };
                 };
-                /** @description STAGE_CONFIRMED */
+                /** @description UMPIRE_NOT_ASSIGNED | UMPIRE_OWN_MATCH */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+                /** @description STAGE_CONFIRMED | MATCH_ALREADY_CONFIRMED */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1922,6 +2256,243 @@ export interface paths {
                 };
             };
         };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/matches/{matchId}/result/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Committee confirms a reported result (reported -> confirmed; audited) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    matchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Match"];
+                    };
+                };
+                /** @description MATCH_NOT_REPORTED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/matches/{matchId}/result/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Committee sends a reported result back to the umpire (reported -> scheduled; reason required) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    matchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReasonInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Match"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/matches/{matchId}/assignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set court label and/or umpire for one match */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    matchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        court?: string | null;
+                        /** Format: uuid */
+                        umpireId?: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Match"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/events/{eventId}/umpires": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Umpires assigned to the event (with courts) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    eventId: components["parameters"]["EventId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EventUmpire"][];
+                    };
+                };
+            };
+        };
+        /** Replace the umpire assignment of the event (courts empty = all courts) */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    eventId: components["parameters"]["EventId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["EventUmpire"][];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EventUmpire"][];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/umpire/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Matches the calling umpire may report (assigned directly or on an assigned court) */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "scheduled" | "reported" | "confirmed";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Match"][];
+                    };
+                };
+            };
+        };
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1987,8 +2558,11 @@ export interface components {
                 };
             };
         };
-        /** @enum {string} */
-        Role: "Admin" | "Committee" | "Reviewer" | "Member";
+        /**
+         * @description Guest = not logged in (not a stored role)
+         * @enum {string}
+         */
+        Role: "Admin" | "Committee" | "Umpire" | "Reviewer" | "Member";
         RegisterInput: {
             /** Format: email */
             email: string;
@@ -2004,8 +2578,8 @@ export interface components {
             id: string;
             displayName: string;
             roles: components["schemas"]["Role"][];
-            /** Format: uuid */
-            teamId?: string | null;
+            /** @description current teams (several allowed, A11) */
+            teamIds?: string[];
         };
         Me: components["schemas"]["UserSummary"] & {
             /** Format: email */
@@ -2018,6 +2592,23 @@ export interface components {
             id: string;
             name: string;
             shortName?: string;
+        };
+        TeamRequest: {
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+            /** Format: uuid */
+            requestedBy?: string;
+            /** @enum {string} */
+            status?: "pending" | "created" | "aliased" | "rejected";
+            /** Format: uuid */
+            teamId?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        /** @description reason-bearing input (>= 20 chars) for audited privileged actions */
+        AuditedReasonInput: {
+            reason: string;
         };
         TeamPage: {
             items: components["schemas"]["Team"][];
@@ -2060,6 +2651,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             subjectUserId: string;
+            /**
+             * Format: uuid
+             * @description A13 event-bound assessment
+             */
+            eventId?: string | null;
             status: components["schemas"]["AssessmentStatus"];
             reviewsSubmitted?: number;
             reviewsRequired?: number;
@@ -2224,12 +2820,23 @@ export interface components {
             gradeMin: components["schemas"]["GradeKey"];
             gradeMax: components["schemas"]["GradeKey"];
             maxEntries?: number;
+            /**
+             * @description A13: entry needs an approved assessment bound to this event
+             * @default false
+             */
+            requiresFreshAssessment: boolean;
         };
         Event: components["schemas"]["EventInput"] & {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             tournamentId: string;
+            /**
+             * Format: date-time
+             * @description A14 transparency disclosure
+             */
+            gradesDisclosedAt?: string | null;
+            gradesDisclosedReason?: string | null;
         };
         Entry: {
             /** Format: uuid */
@@ -2242,12 +2849,22 @@ export interface components {
                 /** Format: uuid */
                 userId?: string;
                 displayName?: string;
-                /** Format: uuid */
-                teamId?: string | null;
-                grade?: components["schemas"]["GradeView"];
+                teamIds?: string[];
+                /** @description teams the player currently belongs to (A11 warning when > 1) */
+                teamCount?: number;
+                /** @description A14 consent of this player */
+                gradeConsent?: boolean;
+                /** @description null when hidden to the caller */
+                grade?: components["schemas"]["GradeView"] | null;
             }[];
-            /** @description singles = player score; doubles = mean of both (draw.md §3) */
-            seedScore?: number;
+            /** @description singles = player score; doubles = mean of both (draw.md §3); null when hidden to the caller */
+            seedScore?: number | null;
+            /**
+             * @description A14: public = all players consented; disclosed = event transparency disclosure
+             * @enum {string}
+             */
+            gradeVisibility?: "hidden" | "public" | "disclosed";
+            warnings?: "MULTI_TEAM"[];
         };
         DrawSummary: {
             /** Format: uuid */
@@ -2255,8 +2872,11 @@ export interface components {
             /** Format: uuid */
             eventId: string;
             version: number;
-            /** @enum {string} */
-            status: "preview" | "published" | "superseded" | "locked";
+            /**
+             * @description discarded = preview not chosen once another version was published (draw.md §6)
+             * @enum {string}
+             */
+            status: "preview" | "published" | "discarded" | "superseded" | "locked";
             sameTeamR1Count?: number;
             /** Format: date-time */
             createdAt: string;
@@ -2312,7 +2932,7 @@ export interface components {
                     /** Format: uuid */
                     winner?: string | null;
                     /** @enum {string} */
-                    status?: "scheduled" | "bye" | "walkover" | "finished";
+                    status?: "scheduled" | "bye" | "reported" | "confirmed" | "walkover";
                 }[];
             }[];
         };
@@ -2374,8 +2994,30 @@ export interface components {
             }[];
             /** @enum {string|null} */
             result?: "a_win" | "b_win" | "draw" | "walkover_a" | "walkover_b" | "void" | null;
-            /** @enum {string} */
-            status?: "scheduled" | "bye" | "walkover" | "finished" | "void";
+            /**
+             * @description standings and knockout progression count confirmed only
+             * @enum {string}
+             */
+            status?: "scheduled" | "bye" | "reported" | "confirmed" | "walkover" | "void";
+            court?: string | null;
+            /** Format: uuid */
+            umpireId?: string | null;
+            /** Format: uuid */
+            reportedBy?: string | null;
+            /** Format: date-time */
+            reportedAt?: string | null;
+            /** Format: uuid */
+            confirmedBy?: string | null;
+            /** Format: date-time */
+            confirmedAt?: string | null;
+            flags?: ("UMPIRE_TEAM_CONFLICT" | "COMMITTEE_DIRECT_ENTRY" | "CORRECTED")[];
+        };
+        EventUmpire: {
+            /** Format: uuid */
+            userId: string;
+            readonly displayName?: string;
+            /** @description empty = all courts of the event */
+            courts?: string[];
         };
         Group: {
             /** Format: uuid */
