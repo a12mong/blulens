@@ -4,12 +4,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   useTournaments,
   useCreateTournament,
+  useTournament,
+  useSetTournamentStatus,
+  useEvent,
   useEvents,
   useCreateEvent,
   useEventEntries,
   useCreateEntry,
   tournamentsKey,
+  tournamentKey,
   eventsKey,
+  eventKey,
   entriesKey,
 } from './api';
 import { apiFetch } from '@/lib/api/client';
@@ -211,5 +216,68 @@ describe('Events API hooks', () => {
     const calls = onSuccessMock.mock.calls;
     expect(calls.length).toBe(1);
     expect(calls[0]![0]).toEqual(mockTournament);
+  });
+
+  it('useTournament fetches a single tournament by ID', async () => {
+    const queryClient = createQueryClient();
+    const mockTournament = { id: 'T1', status: 'draft' } as unknown;
+
+    vi.mocked(apiFetch).mockResolvedValueOnce(mockTournament);
+
+    const { result } = renderHook(() => useTournament('T1'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(vi.mocked(apiFetch)).toHaveBeenCalledWith('/tournaments/T1');
+    expect(result.current.data).toEqual(mockTournament);
+  });
+
+  it('useSetTournamentStatus posts status and invalidates both keys', async () => {
+    const queryClient = createQueryClient();
+    const mockTournament = { id: 'T1', status: 'open' } as unknown;
+
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+    vi.mocked(apiFetch).mockResolvedValueOnce(mockTournament);
+
+    const { result } = renderHook(() => useSetTournamentStatus('T1'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    result.current.mutate({ to: 'open' });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(vi.mocked(apiFetch)).toHaveBeenCalledWith('/tournaments/T1/status', {
+      method: 'POST',
+      body: { to: 'open' },
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tournamentsKey });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tournamentKey('T1') });
+  });
+
+  it('useEvent fetches a single event by ID', async () => {
+    const queryClient = createQueryClient();
+    const mockEvent = { id: 'EV1', tournamentId: 'T1' } as unknown;
+
+    vi.mocked(apiFetch).mockResolvedValueOnce(mockEvent);
+
+    const { result } = renderHook(() => useEvent('EV1'), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(vi.mocked(apiFetch)).toHaveBeenCalledWith('/events/EV1');
+    expect(result.current.data).toEqual(mockEvent);
   });
 });

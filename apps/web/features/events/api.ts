@@ -11,7 +11,9 @@ export type EventInput = components['schemas']['EventInput'];
 export type Entry = components['schemas']['Entry'];
 
 export const tournamentsKey = ['tournaments'] as const;
+export const tournamentKey = (tournamentId: string) => ['tournaments', tournamentId] as const;
 export const eventsKey = (tournamentId: string) => ['tournaments', tournamentId, 'events'] as const;
+export const eventKey = (eventId: string) => ['events', eventId] as const;
 export const entriesKey = (eventId: string) => ['events', eventId, 'entries'] as const;
 
 /**
@@ -127,5 +129,60 @@ export function useCreateEntry(
       queryClient.invalidateQueries({ queryKey: entriesKey(eventId) });
       options?.onSuccess?.(...args);
     },
+  });
+}
+
+/**
+ * Fetch a single tournament with its events.
+ */
+export function useTournament(
+  tournamentId: string,
+  options?: Omit<UseQueryOptions<Tournament>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: tournamentKey(tournamentId),
+    queryFn: async () =>
+      apiFetch<Tournament>(`/tournaments/${tournamentId}`),
+    ...options,
+  });
+}
+
+/**
+ * Set the status of a tournament.
+ * Invalidates tournaments list and tournament detail on success.
+ */
+export function useSetTournamentStatus(
+  tournamentId: string,
+  options?: Omit<UseMutationOptions<Tournament, ApiRequestError, { to: string }>, 'mutationFn'>
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (body) =>
+      apiFetch<Tournament>(`/tournaments/${tournamentId}/status`, {
+        method: 'POST',
+        body,
+      }),
+    ...options,
+    onSuccess: (...args) => {
+      queryClient.invalidateQueries({ queryKey: tournamentsKey });
+      queryClient.invalidateQueries({ queryKey: tournamentKey(tournamentId) });
+      options?.onSuccess?.(...args);
+    },
+  });
+}
+
+/**
+ * Fetch a single event with tournament context.
+ */
+export function useEvent(
+  eventId: string,
+  options?: Omit<UseQueryOptions<Event>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: eventKey(eventId),
+    queryFn: async () =>
+      apiFetch<Event>(`/events/${eventId}`),
+    ...options,
   });
 }
