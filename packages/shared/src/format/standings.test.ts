@@ -88,6 +88,7 @@ describe('computeGroupStandings', () => {
     expect(result[0].points).toBeGreaterThan(result[1].points);
   });
 
+
   it('3-way loss cycle, different pointsFor breaks tie', () => {
     const entryIds = ['A', 'B', 'C'];
     const matches: GroupMatch[] = [

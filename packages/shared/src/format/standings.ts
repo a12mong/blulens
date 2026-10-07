@@ -208,12 +208,7 @@ function groupByTiebreaker(entries: EntryStats[]): EntryStats[][] {
         const aDiff = prev.pointsFor - prev.pointsAgainst;
         const bDiff = entry.pointsFor - entry.pointsAgainst;
         if (aDiff === bDiff) {
-          if (prev.pointsFor === entry.pointsFor) {
-            currentGroup.push(entry);
-          } else {
-            groups.push(currentGroup);
-            currentGroup = [entry];
-          }
+          currentGroup.push(entry);
         } else {
           groups.push(currentGroup);
           currentGroup = [entry];
@@ -267,6 +262,10 @@ function resolveHeadToHead(
 
       if (aGamesWon > bGamesWon) return [a, b];
       if (bGamesWon > aGamesWon) return [b, a];
+    }
+
+    if (a.pointsFor !== b.pointsFor) {
+      return a.pointsFor > b.pointsFor ? [a, b] : [b, a];
     }
 
     return applyLot(entries, seed);
