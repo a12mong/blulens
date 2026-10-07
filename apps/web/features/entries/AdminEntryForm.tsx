@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { PlayerPicker } from '@/features/users/PlayerPicker';
-import { TeamCombobox } from '@/features/teams/TeamCombobox';
+import { PlayerPicker, type PlayerValue } from '@/features/users/PlayerPicker';
+import { TeamCombobox, type TeamValue } from '@/features/teams/TeamCombobox';
 import { useCreateEntry, useForwardEntry, type Entry } from './api';
 import { ApiRequestError } from '@/lib/api/client';
 
@@ -12,10 +12,10 @@ export interface AdminEntryFormProps {
 }
 
 export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
-  const [player1, setPlayer1] = useState<{ userId: string; displayName?: string } | null>(null);
-  const [player2, setPlayer2] = useState<{ userId: string; displayName?: string } | null>(null);
-  const [team1, setTeam1] = useState<{ teamId: string; name?: string } | null>(null);
-  const [team2, setTeam2] = useState<{ teamId: string; name?: string } | null>(null);
+  const [player1, setPlayer1] = useState<PlayerValue | null>(null);
+  const [player2, setPlayer2] = useState<PlayerValue | null>(null);
+  const [team1, setTeam1] = useState<TeamValue | null>(null);
+  const [team2, setTeam2] = useState<TeamValue | null>(null);
   const [name, setName] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState('');

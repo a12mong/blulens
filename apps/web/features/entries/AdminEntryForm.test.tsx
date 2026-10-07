@@ -5,13 +5,14 @@ import { AdminEntryForm } from './AdminEntryForm';
 
 let playerPickerCallCount = 0;
 let teamComboboxCallCount = 0;
+let forcePlayerDuplicate = false;
 
 vi.mock('@/features/users/PlayerPicker', () => ({
   PlayerPicker: ({ onChange }: any) => {
     const index = playerPickerCallCount++;
     return (
       <div data-testid={`player-picker-${index}`}>
-        <button onClick={() => onChange({ userId: index === 0 ? 'u1' : 'u2' })}>
+        <button onClick={() => onChange({ userId: forcePlayerDuplicate ? 'u1' : (index === 0 ? 'u1' : 'u2'), displayName: `Player ${index + 1}` })}>
           Select Player
         </button>
       </div>
@@ -24,7 +25,7 @@ vi.mock('@/features/teams/TeamCombobox', () => ({
     const index = teamComboboxCallCount++;
     return (
       <div data-testid={`team-combobox-${index}`}>
-        <button onClick={() => onChange({ teamId: index === 0 ? 't1' : 't2' })}>
+        <button onClick={() => onChange({ teamId: index === 0 ? 't1' : 't2', name: `Team ${index + 1}` })}>
           Select Team
         </button>
       </div>
@@ -50,68 +51,54 @@ describe('AdminEntryForm', () => {
     vi.clearAllMocks();
     playerPickerCallCount = 0;
     teamComboboxCallCount = 0;
+    forcePlayerDuplicate = false;
   });
 
-  it('forward creates the draft with two players then forwards it', async () => {
+  it('form submission sends exact payload with no name key when empty', () => {
     const queryClient = createQueryClient();
-    const mockEntry = { id: 'E1', status: 'draft', warnings: [] } as any;
-    const onDoneMock = vi.fn();
+    let capturedPayload: any;
 
-    let createOnSuccess: ((entry: any) => void) | undefined;
-    let forwardOnSuccess: ((entry: any) => void) | undefined;
-
-    mockCreateEntry.mockImplementation((eventId: string, opts?: any) => {
-      createOnSuccess = opts?.onSuccess;
-      return {
-        mutate: vi.fn((body: any) => {
-          createOnSuccess?.(mockEntry);
-        }),
-        mutateAsync: vi.fn(async (body: any) => {
-          return mockEntry;
-        }),
-        isPending: false,
-      };
+    mockCreateEntry.mockReturnValue({
+      mutate: vi.fn((body) => {
+        capturedPayload = body;
+      }),
+      mutateAsync: vi.fn(),
+      isPending: false,
     });
 
-    mockForwardEntry.mockImplementation((opts?: any) => {
-      forwardOnSuccess = opts?.onSuccess;
-      return {
-        mutate: vi.fn((vars: any) => {
-          forwardOnSuccess?.(mockEntry);
-        }),
-        isPending: false,
-      };
+    mockForwardEntry.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
     });
 
     render(
       <QueryClientProvider client={queryClient}>
-        <AdminEntryForm eventId="EV1" onDone={onDoneMock} />
+        <AdminEntryForm eventId="EV1" />
       </QueryClientProvider>
     );
 
-    // Select players - mocks track call order to differentiate
-    const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
-    const player2Btn = screen.getByTestId('player-picker-1').querySelector('button');
-    const team1Btn = screen.getByTestId('team-combobox-0').querySelector('button');
-    const team2Btn = screen.getByTestId('team-combobox-1').querySelector('button');
+    // Select both players (u1, u2)
+    const playerButtons = screen.getAllByText('Select Player');
+    fireEvent.click(playerButtons[0]!);
+    fireEvent.click(playerButtons[1]!);
 
-    fireEvent.click(player1Btn!);
-    fireEvent.click(player2Btn!);
-    fireEvent.click(team1Btn!);
-    fireEvent.click(team2Btn!);
+    // Select both teams (t1, t2)
+    const teamButtons = screen.getAllByText('Select Team');
+    fireEvent.click(teamButtons[0]!);
+    fireEvent.click(teamButtons[1]!);
 
-    const forwardBtn = screen.getByTestId('entry-forward');
-    fireEvent.click(forwardBtn);
+    // Submit form
+    const saveDraftBtn = screen.getByTestId('entry-save-draft');
+    fireEvent.click(saveDraftBtn);
 
-    // Verify form submits with correct data structure
-    await waitFor(() => {
-      expect(mockCreateEntry).toHaveBeenCalledWith('EV1', expect.any(Object));
-    });
-
-    // Verify onDone was called with the entry
-    await waitFor(() => {
-      expect(onDoneMock).toHaveBeenCalledWith(mockEntry);
-    });
+    // Verify payload structure:
+    // - Two players with userId and optional teamId
+    // - NO 'name' key when input is empty string
+    expect(capturedPayload).toBeDefined();
+    expect(capturedPayload.players).toHaveLength(2);
+    expect(capturedPayload.players[0]).toHaveProperty('userId');
+    expect(capturedPayload.players[1]).toHaveProperty('userId');
+    expect(capturedPayload.name).toBeUndefined(); // Critical: no name key when empty
   });
 
   it('buttons disabled until both players picked', () => {
@@ -139,6 +126,66 @@ describe('AdminEntryForm', () => {
 
     expect(saveDraftBtn.disabled).toBe(true);
     expect(forwardBtn.disabled).toBe(true);
+  });
+
+  it('duplicate player error prevents submission and calls neither mutation', () => {
+    const queryClient = createQueryClient();
+
+    const createMuteMock = vi.fn();
+    const forwardMuteMock = vi.fn();
+
+    mockCreateEntry.mockReturnValue({
+      mutate: createMuteMock,
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+
+    mockForwardEntry.mockReturnValue({
+      mutate: forwardMuteMock,
+      isPending: false,
+    });
+
+    // Force both pickers to emit 'u1'
+    forcePlayerDuplicate = true;
+    playerPickerCallCount = 0;
+    teamComboboxCallCount = 0;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AdminEntryForm eventId="EV1" />
+      </QueryClientProvider>
+    );
+
+    const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
+    const player2Btn = screen.getByTestId('player-picker-1').querySelector('button');
+    const team1Btn = screen.getByTestId('team-combobox-0').querySelector('button');
+    const team2Btn = screen.getByTestId('team-combobox-1').querySelector('button');
+
+    fireEvent.click(player1Btn!); // player1 = u1
+    fireEvent.click(player2Btn!); // player2 = u1 (duplicate!)
+    fireEvent.click(team1Btn!);
+    fireEvent.click(team2Btn!);
+
+    // Error message should appear
+    const errorDiv = screen.getByText('เลือกผู้เล่นซ้ำกัน');
+    expect(errorDiv).toBeInTheDocument();
+
+    // Both buttons should be disabled
+    const saveDraftBtn = screen.getByTestId('entry-save-draft') as HTMLButtonElement;
+    const forwardBtn = screen.getByTestId('entry-forward') as HTMLButtonElement;
+    expect(saveDraftBtn.disabled).toBe(true);
+    expect(forwardBtn.disabled).toBe(true);
+
+    // Try to click save-draft (should do nothing)
+    fireEvent.click(saveDraftBtn);
+    expect(createMuteMock).not.toHaveBeenCalled();
+
+    // Try to click forward (should do nothing)
+    fireEvent.click(forwardBtn);
+    expect(forwardMuteMock).not.toHaveBeenCalled();
+
+    // Reset flag for next tests
+    forcePlayerDuplicate = false;
   });
 
   it('renders warnings after save draft', async () => {
