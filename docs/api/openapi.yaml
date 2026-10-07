@@ -4,7 +4,7 @@ info:
   version: 0.1.0-draft
   description: |
     Single source of truth for the Web <-> API contract. bl-02 v1 APPROVED by the owner 2026-10-07 (incl. A8/A11/A13/A14 changes).
-    Tag 'format' (bl-17) is still a DRAFT awaiting owner approval; grading v2 changes (provisional, minReviewers) are not in yet.
+    Includes bl-17 tag 'format' (v1 approved, Umpire role) and grading v2 (provisional, minReviewers, calibration) — all owner-approved.
     Specs: docs/specs/architecture.md, docs/specs/grading.md, docs/specs/draw.md.
     Conventions:
       - Auth via httpOnly cookies: bl_access (JWT 15 min, path /), bl_refresh (7 days, path /api/v1/auth),
@@ -29,7 +29,7 @@ tags:
   - name: draws
   - name: audit
   - name: format
-    description: bl-17 DRAFT (docs/specs/tournament-format.md), waiting for owner approval
+    description: bl-17 (docs/specs/tournament-format.md) v1 approved
 
 paths:
   /health:
@@ -393,6 +393,37 @@ paths:
             schema: { $ref: '#/components/schemas/ReasonInput' }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+  /assessments/{assessmentId}/confirm:
+    post:
+      tags: [assessments]
+      summary: 'Committee confirms a provisional single-reviewer result (provisional -> approved; flag SINGLE_REVIEWER kept) (grading.md §12, G17)'
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resultVersion: { type: integer }
+                note: { type: string, maxLength: 1000 }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+        '409': { description: 'ASSESSMENT_NOT_PROVISIONAL', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /assessments/{assessmentId}/second-opinion:
+    post:
+      tags: [assessments]
+      summary: 'Request one more reviewer (G20): the subject Member once per request within 14 days of the result; Committee any time'
+      x-roles: [Member, Committee]
+      parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/AssessmentDetail' } } } }
+        '409': { description: 'SECOND_OPINION_ALREADY_USED | SECOND_OPINION_WINDOW_CLOSED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /assessments/{assessmentId}/override:
     post:
       tags: [assessments]
@@ -487,6 +518,102 @@ paths:
         - { name: window, in: query, schema: { type: string, enum: [30d, 90d, 365d, all], default: 90d } }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/RaterStats' } } } }
+
+  # ---------------- calibration (grading.md §12.4, G19 option b) ----------------
+  /calibration-sets:
+    get:
+      tags: [rater-stats]
+      summary: Calibration clip sets (reference grades visible to the Committee only)
+      x-roles: [Committee]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CalibrationSet' } }
+    post:
+      tags: [rater-stats]
+      summary: Create a calibration set (e.g. 5 clips per quarter); clips are uploaded via /calibration-sets/{setId}/clips/upload-url
+      x-roles: [Committee]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                period: { type: string, example: 2026-Q4 }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/CalibrationSet' } } } }
+  /calibration-sets/{setId}/clips/upload-url:
+    post:
+      tags: [rater-stats]
+      summary: Presigned PUT for one calibration clip + its Committee reference grade
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, sizeBytes, referenceKey]
+              properties:
+                fileName: { type: string }
+                contentType: { type: string, enum: [video/mp4, video/quicktime] }
+                sizeBytes: { type: integer, maximum: 524288000 }
+                referenceKey: { $ref: '#/components/schemas/GradeKey' }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clipId: { type: string, format: uuid }
+                  uploadUrl: { type: string, format: uri }
+                  expiresAt: { type: string, format: date-time }
+  /calibration-sets/{setId}/assign:
+    post:
+      tags: [rater-stats]
+      summary: Assign the set to reviewers (blind; each clip appears as a normal review task flagged calibration)
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewerIds]
+              properties:
+                reviewerIds: { type: array, items: { type: string, format: uuid } }
+                dueAt: { type: string, format: date-time }
+      responses:
+        '204': { description: assigned }
+  /calibration-sets/{setId}/results:
+    get:
+      tags: [rater-stats]
+      summary: Per-reviewer bias vs the reference grades for this set
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    reviewerId: { type: string, format: uuid }
+                    clipsScored: { type: integer }
+                    biasVsReference: { type: number, description: 'mean(reviewer overall - (idx(referenceKey) + 0.5)), ladder units' }
+                    meanAbsError: { type: number }
 
   # ---------------- tournaments ----------------
   /tournaments:
@@ -1009,7 +1136,8 @@ components:
     # ---- assessments ----
     AssessmentStatus:
       type: string
-      enum: [draft, submitted, in_review, needs_reviewers, disputed, pending_approval, approved, overridden, rejected, withdrawn]
+      enum: [draft, submitted, in_review, needs_reviewers, provisional, disputed, pending_approval, approved, overridden, rejected, withdrawn]
+      description: 'provisional = single-reviewer result awaiting Committee confirm (grading.md §12, G17)'
     Assessment:
       type: object
       required: [id, subjectUserId, status, createdAt]
@@ -1039,7 +1167,7 @@ components:
         nRaters: { type: integer, description: valid reviews used after exclusion }
         nExcluded: { type: integer, description: reviews excluded as outliers }
         spread: { type: number, description: max - min of used rater scores (ladder units) }
-        flags: { type: array, items: { type: string, enum: [OUTLIER_EXCLUDED, HIGH_DISAGREEMENT, LOW_RATER_COUNT, OVERRIDE] } }
+        flags: { type: array, items: { type: string, enum: [OUTLIER_EXCLUDED, HIGH_DISAGREEMENT, LOW_RATER_COUNT, OVERRIDE, SINGLE_REVIEWER, PAIR_DISAGREEMENT] } }
         methodVersion: { type: string, example: grading-v1 }
         reason: { type: string, description: override only }
         computedAt: { type: string, format: date-time }
@@ -1052,7 +1180,9 @@ components:
         reviewerName: { type: string }
         overall: { type: number }
         excluded: { type: boolean }
-        robustZ: { type: [number, 'null'] }
+        robustZ: { type: [number, 'null'], description: 'null when n < 3 (no outlier rule)' }
+        reviewerBias: { type: [number, 'null'], description: 'cross-event bias vs consensus/calibration, ladder units; null below minimum sample (§12.4)' }
+        pairKappa: { type: [number, 'null'], description: 'n = 2 only: Cohen quadratic weighted kappa history of this reviewer pair (>= 10 shared cases)' }
         criteria: { type: array, items: { $ref: '#/components/schemas/CriterionScore' } }
     AssessmentDetail:
       allOf:
@@ -1092,6 +1222,20 @@ components:
       properties:
         criterion: { type: string }
         gradeKey: { oneOf: [{ $ref: '#/components/schemas/GradeKey' }, { type: 'null' }], description: null = cannot assess from clip }
+    CalibrationSet:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        period: { type: string }
+        clips:
+          type: array
+          items:
+            type: object
+            properties:
+              clipId: { type: string, format: uuid }
+              referenceKey: { $ref: '#/components/schemas/GradeKey' }
+        createdAt: { type: string, format: date-time }
     ReviewInput:
       type: object
       required: [scores]
@@ -1105,6 +1249,7 @@ components:
         id: { type: string, format: uuid }
         assessmentId: { type: string, format: uuid }
         state: { type: string, enum: [open, submitted, expired, declined] }
+        kind: { type: string, enum: [assessment, calibration], default: assessment, description: 'calibration tasks look identical to the reviewer (blind)' }
         dueAt: { type: string, format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time }
     ReviewAssignmentDetail:
@@ -1184,6 +1329,7 @@ components:
         gradeMax: { $ref: '#/components/schemas/GradeKey' }
         maxEntries: { type: integer, maximum: 256 }
         requiresFreshAssessment: { type: boolean, default: false, description: 'A13: entry needs an approved assessment bound to this event' }
+        minReviewers: { type: integer, minimum: 1, maximum: 5, default: 2, description: 'G3prime: valid reviews needed before computing; >= 3 uses the full v1 pipeline' }
     Event:
       allOf:
         - { $ref: '#/components/schemas/EventInput' }
