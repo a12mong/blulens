@@ -28,7 +28,8 @@ export function projectGrade(score: number, margin: number): GradeView {
   }
 
   const a = clamp(Math.floor(score - margin), 0, 14);
-  const b = clamp(Math.ceil(score + margin) - 1, 0, 14);
+  // an empty interval (integer score, margin 0) would give b = a - 1; the upper bound never goes below the lower
+  const b = Math.max(a, clamp(Math.ceil(score + margin) - 1, 0, 14));
   const centerIdx = clamp(Math.floor(score), 0, 14);
 
   const lower = GRADES[a]!;
