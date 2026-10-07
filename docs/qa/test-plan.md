@@ -97,7 +97,7 @@
 
 > รอบแบ่งกลุ่ม (groups of 4, round robin, N advance + best third, scoring formats) — เพิ่มเคส GS-* เมื่อสเปก bl-17 ออก
 
-## 3. การลงทะเบียน: ชื่อทีม + อัปโหลดคลิป + visibility — 28 เคส
+## 3. การลงทะเบียน: ชื่อทีม + อัปโหลดคลิป + visibility + วงจร entry — 40 เคส
 
 ### 3.1 ชื่อทีม (team identity) — ผูกกับ DR-01..04
 ถ้าทีมเดียวกันสะกดต่างกันแล้วระบบมองเป็นคนละทีม กฎห้ามทีมเดียวกันเจอกันจะรั่วเงียบ ๆ — ความเสี่ยงสูง
@@ -122,6 +122,8 @@
 | RG-11 | **อัปโหลดซ้ำ** | กดส่งซ้ำ/checksum เดียวกัน | idempotent: ไม่มีสองแถว; object key ไม่ชนข้ามผู้ใช้ | I |
 | RG-12 | **สิทธิ์และ presigned URL** | Guest/Member อื่นขออัปโหลด/ดู; URL หมดอายุ | 403; URL หมดอายุใช้ไม่ได้; กรรมการเข้าถึงเฉพาะคลิปที่ถูกมอบหมาย | I |
 
+> **หมายเหตุ bl-21:** สไลซ์ตัวอย่างเปลี่ยนเป็น Admin/Committee สร้าง entry คู่แทนผู้เล่น (ไม่มีสมัครเอง, ไม่มี field คลิปในสไลซ์) — เคส RG-08..12 (คลิป) ยังไม่อยู่ในสไลซ์ และ RG-19/20 (หลายทีม) ถูกแสดงเป็น warning `MULTI_TEAM` ของ entry (ดู §3.4)
+
 ### 3.3 Type-ahead ชื่อทีม, หลายทีม, ผลประเมินสดต่ออีเวนต์, การมองเห็นเกรด (owner A8/A11/A13/A14)
 > ชื่อ endpoint ด้านล่างเป็นชื่อเชิงสัญลักษณ์ (`GET suggest`) จนกว่า openapi.yaml จะมีของจริง — reconcile ภายหลัง · ตัดสินใจแล้ว: Q4 = พิมพ์อิสระแบบ type-ahead (combobox) + "ขอทีมใหม่" เมื่อไม่ตรง + Committee alias/merge
 
@@ -143,6 +145,24 @@
 | RG-26 | **visibility ต่อ entry** | ตั้ง visible เฉพาะ entry หนึ่ง (เดี่ยว) และอีก entry เป็นคู่ | มีผลเฉพาะ entry นั้น; คู่ตั้งต่อคู่ ไม่ใช่ต่อผู้เล่นรายคน (ตามที่ตีความ — ยืนยัน §5 Q7) | I |
 | RG-27 | **transparency disclosure (event/bracket)** | Committee/Admin เปิดเผยเกรดของอีเวนต์/สาย | ผู้ใช้ทั่วไปเห็นเกรดทั้งสาย; audit บันทึกผู้เปิด/เวลา/ขอบเขต/เหตุผล; สิทธิ์อื่น 403; ปิดกลับได้ (ถ้าสเปกอนุญาต) และบันทึก | I: role table + audit assert |
 | RG-28 | **disclosure ไม่ข้ามขอบเขต** | เปิดเผยอีเวนต์ X | อีเวนต์ Y/entry นอกสายยังซ่อน; ผู้เล่นที่ตั้งซ่อนเองตามกฎ precedence ที่สเปกกำหนด (Q7) | I |
+
+### 3.4 วงจรชีวิตของ Entry (เจ้าของแก้ bl-21: Admin/Committee สร้างแทนผู้เล่น, เริ่มที่ประเภทคู่; architecture §6.10, openapi 07543e2)
+> ไม่มีการสมัครเอง (self-registration) ในสไลซ์ · entry คู่ = ผู้เล่น 2 คน แต่ละคนมีสโมสรเลือกผ่าน type-ahead + ชื่อคู่ (ไม่บังคับ) · สถานะ `draft → pending_committee → approved | rejected` (rejected กลับ `draft` เมื่อแก้) · warnings: `MULTI_TEAM`, `NO_APPROVED_GRADE`, `GRADE_OUT_OF_BAND`, `FRESH_ASSESSMENT_REQUIRED`
+
+| ID | เคส | Setup | พฤติกรรมที่คาดหวัง | Automated check |
+|---|---|---|---|---|
+| RG-29 | **สร้าง entry คู่ (happy path)** | Admin สร้างด้วย 2 ผู้เล่น + ทีมคนละทีม + ชื่อคู่ | 201 สถานะ `draft`; ทีมแต่ละคนตามที่เลือก; ชื่อคู่ optional | I + E (สไลซ์) |
+| RG-30 | **ข้อผิดพลาดตอนสร้าง** | ผู้เล่น 1 คนและ 3 คน; ผู้เล่นซ้ำกันเอง; ปิดรับสมัครแล้ว | 400/409 รหัส `ENTRY_PLAYER_COUNT`, `ENTRY_DUPLICATE_PLAYER`, `ENTRIES_CLOSED`; ไม่สร้าง row | I |
+| RG-31 | **warnings ไม่ขวางการสร้าง** | ผู้เล่นไม่มีเกรดอนุมัติ; เกรดนอกช่วง; หลายทีม; อีเวนต์บังคับประเมินสด | สร้างได้ (draft) พร้อม `warnings` ครบตามชนิดและตรงผู้เล่น; UI แสดง `entry-warnings` | I: assert รายการ warnings ทีละชนิด |
+| RG-32 | **forward → Committee queue** | draft แล้ว forward โดย Admin/Committee; Member/Reviewer/Umpire พยายาม forward | `pending_committee`; ปรากฏใน `GET /entries?status=pending_committee&eventId=`; role อื่น 403; forward ซ้ำ/สถานะผิด 409 | I: role × state |
+| RG-33 | **Committee approve** | ผู้เล่นทั้งคู่มีเกรดอนุมัติในช่วง | `approved`; audit; ปรากฏใน list ที่ Guest/Member เห็น (approved เท่านั้น) | I + E |
+| RG-34 | **approve ถูกบล็อก: ผู้เล่นไม่มีเกรด** | ผู้เล่นคนหนึ่ง `NO_APPROVED_GRADE` | 409 `ENTRY_PLAYER_UNGRADED`; สถานะคงเดิม; ไม่รั่วเกรด | I |
+| RG-35 | **approve เกรดนอกช่วง** | เกรดนอก band; มี/ไม่มีเหตุผล; เหตุผลยาว 19 vs 20 ตัวอักษร | ไม่มีเหตุผลหรือ < 20 ตัว → 409 `ENTRY_OUT_OF_BAND_REASON_REQUIRED`; ≥ 20 → approved + audit เหตุผล | I: ขอบ 19/20 |
+| RG-36 | **reject + แก้ + ส่งใหม่** | Committee reject พร้อมเหตุผล; Admin PATCH; forward ใหม่ | `rejected` (ต้องมีเหตุผล) → PATCH ทำให้กลับ `draft` → forward ได้อีก; ประวัติ/audit ครบ; PATCH entry สถานะ approved → 409 | I: ไล่สถานะเต็มวง |
+| RG-37 | **visibility ตามสถานะ** | entry draft / pending / approved / rejected | Guest/Member/Reviewer/Umpire เห็นเฉพาะ `approved`; Admin/Committee เห็นทุกสถานะ; ไม่รั่วทาง `GET /events/{id}/entries?status=` | I: role × status matrix |
+| RG-38 | **draw ใช้เฉพาะ entry ที่ approved** | event มี approved 6 + pending 2 + rejected 1 + draft 1 | draw preview/input_hash นับ 6 เท่านั้น; อนุมัติเพิ่มหลัง preview → `DRAW_INPUT_CHANGED` | I (เชื่อม DR-15) |
+| RG-39 | **ผู้เล่นซ้ำข้าม entry** | ผู้เล่นคนเดียวอยู่ 2 entry ในอีเวนต์เดียว | ตามสเปก (ไม่ซ้ำภายในอีเวนต์) — **ถาม Jim ว่าบล็อกตอนสร้างหรือ warning** | I |
+| RG-40 | **สิทธิ์สร้าง/แก้** | Member สร้างแทนตัวเอง; Reviewer แก้ draft | 403 (ไม่มี self-registration); Admin/Committee สร้าง/แก้ได้ | I |
 
 ## 4. รอบแบ่งกลุ่ม + น็อคเอาท์ + รูปแบบแมตช์ (GS) — 24 เคส
 
@@ -206,7 +226,7 @@
 |---|---|
 | Grading (GR) | 36 |
 | Draw (DR) | 19 |
-| Registration (RG: ชื่อทีม 7 + อัปโหลด 5 + type-ahead/หลายทีม/ประเมินสด/visibility 16) | 28 |
+| Registration (RG: ชื่อทีม 7 + อัปโหลด 5 + type-ahead/หลายทีม/ประเมินสด/visibility 16 + วงจร entry 12) | 40 |
 | Group stage / knockout / match format (GS) | 24 |
 | Cross-system (X) | 3 |
 
