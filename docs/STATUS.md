@@ -29,7 +29,7 @@
 4. ออกจากระบบ → ล็อกอินเป็น `committee@blulens.local` → ไปที่ `/committee/events/<รหัสประเภท>/entries` → **อนุมัติ** หรือ **ปฏิเสธ** (ปฏิเสธต้องใส่เหตุผลอย่างน้อย 10 ตัวอักษร)
 5. ออกจากระบบ → ล็อกอินเป็น `member1@blulens.local` → ไปที่ `/events/<รหัสประเภท>/entries` → เห็นรายชื่อคู่ที่อนุมัติแล้ว
 
-**ข้อมูลตัวอย่างที่มีให้:** แอดมิน (มีสิทธิ์คณะกรรมการด้วย), `committee@blulens.local`, `member1` ถึง `member6@blulens.local` (มีเกรดตัวอย่างแล้ว) · ทีม Blue Wing (บลูวิง), Red Phoenix, Green Valley
+**ข้อมูลตัวอย่างที่มีให้:** แอดมิน (มีสิทธิ์คณะกรรมการด้วย), `committee@blulens.local`, `member1` ถึง `member6@blulens.local` (มีเกรดตัวอย่างแล้ว), กรรมการให้คะแนน `reviewer1` ถึง `reviewer3@blulens.local` (มีงานประเมินรอให้คะแนน · คลิปเป็นไฟล์ตัวอย่าง ไม่ใช่การเล่นจริง · หน้าให้คะแนนจะประกาศว่า "กดได้" หลังทดสอบผ่าน) · ถ้าเคย seed ไว้ก่อนแล้ว ให้ดึงโค้ดใหม่ รัน `pnpm db:deploy` และ `pnpm db:seed` อีกครั้ง (ข้อมูลเดิมไม่หาย) แล้วเปิด API ใหม่ · ทีม Blue Wing (บลูวิง), Red Phoenix, Green Valley
 
 **ตัวอย่างหน้าผลประเมินมือ (ภาพจำลอง ยังไม่ใช่ข้อมูลจริง):** http://localhost:3100/demo/assessment-result · ภาพหน้าจอใน `docs/design/mock/` (`assessment-result.png`, `assessment-result-mobile.png`)
 
