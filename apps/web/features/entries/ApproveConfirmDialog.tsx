@@ -2,13 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Entry } from './api';
-
-const warningLabels: Record<string, string> = {
-  MULTI_TEAM: 'ผู้เล่นสังกัดหลายสโมสร',
-  NO_APPROVED_GRADE: 'ผู้เล่นยังไม่มีเกรดที่อนุมัติ',
-  GRADE_OUT_OF_BAND: 'เกรดอยู่นอกช่วงของประเภทนี้',
-  FRESH_ASSESSMENT_REQUIRED: 'ต้องประเมินใหม่ก่อนลงแข่ง',
-};
+import { warningLines } from './warningText';
 
 export interface ApproveConfirmDialogProps {
   entry: Entry;
@@ -71,18 +65,21 @@ export function ApproveConfirmDialog({
           </div>
 
           {/* Warnings section */}
-          {entry.warnings && entry.warnings.length > 0 && (
-            <div>
-              <h3 className="font-medium text-sm mb-2">คำเตือน</h3>
-              <ul className="list-disc list-inside space-y-1">
-                {entry.warnings.map((warning) => (
-                  <li key={warning} className="text-sm text-muted-foreground">
-                    {warningLabels[warning] || warning}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {(() => {
+            const warnings = warningLines(entry);
+            return warnings.length > 0 ? (
+              <div>
+                <h3 className="font-medium text-sm mb-2">คำเตือน</h3>
+                <ul className="list-disc list-inside space-y-1">
+                  {warnings.map((warning, idx) => (
+                    <li key={`${warning}-${idx}`} className="text-sm text-muted-foreground">
+                      {warning}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null;
+          })()}
 
           {/* Error message */}
           {error && (

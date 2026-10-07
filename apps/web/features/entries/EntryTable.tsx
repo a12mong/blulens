@@ -2,6 +2,7 @@
 
 import { GradeBand } from '@/components/ui/GradeBand';
 import type { components } from '@/lib/api/schema';
+import { warningLines } from './warningText';
 
 type Entry = components['schemas']['Entry'];
 
@@ -20,13 +21,6 @@ const STATUS_LABELS: Record<string, string> = {
   approved: 'อนุมัติแล้ว',
   rejected: 'ถูกปฏิเสธ',
   withdrawn: 'ถอนตัว',
-};
-
-const WARNING_LABELS: Record<string, string> = {
-  MULTI_TEAM: 'หลากลุ่ม',
-  NO_APPROVED_GRADE: 'ยังไม่มีเกรดอนุมัติ',
-  GRADE_OUT_OF_BAND: 'เกรดนอกช่วง',
-  FRESH_ASSESSMENT_REQUIRED: 'ต้องประเมินใหม่',
 };
 
 export function EntryTable({
@@ -73,7 +67,7 @@ export function EntryTable({
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {entry.players.map((player, idx) => (
-                      <div key={player.userId}>
+                      <div key={player.userId ?? idx}>
                         {player.displayName}
                         {(player.teamCount ?? 0) > 0 && <span className="ml-1">({player.teamCount})</span>}
                       </div>
@@ -132,17 +126,23 @@ export function EntryTable({
 
               {/* Warnings */}
               <td className="px-4 py-2">
-                {entry.warnings && entry.warnings.length > 0 ? (
-                  <ul data-testid="entry-warnings" className="space-y-1">
-                    {entry.warnings.map((warning) => (
-                      <li key={warning} className="text-sm px-2 py-1 bg-warning text-warning-foreground rounded">
-                        {WARNING_LABELS[warning] || warning}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
+                {(() => {
+                  const warnings = warningLines(entry);
+                  return warnings.length > 0 ? (
+                    <ul data-testid="entry-warnings" className="space-y-1">
+                      {warnings.map((warning, idx) => (
+                        <li
+                          key={`${warning}-${idx}`}
+                          className="text-sm px-2 py-1 bg-warning text-warning-foreground rounded"
+                        >
+                          {warning}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  );
+                })()}
               </td>
 
               {/* Decision Reason */}
