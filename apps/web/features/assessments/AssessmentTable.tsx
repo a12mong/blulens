@@ -1,0 +1,142 @@
+'use client';
+
+import Link from 'next/link';
+import { AssessmentStatusBadge } from './AssessmentStatusBadge';
+import type { components } from '@/lib/api/schema';
+
+type AssessmentStatus = components['schemas']['AssessmentStatus'];
+type GradeView = components['schemas']['GradeView'];
+
+interface Assessment {
+  id: string;
+  subjectUserId: string;
+  subject?: { displayName: string } | null;
+  status: AssessmentStatus;
+  latestGrade: GradeView | null;
+  reviewsSubmitted: number;
+  reviewsRequired: number;
+  createdAt: string;
+}
+
+const allStatuses: AssessmentStatus[] = [
+  'draft',
+  'submitted',
+  'in_review',
+  'needs_reviewers',
+  'provisional',
+  'disputed',
+  'pending_approval',
+  'approved',
+  'overridden',
+  'rejected',
+  'withdrawn',
+];
+
+const statusLabels: Record<AssessmentStatus, string> = {
+  draft: 'ร่าง',
+  submitted: 'ส่งแล้ว',
+  in_review: 'กำลังรีวิว',
+  needs_reviewers: 'ต้องหากรรมการเพิ่ม',
+  provisional: 'ชั่วคราว (กรรมการ 1 คน)',
+  disputed: 'เห็นต่างกันมาก',
+  pending_approval: 'รออนุมัติ',
+  approved: 'อนุมัติแล้ว',
+  overridden: 'แก้ไขโดยคณะกรรมการ',
+  rejected: 'ไม่ผ่าน',
+  withdrawn: 'ถอนคำขอ',
+};
+
+export interface AssessmentTableProps {
+  items: Assessment[];
+  status?: AssessmentStatus;
+  onStatusChange?: (s: AssessmentStatus | undefined) => void;
+  emptyText?: string;
+}
+
+export function AssessmentTable({
+  items,
+  status,
+  onStatusChange,
+  emptyText = 'ไม่มีรายการ',
+}: AssessmentTableProps) {
+  if (items.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        {emptyText}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filter */}
+      <div>
+        <select
+          data-testid="assessment-filter"
+          value={status ?? 'all'}
+          onChange={(e) => {
+            const val = e.target.value === 'all' ? undefined : (e.target.value as AssessmentStatus);
+            onStatusChange?.(val);
+          }}
+          className="px-3 py-2 border border-border rounded text-sm bg-background"
+        >
+          <option value="all">ทั้งหมด</option>
+          {allStatuses.map((s) => (
+            <option key={s} value={s}>
+              {statusLabels[s]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto border border-border rounded">
+        <table className="w-full text-sm">
+          <thead className="bg-muted">
+            <tr>
+              <th className="px-4 py-2 text-left font-medium">ผู้ถูกประเมิน</th>
+              <th className="px-4 py-2 text-left font-medium">สถานะ</th>
+              <th className="px-4 py-2 text-left font-medium">รีวิว</th>
+              <th className="px-4 py-2 text-left font-medium">ผล</th>
+              <th className="px-4 py-2 text-left font-medium">การกระทำ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr
+                key={item.id}
+                data-testid="assessment-row"
+                data-assessment-id={item.id}
+                className="border-t border-border hover:bg-muted/50"
+              >
+                <td className="px-4 py-2">
+                  {item.subject?.displayName ?? 'ไม่ระบุ'}
+                </td>
+                <td className="px-4 py-2">
+                  <AssessmentStatusBadge status={item.status} />
+                </td>
+                <td className="px-4 py-2">
+                  {item.reviewsSubmitted}/{item.reviewsRequired}
+                </td>
+                <td className="px-4 py-2">
+                  {item.latestGrade?.label ?? 'ยังสรุปไม่ได้'}
+                </td>
+                <td className="px-4 py-2">
+                  <Link
+                    href={`/committee/assessments/${item.id}`}
+                    data-testid="assessment-open"
+                    className="text-primary hover:underline"
+                  >
+                    ดูรายละเอียด
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default AssessmentTable;
