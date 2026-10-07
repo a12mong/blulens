@@ -11,6 +11,8 @@ import { ZodValidationPipe } from './common/zod/zod';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
 import { TeamsModule } from './modules/teams/teams.module';
+import { TournamentsModule } from './modules/tournaments/tournaments.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { TeamsModule } from './modules/teams/teams.module';
     HealthModule,
     AuthModule,
     TeamsModule,
+    TournamentsModule,
+    UsersModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
