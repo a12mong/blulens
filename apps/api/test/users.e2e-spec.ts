@@ -254,4 +254,159 @@ describe('GET /api/v1/users (bl-21-2)', () => {
     expect(resCursor.body.success).toBe(false);
     expect(resCursor.body.error.code).toBe('VALIDATION_FAILED');
   });
+
+  it('includes teamNames, gradeLabel and gradeProvisional (bl-21-11 picker)', async () => {
+    const committeeCookie = cookieFor(randomUUID(), ['Committee']);
+    const gradePrefixes = `grad-${randomUUID().slice(0, 8)}-`;
+
+    // Create rubric for assessments
+    const rubric = await prisma.rubric.findFirst({ where: { active: true } });
+    if (!rubric) throw new Error('No active rubric found');
+
+    // Create 3 teams for the test
+    const teamA = await prisma.team.create({
+      data: {
+        name: `${gradePrefixes}Zeta`,
+        nameKey: `${gradePrefixes}zeta`,
+      },
+    });
+    const teamB = await prisma.team.create({
+      data: {
+        name: `${gradePrefixes}Alpha`,
+        nameKey: `${gradePrefixes}alpha`,
+      },
+    });
+    const teamC = await prisma.team.create({
+      data: {
+        name: `${gradePrefixes}Gamma`,
+        nameKey: `${gradePrefixes}gamma`,
+      },
+    });
+
+    // 1. Member with approved grade, 2 teams (check sorting by name)
+    const u1 = await prisma.user.create({
+      data: {
+        email: `${gradePrefixes}member1@test.local`,
+        passwordHash: 'dummy',
+        displayName: `${gradePrefixes}MemberWithGrade`,
+        roles: { create: [{ role: 'Member' }] },
+        memberships: {
+          create: [{ teamId: teamA.id }, { teamId: teamB.id }],
+        },
+      },
+    });
+
+    // Create assessment and approved result for u1
+    const a1 = await prisma.assessment.create({
+      data: {
+        subjectUserId: u1.id,
+        rubricId: rubric.id,
+        status: 'submitted',
+      },
+    });
+    await prisma.assessmentResult.create({
+      data: {
+        assessmentId: a1.id,
+        version: 1,
+        source: 'computed',
+        status: 'approved',
+        score: 9.0,
+        margin: 0.5,
+        lowerIndex: 12,
+        upperIndex: 13,
+        centerIndex: 12,
+        kind: 'exact',
+        label: 'S+',
+        nRaters: 1,
+        methodVersion: '1.0',
+        inputs: {},
+      },
+    });
+
+    // 2. Member with only provisional grade
+    const u2 = await prisma.user.create({
+      data: {
+        email: `${gradePrefixes}member2@test.local`,
+        passwordHash: 'dummy',
+        displayName: `${gradePrefixes}MemberProvisional`,
+        roles: { create: [{ role: 'Member' }] },
+        memberships: { create: [{ teamId: teamC.id }] },
+      },
+    });
+
+    const a2 = await prisma.assessment.create({
+      data: {
+        subjectUserId: u2.id,
+        rubricId: rubric.id,
+        status: 'submitted',
+      },
+    });
+    await prisma.assessmentResult.create({
+      data: {
+        assessmentId: a2.id,
+        version: 1,
+        source: 'computed',
+        status: 'provisional',
+        score: 8.0,
+        margin: 0.5,
+        lowerIndex: 10,
+        upperIndex: 11,
+        centerIndex: 10,
+        kind: 'exact',
+        label: 'A',
+        nRaters: 1,
+        methodVersion: '1.0',
+        inputs: {},
+      },
+    });
+
+    // 3. Member with no grade
+    const u3 = await prisma.user.create({
+      data: {
+        email: `${gradePrefixes}member3@test.local`,
+        passwordHash: 'dummy',
+        displayName: `${gradePrefixes}MemberNoGrade`,
+        roles: { create: [{ role: 'Member' }] },
+        memberships: { create: [{ teamId: teamB.id }] },
+      },
+    });
+
+    // Query for all three members
+    const res = await http()
+      .get(`/api/v1/users?role=Member&q=${gradePrefixes}Member`)
+      .set('Cookie', committeeCookie)
+      .expect(200);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.items).toHaveLength(3);
+
+    // Find each member in results
+    const m1 = res.body.data.items.find((u: any) => u.id === u1.id);
+    const m2 = res.body.data.items.find((u: any) => u.id === u2.id);
+    const m3 = res.body.data.items.find((u: any) => u.id === u3.id);
+
+    // m1: approved grade, 2 teams sorted by name
+    expect(m1).toBeDefined();
+    expect(m1.teamNames).toEqual([`${gradePrefixes}Alpha`, `${gradePrefixes}Zeta`]);
+    expect(m1.gradeLabel).toBe('S+');
+    expect(m1.gradeProvisional).toBe(false);
+
+    // m2: provisional grade
+    expect(m2).toBeDefined();
+    expect(m2.teamNames).toEqual([`${gradePrefixes}Gamma`]);
+    expect(m2.gradeLabel).toBeNull();
+    expect(m2.gradeProvisional).toBe(true);
+
+    // m3: no grade
+    expect(m3).toBeDefined();
+    expect(m3.teamNames).toEqual([`${gradePrefixes}Alpha`]);
+    expect(m3.gradeLabel).toBeNull();
+    expect(m3.gradeProvisional).toBe(false);
+
+    // Cleanup: disable users (teams remain; assessments/results are append-only)
+    await prisma.user.updateMany({
+      where: { displayName: { startsWith: gradePrefixes } },
+      data: { status: 'disabled' },
+    });
+  });
 });
