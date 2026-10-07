@@ -208,7 +208,7 @@ export function AssessmentResultMock({
                     ช่วง: {current.grade.lower} ถึง {current.grade.upper}
                   </span>
                 </div>
-                <div className="w-full overflow-hidden rounded-lg border border-border p-3 bg-muted/20">
+                <div className="w-full overflow-hidden rounded-lg border border-border p-3 bg-muted/20 [&_div[role='img']]:w-full [&_.flex-wrap]:w-full [&_.flex-wrap]:lg:flex-nowrap [&_span[data-testid='grade-cell']]:lg:flex-1 [&_span[data-testid='grade-cell']]:lg:min-w-0 [&_span[data-testid='grade-cell']]:lg:px-0 [&_span[data-testid='grade-cell']]:lg:text-[9.5px] [&_span[data-testid='grade-cell']]:lg:tracking-tighter [&_span[data-marker='true']]:ring-2 [&_span[data-marker='true']]:ring-primary [&_span[data-marker='true']]:font-bold [&_span[data-marker='true']]:relative [&_span[data-marker='true']]:z-10">
                   <GradeBand
                     lower={current.grade.lower}
                     upper={current.grade.upper}
@@ -218,6 +218,19 @@ export function AssessmentResultMock({
                     disputed={activeState === 'disputed'}
                     reviewerCount={current.agreement.assessedCount}
                   />
+
+                  {/* Visible Score Indicator Marker Under S Cell */}
+                  <div
+                    data-testid="demo-ladder-marker"
+                    className="relative w-full flex flex-col items-center mt-1.5 pt-1"
+                  >
+                    <div className="flex flex-col items-center">
+                      <div className="w-0 h-0 border-x-4 border-x-transparent border-b-[6px] border-b-primary" />
+                      <div className="mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-background border border-primary/40 shadow-xs text-xs font-bold text-primary">
+                        <span>คะแนน {current.grade.score.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

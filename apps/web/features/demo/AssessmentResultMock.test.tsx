@@ -34,6 +34,9 @@ describe('AssessmentResultMock', () => {
     // Grade label is S-/S
     expect(screen.getByTestId('demo-grade-label')).toHaveTextContent('S-/S');
     expect(screen.getByTestId('demo-score')).toHaveTextContent('7.42');
+
+    // Visible ladder score marker
+    expect(screen.getByTestId('demo-ladder-marker')).toHaveTextContent('คะแนน 7.42');
   });
 
   it('switches between approved, provisional, and disputed states via status switcher', () => {
