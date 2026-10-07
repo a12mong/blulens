@@ -17,14 +17,14 @@ export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
 
   @Post()
-  @Roles('Member', 'Reviewer', 'Committee', 'Admin')
+  @Roles('Member')
   async create(@Body() body: CreateAssessmentDto, @CurrentUser() user: AuthUser) {
     return this.assessmentsService.create(user, body);
   }
 
   @Post(':assessmentId/submit')
   @HttpCode(200)
-  @Roles('Member', 'Reviewer', 'Committee', 'Admin')
+  @Roles('Member')
   async submit(@Param('assessmentId') assessmentId: string, @CurrentUser() user: AuthUser) {
     return this.assessmentsService.submit(assessmentId, user);
   }

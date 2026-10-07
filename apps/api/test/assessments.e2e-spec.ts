@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 describe('assessments (bl-10 wave 3)', () => {
   let app: INestApplication;
   let userId: string;
+  let otherUserId: string;
   let testToken: string;
 
   const http = () => request(app.getHttpServer());
@@ -35,6 +36,14 @@ describe('assessments (bl-10 wave 3)', () => {
       .expect(201);
     userId = reg.body.data.id;
 
+    // Create another user for cross-user tests
+    const otherEmail = `assessments-other-${randomUUID()}@test.local`;
+    const otherReg = await http()
+      .post('/api/v1/auth/register')
+      .send({ email: otherEmail, password: 'test-password-123', displayName: 'Other User' })
+      .expect(201);
+    otherUserId = otherReg.body.data.id;
+
     testToken = `ta${randomUUID().slice(0, 6)}`;
 
     // Ensure active rubric exists
@@ -54,9 +63,9 @@ describe('assessments (bl-10 wave 3)', () => {
   });
 
   afterAll(async () => {
-    // Disable user to prevent FK constraint issues
-    await prisma.user.update({
-      where: { id: userId },
+    // Disable users to prevent FK constraint issues
+    await prisma.user.updateMany({
+      where: { id: { in: [userId, otherUserId] } },
       data: { status: 'disabled' },
     });
     await prisma.$disconnect();
@@ -184,5 +193,103 @@ describe('assessments (bl-10 wave 3)', () => {
       .post(`/api/v1/assessments/${assessmentId}/submit`)
       .set('Cookie', memberCookie)
       .expect(409);
+  });
+
+  it('another Member cannot submit someone else\'s draft (ownership check)', async () => {
+    const memberCookie = cookieFor(userId, ['Member']);
+    const otherMemberCookie = cookieFor(otherUserId, ['Member']);
+
+    // User 1 creates a draft
+    const createRes = await http()
+      .post('/api/v1/assessments')
+      .set('Cookie', memberCookie)
+      .send({})
+      .expect(201);
+
+    const assessmentId = createRes.body.data.id;
+
+    // Add clip
+    await prisma.clip.create({
+      data: {
+        assessmentId,
+        objectKey: `clip-${randomUUID()}`,
+        status: 'uploaded',
+      },
+    });
+
+    // User 2 tries to submit User 1's assessment -> 404
+    await http()
+      .post(`/api/v1/assessments/${assessmentId}/submit`)
+      .set('Cookie', otherMemberCookie)
+      .expect(404);
+  });
+
+  it('Reviewer-only role cannot create assessments (Member role required)', async () => {
+    const reviewerCookie = cookieFor(userId, ['Reviewer']);
+
+    // Try to create with Reviewer role -> 403
+    await http()
+      .post('/api/v1/assessments')
+      .set('Cookie', reviewerCookie)
+      .send({})
+      .expect(403);
+  });
+
+  it('creates assessment_transitions row on successful submit', async () => {
+    const memberCookie = cookieFor(userId, ['Member']);
+
+    // Create and submit
+    const createRes = await http()
+      .post('/api/v1/assessments')
+      .set('Cookie', memberCookie)
+      .send({})
+      .expect(201);
+
+    const assessmentId = createRes.body.data.id;
+
+    // Add clip and submit
+    await prisma.clip.create({
+      data: {
+        assessmentId,
+        objectKey: `clip-${randomUUID()}`,
+        status: 'uploaded',
+      },
+    });
+
+    await http()
+      .post(`/api/v1/assessments/${assessmentId}/submit`)
+      .set('Cookie', memberCookie)
+      .expect(200);
+
+    // Verify exactly one transition row exists
+    const transitions = await prisma.assessmentTransition.findMany({
+      where: { assessmentId },
+    });
+
+    expect(transitions.length).toBe(1);
+    expect(transitions[0]!.fromStatus).toBe('draft');
+    expect(transitions[0]!.toStatus).toBe('submitted');
+    expect(transitions[0]!.actorId).toBe(userId);
+  });
+
+  it('submit without clip returns 409 ASSESSMENT_NO_CLIP', async () => {
+    const memberCookie = cookieFor(userId, ['Member']);
+
+    // Create draft
+    const createRes = await http()
+      .post('/api/v1/assessments')
+      .set('Cookie', memberCookie)
+      .send({})
+      .expect(201);
+
+    const assessmentId = createRes.body.data.id;
+
+    // Try to submit without any clip -> 409
+    const submitRes = await http()
+      .post(`/api/v1/assessments/${assessmentId}/submit`)
+      .set('Cookie', memberCookie)
+      .expect(409);
+
+    expect(submitRes.body.error?.code).toBe('ASSESSMENT_NO_CLIP');
   });
 });
