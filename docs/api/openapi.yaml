@@ -540,6 +540,35 @@ paths:
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/RaterStats' } } } }
 
+  /rater-stats/pairs/{reviewerA}/{reviewerB}:
+    get:
+      tags: [rater-stats]
+      summary: 'Drill-down of a PairMatrix cell: the cases both reviewers scored (Committee only)'
+      x-roles: [Committee]
+      parameters:
+        - { name: reviewerA, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: reviewerB, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: window, in: query, schema: { type: string, enum: [30d, 90d, 365d, all], default: 90d } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cohenKappaQuadratic: { $ref: '#/components/schemas/AgreementValue' }
+                  cases:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        assessmentId: { type: string, format: uuid }
+                        subjectDisplayName: { type: string }
+                        overallA: { type: number, description: reviewer A overall (ladder units) }
+                        overallB: { type: number }
+                        gap: { type: number }
+                        submittedAt: { type: string, format: date-time }
   # ---------------- calibration (grading.md §12.4, G19 option b) ----------------
   /calibration-sets:
     get:
@@ -1288,6 +1317,14 @@ components:
         subjectUserId: { type: string, format: uuid }
         eventId: { type: [string, 'null'], format: uuid, description: 'A13 event-bound assessment' }
         status: { $ref: '#/components/schemas/AssessmentStatus' }
+        subject:
+          type: object
+          description: 'who is assessed (never sent to reviewers, who only get blind ReviewAssignment)'
+          properties:
+            userId: { type: string, format: uuid }
+            displayName: { type: string }
+        latestGrade: { oneOf: [{ $ref: '#/components/schemas/GradeView' }, { type: 'null' }], description: 'grade of the latest result version (list rows show its label without loading the detail)' }
+        latestResultVersion: { type: [integer, 'null'] }
         reviewsSubmitted: { type: integer }
         reviewsRequired: { type: integer }
         createdAt: { type: string, format: date-time }
@@ -1714,9 +1751,11 @@ components:
         nextCursor: { type: [string, 'null'] }
     OverrideInput:
       type: object
+      description: 'grading §8: the override sets only the center grade; score = idx + 0.5, margin = 0, lower = upper = center, kind exact (no margin input)'
       required: [centerKey, reason]
       properties:
         centerKey: { $ref: '#/components/schemas/GradeKey' }
+        resultVersion: { type: integer, description: optimistic check, must equal the latest version }
         reason: { type: string, minLength: 20, maxLength: 2000 }
     ReasonInput:
       type: object
