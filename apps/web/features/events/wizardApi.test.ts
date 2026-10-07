@@ -9,7 +9,7 @@ vi.mock('@/lib/api/client', async (orig) => ({
 
 const input = {
   tournament: { name: 'Cup', startsOn: '2026-11-01', entriesCloseAt: '2026-10-25T00:00:00.000Z' },
-  events: [{ discipline: 'XD' as const, gradeMin: 'S-' as const, gradeMax: 'S+' as const, formatPreset: 'knockout' as const }],
+  events: [{ discipline: 'XD' as const, gradeMin: 'S-' as const, gradeMax: 'S+' as const, requiresFreshAssessment: false, minReviewers: 2, formatPreset: 'knockout' as const }],
 };
 
 describe('createTournamentWithEvents', () => {
@@ -25,7 +25,7 @@ describe('createTournamentWithEvents', () => {
     const calls = vi.mocked(apiFetch).mock.calls;
     expect(calls[0][0]).toBe('/tournaments');
     expect(calls[1][0]).toBe('/tournaments/T1/events');
-    expect(calls[1][1]?.body).toEqual({ discipline: 'XD', gradeMin: 'S-', gradeMax: 'S+' });
+    expect(calls[1][1]?.body).toEqual({ discipline: 'XD', gradeMin: 'S-', gradeMax: 'S+', requiresFreshAssessment: false, minReviewers: 2 });
     expect(calls[2][0]).toBe('/events/E1/format');
     expect(calls[2][1]?.method).toBe('PUT');
     expect((calls[2][1]?.body as { type: string }).type).toBe('knockout');
