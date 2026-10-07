@@ -93,7 +93,8 @@ export function Bracket({ rounds, highlightEntryId }: BracketProps) {
   return (
     <section data-testid="bracket" className="w-full bg-night text-night-foreground">
       {/* Visually hidden text table for screen readers */}
-      <table data-testid="bracket-sr-table" className="sr-only">
+      <div className="sr-only">
+      <table data-testid="bracket-sr-table">
         <caption>ผังสายแข่งรอบน็อคเอาท์</caption>
         <thead>
           <tr>
@@ -129,6 +130,7 @@ export function Bracket({ rounds, highlightEntryId }: BracketProps) {
           })}
         </tbody>
       </table>
+      </div>
 
       {/* Desktop layout: tree with columns per round */}
       <div
