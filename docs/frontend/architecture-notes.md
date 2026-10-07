@@ -66,16 +66,16 @@ output: process.env.BUILD_STANDALONE === '1' ? 'standalone' : undefined
 ```
 
 - Browser เรียก **same-origin `/api/*` เท่านั้น** → Caddy `reverse_proxy web:3000` → Next rewrite ไป `http://api:3001` ภายใน Docker network. API ไม่เปิดพอร์ตสู่ภายนอก, ไม่มี CORS
-- `API_URL` เป็น runtime env ของ container web (ต้องไม่ใช่ `NEXT_PUBLIC_*` เพราะ rewrite ถูก resolve ตอน build/start ฝั่ง server). ต้องยืนยันกับ Kevin ว่า rewrite ถูก bake ตอน `next build` หรืออ่านตอนรัน (standalone) — ถ้า bake ต้องส่ง build-arg (Q7)
+- **`API_URL` เป็น build-time** (ยืนยันโดย Kevin, README หัวข้อ Q7): rewrite ถูก bake ตอน `next build`; image web bake `http://api:3001`; browser เรียกแค่ same-origin `/api/*`; dev ใช้ `.env` `API_URL=http://localhost:3101` (web 3100) — เปลี่ยนค่าต้อง rebuild image
 - ข้อจำกัด: rewrite proxy ของ Next มี body limit/timeout → **อัปโหลดคลิปห้ามผ่าน Next** (ดูข้อ 5)
-- Caddyfile ใช้ pattern `deploy/Caddyfile` ของ kpaccv2 (`encode gzip`, `reverse_proxy web:3000`); MinIO ต้องมี route/โดเมนย่อยให้ browser ดึงคลิปด้วย signed URL (Q5)
+- Caddyfile ใช้ pattern `deploy/Caddyfile` ของ kpaccv2 (`encode gzip`, `reverse_proxy web:3000`); MinIO อยู่โดเมนแยก `files.<domain>` หลัง Caddy (`FILES_ADDRESS` → `minio:9000`) ให้ browser ดึง/อัปโหลดคลิปด้วย presigned URL; Caddy ส่ง Host ผ่านเพื่อให้ SigV4 ตรวจผ่าน และ block files ไม่เปิด gzip เพื่อให้ Range ทำงาน; bucket `clips` เป็น private, ไม่เปิด console
 
 ## 5. Video player — คลิปประเมินมือ (MinIO signed URL)
 
 - Flow เล่น: หน้าประเมินเรียก `GET /api/clips/:id/playback` → `{ url, expiresAt, mime }` (presigned GET ของ MinIO) → `<video src={url}>` เล่นตรง ไม่ผ่าน Next
 - Component `VideoPlayer` (shell, bl-08): native `<video controls playsInline preload="metadata">`, ปุ่ม speed (0.5/1/1.5/2), step ±1 เฟรม/±5 วิ, loop ช่วง, keyboard (space, ←/→, J/L). ไม่ดึง library หนัก (ถ้าจำเป็นค่อย `hls.js` ภายหลัง — Q6 ถามว่าคลิปเป็น mp4 ตรงหรือ HLS)
 - URL หมดอายุ: เก็บใน Query (`staleTime` = expiresAt − 60s); เมื่อ `<video>` error / `expiresAt` ใกล้ถึง → refetch แล้วเล่นต่อที่ `currentTime` เดิม
-- Signed URL ชี้ host ของ MinIO ที่ browser เข้าถึงได้ (ไม่ใช่ `minio:9000` ภายใน) — ต้องกำหนด public endpoint ให้ตรง Caddy (Q5)
+- Signed URL (GET/PUT) อายุ **15 นาที** ลงนามกับ `S3_PUBLIC_ENDPOINT` = `https://files.<domain>` (dev `http://localhost:9100`) — ไม่ใช่ `minio:9000` ภายใน; รองรับ Range (seek ได้). _ปิดแล้ว: Q5 host/TTL/Range, Q7_
 - อัปโหลด: presigned PUT ตรงไป MinIO (ผ่าน `POST /api/clips/upload-url`) พร้อม progress bar; ยืนยันด้วย `POST /api/clips/:id/complete`
 - ไม่มี autoplay; ไม่แสดง URL ให้ผู้ใช้คัดลอกง่าย (ไม่ใช่ DRM — อย่างน้อย TTL สั้น)
 
