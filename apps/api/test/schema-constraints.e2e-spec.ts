@@ -207,6 +207,69 @@ describe('bl-07 schema constraints', () => {
     });
   });
 
+  it('grading v2: provisional status, min reviewers 1..5, one member second opinion (G3\', G17, G20)', async () => {
+    await inRollback(async (tx) => {
+      const a = await makeAssessment(tx);
+      expect(a.reviewsRequired).toBe(2);
+      await tx.assessment.update({ where: { id: a.id }, data: { status: 'provisional' } });
+      await tx.assessmentResult.create({
+        data: result(a.id, 1, { status: 'provisional', nRaters: 1, margin: 1.0, flags: ['SINGLE_REVIEWER'] }),
+      });
+      expect(
+        await violation(tx, () => tx.assessment.update({ where: { id: a.id }, data: { reviewsRequired: 6 } })),
+      ).toMatch(/assessments_reviews_required_chk/);
+
+      const ev = await makeEvent(tx);
+      expect(ev.minReviewers).toBe(2);
+      expect(
+        await violation(tx, () => tx.event.update({ where: { id: ev.id }, data: { minReviewers: 0 } })),
+      ).toMatch(/events_min_reviewers_chk/);
+
+      const player = await makeUser(tx);
+      await tx.secondOpinion.create({ data: { assessmentId: a.id, requestedBy: player.id, requester: 'member' } });
+      await tx.secondOpinion.create({ data: { assessmentId: a.id, requestedBy: player.id, requester: 'committee' } });
+      expect(
+        await violation(tx, () =>
+          tx.secondOpinion.create({ data: { assessmentId: a.id, requestedBy: player.id, requester: 'member' } }),
+        ),
+      ).toMatch(/Unique constraint failed/);
+    });
+  });
+
+  it('grading v2: calibration assignments target a clip, reference grade is a ladder index (G19b)', async () => {
+    await inRollback(async (tx) => {
+      const committee = await makeUser(tx);
+      const reviewer = await makeUser(tx);
+      const set = await tx.calibrationSet.create({ data: { name: 'Q4', createdBy: committee.id } });
+      const clip = await tx.calibrationClip.create({
+        data: { setId: set.id, objectKey: `calibration/${randomUUID()}`, referenceIndex: 7 },
+      });
+      expect(
+        await violation(tx, () =>
+          tx.calibrationClip.create({ data: { setId: set.id, objectKey: `calibration/${randomUUID()}`, referenceIndex: 15 } }),
+        ),
+      ).toMatch(/calibration_clips_reference_index_chk/);
+
+      const due = new Date('2026-12-01');
+      await tx.reviewAssignment.create({
+        data: { kind: 'calibration', calibrationClipId: clip.id, reviewerId: reviewer.id, dueAt: due },
+      });
+      expect(
+        await violation(tx, () =>
+          tx.reviewAssignment.create({
+            data: { kind: 'calibration', calibrationClipId: clip.id, reviewerId: reviewer.id, dueAt: due },
+          }),
+        ),
+      ).toMatch(/Unique constraint failed/);
+      // kind and target must agree
+      expect(
+        await violation(tx, () =>
+          tx.reviewAssignment.create({ data: { kind: 'assessment', calibrationClipId: clip.id, reviewerId: reviewer.id, dueAt: due } }),
+        ),
+      ).toMatch(/review_assignments_kind_target_chk/);
+    });
+  });
+
   it('rubrics: exactly one active version; review_scores: grade index 0..14', async () => {
     await inRollback(async (tx) => {
       await tx.rubric.updateMany({ data: { active: false } });

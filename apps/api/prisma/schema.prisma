@@ -157,6 +157,8 @@ enum AssessmentStatus {
   draft
   submitted
   in_review
+  /// grading v2 G17: n = 1 result awaiting Committee confirmation.
+  provisional
   needs_reviewers
   disputed
   pending_approval
@@ -224,7 +226,8 @@ model Assessment {
   /// Locked at submit; every review of this request uses the same rubric.
   rubricId        String?                @map("rubric_id") @db.Uuid
   status          AssessmentStatus       @default(draft)
-  reviewsRequired Int                    @default(3) @map("reviews_required") @db.SmallInt
+  /// Copied from events.min_reviewers, or the system default 2 for standalone requests (G3'). CHECK 1..5.
+  reviewsRequired Int                    @default(2) @map("reviews_required") @db.SmallInt
   submittedAt     DateTime?              @map("submitted_at") @db.Timestamptz(3)
   /// Optimistic lock for state transitions.
   version         Int                    @default(0)
@@ -237,6 +240,7 @@ model Assessment {
   assignments     ReviewAssignment[]
   results         AssessmentResult[]
   transitions     AssessmentTransition[]
+  secondOpinions  SecondOpinion[]
 
   @@index([subjectUserId, createdAt])
   @@index([status])
@@ -281,23 +285,90 @@ model Clip {
 }
 
 /// Partial unique (assessment_id, reviewer_id) WHERE state IN ('open','submitted') is in the migration SQL.
+enum AssignmentKind {
+  assessment
+  calibration
+}
+
+/// kind = assessment -> assessment_id set; kind = calibration -> calibration_clip_id set (CHECK in SQL).
+/// Calibration work looks identical to the reviewer (G19b).
 model ReviewAssignment {
-  id            String          @id @default(uuid()) @db.Uuid
-  assessmentId  String          @map("assessment_id") @db.Uuid
-  reviewerId    String          @map("reviewer_id") @db.Uuid
-  state         AssignmentState @default(open)
-  dueAt         DateTime        @map("due_at") @db.Timestamptz(3)
-  declineReason String?         @map("decline_reason")
+  id                String           @id @default(uuid()) @db.Uuid
+  kind              AssignmentKind   @default(assessment)
+  assessmentId      String?          @map("assessment_id") @db.Uuid
+  calibrationClipId String?          @map("calibration_clip_id") @db.Uuid
+  reviewerId        String           @map("reviewer_id") @db.Uuid
+  state             AssignmentState  @default(open)
+  dueAt             DateTime         @map("due_at") @db.Timestamptz(3)
+  declineReason     String?          @map("decline_reason")
   /// null = automatic assignment.
-  assignedBy    String?         @map("assigned_by") @db.Uuid
-  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  assessment    Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
-  reviewer      User            @relation("AssignmentReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
-  review        Review?
+  assignedBy        String?          @map("assigned_by") @db.Uuid
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  assessment        Assessment?      @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  calibrationClip   CalibrationClip? @relation(fields: [calibrationClipId], references: [id], onDelete: Restrict)
+  reviewer          User             @relation("AssignmentReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  review            Review?
+  secondOpinion     SecondOpinion?
 
   @@index([reviewerId, state])
   @@index([assessmentId])
+  @@index([calibrationClipId])
   @@map("review_assignments")
+}
+
+enum SecondOpinionRequester {
+  member
+  committee
+}
+
+/// G20: the player may ask once per request within 14 days of the result; the Committee any time.
+/// Partial unique (assessment_id) WHERE requester = 'member' is in the migration SQL.
+model SecondOpinion {
+  id           String                 @id @default(uuid()) @db.Uuid
+  assessmentId String                 @map("assessment_id") @db.Uuid
+  requestedBy  String                 @map("requested_by") @db.Uuid
+  requester    SecondOpinionRequester
+  /// The extra review assignment created for it.
+  assignmentId String?                @unique @map("assignment_id") @db.Uuid
+  reason       String?
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  assessment   Assessment             @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  assignment   ReviewAssignment?      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([assessmentId])
+  @@map("second_opinions")
+}
+
+/// G19b: quarterly calibration clips with Committee reference grades.
+model CalibrationSet {
+  id          String            @id @default(uuid()) @db.Uuid
+  name        String            @db.VarChar(120)
+  description String?
+  active      Boolean           @default(true)
+  createdBy   String            @map("created_by") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  clips       CalibrationClip[]
+
+  @@map("calibration_sets")
+}
+
+model CalibrationClip {
+  id             String             @id @default(uuid()) @db.Uuid
+  setId          String             @map("set_id") @db.Uuid
+  objectKey      String             @unique @map("object_key")
+  /// Committee reference grade as a ladder index 0..14 (CHECK in SQL).
+  referenceIndex Int                @map("reference_index") @db.SmallInt
+  status         ClipStatus         @default(pending_upload)
+  contentType    String?            @map("content_type")
+  sizeBytes      BigInt?            @map("size_bytes")
+  sha256         String?            @db.Char(64)
+  durationSec    Int?               @map("duration_sec")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  set            CalibrationSet     @relation(fields: [setId], references: [id], onDelete: Restrict)
+  assignments    ReviewAssignment[]
+
+  @@index([setId])
+  @@map("calibration_clips")
 }
 
 /// One review per assignment; immutable once submitted (blind review).
@@ -392,6 +463,10 @@ model RaterStat {
   kappaVsConsensus Decimal?               @map("kappa_vs_consensus") @db.Decimal(6, 4)
   kappaN           Int                    @default(0) @map("kappa_n")
   outlierRate      Decimal?               @map("outlier_rate") @db.Decimal(6, 4)
+  /// G19b: mean(overall - (referenceIndex + 0.5)) over calibration clips in the window.
+  calibrationBias  Decimal?               @map("calibration_bias") @db.Decimal(6, 4)
+  calibrationMae   Decimal?               @map("calibration_mae") @db.Decimal(6, 4)
+  calibrationN     Int                    @default(0) @map("calibration_n")
   flagged          Boolean                @default(false)
   snapshot         RaterAgreementSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
@@ -461,8 +536,8 @@ model Event {
   formatLockedAt          DateTime?     @map("format_locked_at") @db.Timestamptz(3)
   /// A13: entering requires an approved assessment bound to this event.
   requiresFreshAssessment Boolean       @default(false) @map("requires_fresh_assessment")
-  /// Reserved for grading.md v2 (few-reviewer mode).
-  minReviewers            Int?          @map("min_reviewers") @db.SmallInt
+  /// grading v2 G3': valid reviews needed before a result is computed (1-5, CHECK in SQL).
+  minReviewers            Int           @default(2) @map("min_reviewers") @db.SmallInt
   /// A14 transparency: Committee/Admin disclosure overriding hidden grades.
   gradesDisclosedAt       DateTime?     @map("grades_disclosed_at") @db.Timestamptz(3)
   gradesDisclosedBy       String?       @map("grades_disclosed_by") @db.Uuid

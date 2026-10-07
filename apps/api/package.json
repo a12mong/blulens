@@ -7,7 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "jest --config test/jest-e2e.json --runInBand",
+    "test": "prisma generate --no-hints && jest --config test/jest-e2e.json --runInBand",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:generate": "prisma generate",
