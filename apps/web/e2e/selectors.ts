@@ -112,6 +112,8 @@ export const SELECTORS = {
     edit: 'entry-edit',
     forward: 'entry-forward',
     approve: 'entry-approve',
+    approveConfirm: 'approve-confirm',
+    approveCancel: 'approve-cancel',
     reject: 'entry-reject',
   },
 

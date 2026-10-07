@@ -286,13 +286,13 @@ test.describe.serial('bl-21 API Slice Smoke Tests', () => {
   test('Step 9: Committee rejects Entry B (reason min length validation & success)', async () => {
     expect(entryBId).toBeTruthy();
 
-    // Reason validation: < 5 chars must fail with 400
+    // Reason validation: 9 chars must fail with 400
     const shortReasonRes = await committeeCtx.post(`entries/${entryBId}/reject`, {
-      data: { reason: 'bad' },
+      data: { reason: 'abcdefghi' },
     });
-    expect(shortReasonRes.status(), 'Short reason (<5 chars) must return 400').toBe(400);
+    expect(shortReasonRes.status(), 'Short reason (9 chars) must return 400').toBe(400);
 
-    // Valid reason: >= 5 chars must succeed
+    // Valid reason: 10+ chars must succeed
     const validRejectRes = await committeeCtx.post(`entries/${entryBId}/reject`, {
       data: { reason: 'Duplicate skill tier pairing' },
     });

@@ -41,11 +41,12 @@ setup('authenticate as committee', async ({ page }) => {
   expect(password, 'SEED_DEMO_PASSWORD or SEED_ADMIN_PASSWORD must be set for committee auth').toBeTruthy();
 
   await page.goto(ROUTES.login);
+  await expect(page.getByTestId(SELECTORS.login.identifier)).toBeVisible({ timeout: 20000 });
   await page.getByTestId(SELECTORS.login.identifier).fill(email);
   await page.getByTestId(SELECTORS.login.password).fill(password!);
   await page.getByTestId(SELECTORS.login.submit).click();
 
-  await expect(page).not.toHaveURL(/\/login$/);
+  await expect(page).not.toHaveURL(/\/login$/, { timeout: 20000 });
   await page.context().storageState({ path: COMMITTEE_AUTH_FILE });
 });
 
@@ -57,10 +58,11 @@ setup('authenticate as member1', async ({ page }) => {
   expect(password, 'SEED_DEMO_PASSWORD or SEED_ADMIN_PASSWORD must be set for member auth').toBeTruthy();
 
   await page.goto(ROUTES.login);
+  await expect(page.getByTestId(SELECTORS.login.identifier)).toBeVisible({ timeout: 20000 });
   await page.getByTestId(SELECTORS.login.identifier).fill(email);
   await page.getByTestId(SELECTORS.login.password).fill(password!);
   await page.getByTestId(SELECTORS.login.submit).click();
 
-  await expect(page).not.toHaveURL(/\/login$/);
+  await expect(page).not.toHaveURL(/\/login$/, { timeout: 20000 });
   await page.context().storageState({ path: MEMBER_AUTH_FILE });
 });

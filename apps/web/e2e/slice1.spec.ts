@@ -16,7 +16,7 @@ import {
  * - Admin creates 3 doubles entries (A, B, C) on /admin/events/[eventId]/entries/new.
  * - Full type-ahead verification on team input ('blue', 'บลู', 'blue  wing', 'zzzz' -> request-new, select).
  * - Admin forwards all three entries to Committee queue (status -> pending_committee).
- * - Committee rejects entry B (asserts reason is mandatory >= 5 chars in dialog, submits valid reason).
+ * - Committee rejects entry B (asserts reason is mandatory >= 10 chars in dialog, submits valid reason).
  * - Committee approves entry A (asserts entry-grade-hidden visible, status approved).
  * - Committee leaves entry C pending_committee.
  * - API-level cross-check proves backend returns entry A as approved and excludes B and C.
@@ -92,7 +92,7 @@ test.describe.serial('Admin Tournament and Event Creation', () => {
 
     // Open tournament wizard via link
     const createLink = page.getByTestId(SELECTORS.tournament.createOpen);
-    await expect(createLink).toBeVisible();
+    await expect(createLink).toBeVisible({ timeout: 15000 });
     await createLink.click();
     await expect(page).toHaveURL(new RegExp(ROUTES.eventsNew));
 
@@ -497,7 +497,7 @@ test.describe.serial('Admin Entries Workflow (RG-29..32)', () => {
 test.describe.serial('Committee Review & Resolution (RG-33, RG-36)', () => {
   test.use({ storageState: COMMITTEE_AUTH_FILE });
 
-  test('Step 7: RG-36 Committee rejects Entry B and asserts reason is mandatory (>= 5 chars)', async ({
+  test('Step 7: RG-36 Committee rejects Entry B and asserts reason is mandatory (>= 10 chars)', async ({
     page,
   }) => {
     expect(createdEventId, 'createdEventId required').toBeTruthy();
@@ -518,12 +518,16 @@ test.describe.serial('Committee Review & Resolution (RG-33, RG-36)', () => {
     const reasonInput = page.getByTestId(SELECTORS.reasonDialog.input);
     await expect(reasonInput).toBeVisible();
 
-    // Mandatory reason check: submit empty reason -> expect error
+    // Mandatory reason check: submit disabled for empty and 9 chars
     await expect(page.getByTestId(SELECTORS.reasonDialog.submit)).toBeDisabled();
-    await reasonInput.fill('abcd');
+    await reasonInput.fill('abcdefghi');
     await expect(page.getByTestId(SELECTORS.reasonDialog.submit)).toBeDisabled();
 
-    // Submit with valid reason (>= 5 chars)
+    // 10 chars enables submit
+    await reasonInput.fill('abcdefghij');
+    await expect(page.getByTestId(SELECTORS.reasonDialog.submit)).toBeEnabled();
+
+    // Submit with valid real reason (>= 10 chars)
     await reasonInput.fill('Duplicate pairing in this event tier');
     await Promise.all([
       page.waitForResponse((r: Response) => r.url().includes(`/entries/${entryBId}/reject`) && r.request().method() === 'POST'),
@@ -549,11 +553,18 @@ test.describe.serial('Committee Review & Resolution (RG-33, RG-36)', () => {
 
     const approveBtn = rowA.getByTestId(SELECTORS.entryList.approve);
     await expect(approveBtn).toBeVisible();
+    await approveBtn.click();
 
-    await Promise.all([
+    // Confirm dialog (bl-26-3 ApproveConfirmDialog)
+    const confirmBtn = page.getByTestId(SELECTORS.entryList.approveConfirm);
+    await expect(confirmBtn).toBeVisible();
+    await expect(page.getByTestId(SELECTORS.entryList.approveCancel)).toBeVisible();
+
+    const [approveResponse] = await Promise.all([
       page.waitForResponse((r: Response) => r.url().includes(`/entries/${entryAId}/approve`) && r.request().method() === 'POST'),
-      approveBtn.click(),
+      confirmBtn.click(),
     ]);
+    expect(approveResponse.status(), 'Approve must succeed').toBe(200);
 
     // Verify row A status is approved
     await expect(rowA).toHaveCount(0);
