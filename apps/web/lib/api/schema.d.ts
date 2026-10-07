@@ -254,7 +254,7 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            items: components["schemas"]["UserSummary"][];
+                            items: components["schemas"]["UserPickerItem"][];
                             nextCursor?: string | null;
                         };
                     };
@@ -677,6 +677,7 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        /** @description Member context for the reviewers (stored in assessments.note; shown to assigned reviewers and the Committee) */
                         note?: string;
                         /**
                          * Format: uuid
@@ -1462,6 +1463,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rater-stats/pairs/{reviewerA}/{reviewerB}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Drill-down of a PairMatrix cell: the cases both reviewers scored (Committee only) */
+        get: {
+            parameters: {
+                query?: {
+                    window?: "30d" | "90d" | "365d" | "all";
+                };
+                header?: never;
+                path: {
+                    reviewerA: string;
+                    reviewerB: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            cohenKappaQuadratic?: components["schemas"]["AgreementValue"];
+                            cases?: {
+                                /** Format: uuid */
+                                assessmentId?: string;
+                                subjectDisplayName?: string;
+                                /** @description reviewer A overall (ladder units) */
+                                overallA?: number;
+                                overallB?: number;
+                                gap?: number;
+                                /** Format: date-time */
+                                submittedAt?: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/calibration-sets": {
         parameters: {
             query?: never;
@@ -2226,7 +2281,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["ReasonInput"];
+                    "application/json": components["schemas"]["EntryRejectInput"];
                 };
             };
             responses: {
@@ -2948,6 +3003,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events/{eventId}/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Matches of an event (schedule, results). Public roles see scheduled/reported/confirmed (reported shown as awaiting confirmation) */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "scheduled" | "bye" | "reported" | "confirmed" | "walkover" | "void";
+                    stage?: "group" | "knockout" | "third_place";
+                    round?: number;
+                };
+                header?: never;
+                path: {
+                    eventId: components["parameters"]["EventId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Match"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/matches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Committee results queue across events, e.g. ?status=reported */
+        get: {
+            parameters: {
+                query?: {
+                    status?: "scheduled" | "reported" | "confirmed";
+                    eventId?: string;
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Match"][];
+                            nextCursor?: string | null;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/matches/{matchId}/result": {
         parameters: {
             query?: never;
@@ -3344,6 +3485,18 @@ export interface components {
             /** @description current teams (several allowed, A11) */
             teamIds?: string[];
         };
+        /** @description GET /users result (Admin/Committee pickers only): adds club names and the current grade label, which these roles may see */
+        UserPickerItem: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            teamIds?: string[];
+            teamNames?: string[];
+            /** @description label of the current official grade (approved/overridden), null if none */
+            gradeLabel?: string | null;
+            /** @description true when only a provisional (unconfirmed) result exists */
+            gradeProvisional?: boolean;
+        };
         Me: components["schemas"]["UserSummary"] & {
             /** Format: email */
             email?: string;
@@ -3423,6 +3576,15 @@ export interface components {
              */
             eventId?: string | null;
             status: components["schemas"]["AssessmentStatus"];
+            /** @description who is assessed (never sent to reviewers, who only get blind ReviewAssignment) */
+            subject?: {
+                /** Format: uuid */
+                userId?: string;
+                displayName?: string;
+            };
+            /** @description grade of the latest result version (list rows show its label without loading the detail) */
+            latestGrade?: components["schemas"]["GradeView"] | null;
+            latestResultVersion?: number | null;
             reviewsSubmitted?: number;
             reviewsRequired?: number;
             /** Format: date-time */
@@ -3531,19 +3693,15 @@ export interface components {
             scores: components["schemas"]["CriterionScore"][];
             comment?: string;
         };
+        /** @description Reviewer-facing task. BLIND: never exposes the assessment id, the subject, or whether the task is a calibration clip; the assignment id is the neutral task id used in every reviewer endpoint. Committee views (AssessmentDetail.reviewerRows, /calibration-sets/*) carry the kind and the link to the assessment or calibration clip. */
         ReviewAssignment: {
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description neutral task id (assignment id)
+             */
             id: string;
-            /** Format: uuid */
-            assessmentId: string;
             /** @enum {string} */
             state: "open" | "submitted" | "expired" | "declined";
-            /**
-             * @description calibration tasks look identical to the reviewer (blind)
-             * @default assessment
-             * @enum {string}
-             */
-            kind: "assessment" | "calibration";
             /** Format: date-time */
             dueAt: string;
             /** Format: date-time */
@@ -3703,6 +3861,18 @@ export interface components {
             gradeVisibility?: "hidden" | "public" | "disclosed";
             /** @description computed live; shown to Admin/Committee */
             warnings?: ("MULTI_TEAM" | "NO_APPROVED_GRADE" | "GRADE_OUT_OF_BAND" | "FRESH_ASSESSMENT_REQUIRED")[];
+            /** @description one row per (warning, player); Admin/Committee only */
+            warningDetails?: {
+                /** @enum {string} */
+                code: "MULTI_TEAM" | "NO_APPROVED_GRADE" | "GRADE_OUT_OF_BAND" | "FRESH_ASSESSMENT_REQUIRED";
+                /** Format: uuid */
+                userId?: string | null;
+                displayName?: string | null;
+                /** @description MULTI_TEAM: all current clubs of the player */
+                teamNames?: string[];
+                /** @description GRADE_OUT_OF_BAND: the player label, e.g. N- */
+                gradeLabel?: string | null;
+            }[];
         };
         DrawSummary: {
             /** Format: uuid */
@@ -3765,6 +3935,8 @@ export interface components {
                      * @description entryId
                      */
                     top?: string | null;
+                    topEntry?: components["schemas"]["EntryRef"] | null;
+                    bottomEntry?: components["schemas"]["EntryRef"] | null;
                     /** Format: uuid */
                     bottom?: string | null;
                     /** Format: uuid */
@@ -3826,6 +3998,8 @@ export interface components {
             a?: string | null;
             /** Format: uuid */
             b?: string | null;
+            aEntry?: components["schemas"]["EntryRef"] | null;
+            bEntry?: components["schemas"]["EntryRef"] | null;
             games?: {
                 a?: number;
                 b?: number;
@@ -3857,6 +4031,22 @@ export interface components {
             /** @description empty = all courts of the event */
             courts?: string[];
         };
+        /** @description compact entry label for brackets/standings/matches; public-safe (no grade unless visible per A14) */
+        EntryRef: {
+            /** Format: uuid */
+            entryId?: string;
+            /** @description pair name, or the player names joined with " / " */
+            displayName?: string;
+            players?: {
+                /** Format: uuid */
+                userId?: string;
+                displayName?: string;
+            }[];
+            /** @description clubs picked for this entry */
+            teamNames?: string[];
+            /** @description GradeView.label only when the entry grade is public/disclosed (A14), else null */
+            gradeLabel?: string | null;
+        };
         Group: {
             /** Format: uuid */
             id?: string;
@@ -3875,6 +4065,7 @@ export interface components {
             groupId?: string;
             /** Format: uuid */
             entryId?: string;
+            entry?: components["schemas"]["EntryRef"];
             rank?: number;
             played?: number;
             won?: number;
@@ -3908,8 +4099,15 @@ export interface components {
             }[];
             nextCursor?: string | null;
         };
+        /** @description grading §8: the override sets only the center grade; score = idx + 0.5, margin = 0, lower = upper = center, kind exact (no margin input) */
         OverrideInput: {
             centerKey: components["schemas"]["GradeKey"];
+            /** @description optimistic check */
+            resultVersion?: number;
+            reason: string;
+        };
+        /** @description entry reject reason, min 10 chars (decision 2026-10-07, matches the design; other ReasonInput uses stay at 5) */
+        EntryRejectInput: {
             reason: string;
         };
         ReasonInput: {

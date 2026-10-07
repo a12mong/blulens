@@ -9,9 +9,7 @@ describe('ReviewCard', () => {
   it('shows the neutral task id, the state badge and a start link only for open tasks', () => {
     const openAssignment: ReviewAssignment = {
       id: 'aaaa-bbbb-a3f2',
-      assessmentId: 'hidden-uuid',
       state: 'open',
-      kind: 'assessment',
       dueAt: '2026-10-08T15:30:00Z',
       submittedAt: null,
     };
@@ -34,9 +32,7 @@ describe('ReviewCard', () => {
   it('expired task shows state badge and no action link', () => {
     const expiredAssignment: ReviewAssignment = {
       id: 'aaaa-bbbb-c3d4',
-      assessmentId: 'hidden-uuid',
       state: 'expired',
-      kind: 'assessment',
       dueAt: '2026-10-06T15:30:00Z',
       submittedAt: null,
     };
@@ -50,9 +46,7 @@ describe('ReviewCard', () => {
   it('submitted shows state badge and view link', () => {
     const submittedAssignment: ReviewAssignment = {
       id: 'aaaa-bbbb-b1c2',
-      assessmentId: 'hidden-uuid',
       state: 'submitted',
-      kind: 'assessment',
       dueAt: '2026-10-08T15:30:00Z',
       submittedAt: '2026-10-07T10:00:00Z',
     };
@@ -74,9 +68,7 @@ describe('ReviewCard', () => {
 
     const assignment: ReviewAssignment = {
       id: 'aaaa-bbbb-e5f6',
-      assessmentId: 'hidden-uuid',
       state: 'open',
-      kind: 'assessment',
       dueAt,
       submittedAt: null,
     };
@@ -92,9 +84,7 @@ describe('ReviewCard', () => {
   it('never contains calibration references', () => {
     const calibrationAssignment: ReviewAssignment = {
       id: 'aaaa-bbbb-f7g8',
-      assessmentId: 'hidden-uuid',
       state: 'open',
-      kind: 'calibration',
       dueAt: '2026-10-08T15:30:00Z',
       submittedAt: null,
     };
@@ -109,9 +99,7 @@ describe('ReviewCard', () => {
   it('never exposes assessment id or player info', () => {
     const assignment: ReviewAssignment = {
       id: 'aaaa-bbbb-g9h0',
-      assessmentId: 'secret-assessment-id-12345',
       state: 'open',
-      kind: 'assessment',
       dueAt: '2026-10-08T15:30:00Z',
       submittedAt: null,
     };

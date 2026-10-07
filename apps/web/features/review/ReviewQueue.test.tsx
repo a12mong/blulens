@@ -29,33 +29,25 @@ describe('ReviewQueue', () => {
     const assignments: ReviewAssignment[] = [
       {
         id: 'open-1',
-        assessmentId: 'a1',
         state: 'open',
-        kind: 'assessment',
         dueAt: '2026-10-10T12:00:00Z',
         submittedAt: null,
       },
       {
         id: 'open-2',
-        assessmentId: 'a2',
         state: 'open',
-        kind: 'assessment',
         dueAt: '2026-10-11T12:00:00Z',
         submittedAt: null,
       },
       {
         id: 'submitted-1',
-        assessmentId: 'a3',
         state: 'submitted',
-        kind: 'assessment',
         dueAt: '2026-10-09T12:00:00Z',
         submittedAt: '2026-10-07T10:00:00Z',
       },
       {
         id: 'expired-1',
-        assessmentId: 'a4',
         state: 'expired',
-        kind: 'assessment',
         dueAt: '2026-10-08T12:00:00Z',
         submittedAt: null,
       },
@@ -148,9 +140,7 @@ describe('ReviewQueue', () => {
     const assignments: ReviewAssignment[] = [
       {
         id: 'open-1',
-        assessmentId: 'a1',
         state: 'open',
-        kind: 'assessment',
         dueAt: '2026-10-10T12:00:00Z',
         submittedAt: null,
       },
@@ -176,17 +166,13 @@ describe('ReviewQueue', () => {
     const assignments: ReviewAssignment[] = [
       {
         id: 'later',
-        assessmentId: 'a1',
         state: 'open',
-        kind: 'assessment',
         dueAt: '2026-10-12T12:00:00Z',
         submittedAt: null,
       },
       {
         id: 'sooner',
-        assessmentId: 'a2',
         state: 'open',
-        kind: 'assessment',
         dueAt: '2026-10-10T12:00:00Z',
         submittedAt: null,
       },
