@@ -6,7 +6,7 @@
 ## 1. เส้นทางที่ test ครอบคลุม
 | Step | สิ่งที่ตรวจ |
 |---|---|
-| S1 | Member1 สร้าง assessment → แทรกแถว clip (status `uploaded`, object_key `/e2e/sample.mp4?a=<assessmentId>` — คอลัมน์ unique) ลง DB → submit → status `submitted` |
+| S1 | Member1 สร้าง assessment → แทรกแถว clip (status `uploaded`, object_key `/e2e/sample.mp4?c=<clipId>` — คอลัมน์ unique) ลง DB → submit → status `submitted` |
 | S2 | Committee `POST /assessments/{id}/assign` กรรมการ reviewer1 + reviewer2 → `in_review` |
 | S3 | reviewer1 เปิด `/review` เห็นงานในคิว (ปุ่ม "เริ่ม") |
 | S4 | `/review/tasks/[id]`: clip player เล่นได้ (ไม่ขึ้น "ยังไม่พร้อม"), มี rubric card, ปุ่มส่งปิดอยู่จนกว่าจะครบ |
