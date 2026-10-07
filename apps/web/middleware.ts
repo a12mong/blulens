@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const SESSION_COOKIE = 'bl_session';
 
 // Protected routes require a valid session
-const PROTECTED_PREFIXES = ['/me', '/review', '/committee', '/admin'];
+const PROTECTED_PREFIXES = ['/me', '/review', '/committee', '/admin', '/events'];
 
 /**
  * Middleware for session-based routing: redirect unauthenticated users away from protected paths,
@@ -29,7 +29,7 @@ export function middleware(req: NextRequest) {
   // Rule 2: Auth pages with session → redirect to /me
   if (hasSession && (pathname === '/login' || pathname === '/register')) {
     const url = req.nextUrl.clone();
-    url.pathname = '/me';
+    url.pathname = '/events';
     url.search = '';
     return NextResponse.redirect(url, { status: 307 });
   }
