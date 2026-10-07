@@ -158,15 +158,27 @@ export function PlayerPicker({
             >
               {filteredPlayers.map((item, index) => {
                 const isSelected = selectedIndex === index;
-                const clubsText =
-                  item.teamNames && item.teamNames.length > 0
-                    ? item.teamNames.join(', ')
-                    : 'ไม่มีสโมสร';
-                const gradeBase = item.gradeLabel ?? 'ยังไม่มีเกรด';
-                const gradeText = item.gradeProvisional
-                  ? `${gradeBase} (ชั่วคราว)`
-                  : gradeBase;
-                const metaText = `${clubsText} · ${gradeText}`;
+                let clubsText: string | undefined = undefined;
+                if (item.teamNames !== undefined) {
+                  clubsText =
+                    item.teamNames.length > 0
+                      ? item.teamNames.join(', ')
+                      : 'ไม่มีสโมสร';
+                }
+
+                let gradeText: string | undefined = undefined;
+                if (item.gradeLabel === null) {
+                  gradeText = 'ยังไม่มีเกรด';
+                } else if (typeof item.gradeLabel === 'string') {
+                  gradeText = item.gradeProvisional
+                    ? `${item.gradeLabel} (ชั่วคราว)`
+                    : item.gradeLabel;
+                }
+
+                const metaParts = [clubsText, gradeText].filter(
+                  (part): part is string => Boolean(part),
+                );
+                const metaText = metaParts.length > 0 ? metaParts.join(' · ') : null;
 
                 return (
                   <li
@@ -184,16 +196,18 @@ export function PlayerPicker({
                     onClick={() => handleSelect(item)}
                   >
                     <span>{item.displayName}</span>
-                    <span
-                      data-testid="player-option-meta"
-                      className={`text-xs ${
-                        isSelected
-                          ? 'text-primary-foreground/80'
-                          : 'text-muted-foreground'
-                      }`}
-                    >
-                      {metaText}
-                    </span>
+                    {metaText && (
+                      <span
+                        data-testid="player-option-meta"
+                        className={`text-xs ${
+                          isSelected
+                            ? 'text-primary-foreground/80'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {metaText}
+                      </span>
+                    )}
                   </li>
                 );
               })}
