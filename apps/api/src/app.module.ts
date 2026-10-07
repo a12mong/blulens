@@ -10,6 +10,7 @@ import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor'
 import { ZodValidationPipe } from './common/zod/zod';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { HealthModule } from './modules/health/health.module';
     CoreModule,
     HealthModule,
     AuthModule,
+    UsersModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
