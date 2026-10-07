@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { type Role, type UserSummary } from '@blulens/shared';
+import { type Role } from '@blulens/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { officialResults } from '../../common/grades';
 
 export interface ListUsersParams {
   role?: Role;
@@ -10,8 +11,18 @@ export interface ListUsersParams {
   limit: number;
 }
 
+export type UserPickerItem = {
+  id: string;
+  displayName: string;
+  roles: Role[];
+  teamIds: string[];
+  teamNames: string[];
+  gradeLabel: string | null;
+  gradeProvisional: boolean;
+};
+
 export interface ListUsersResult {
-  items: UserSummary[];
+  items: UserPickerItem[];
   nextCursor: string | null;
 }
 
@@ -56,6 +67,11 @@ export class UsersService {
             validFrom: { lte: now },
             OR: [{ validTo: null }, { validTo: { gt: now } }],
           },
+          include: {
+            team: {
+              select: { name: true },
+            },
+          },
         },
       },
     });
@@ -65,12 +81,37 @@ export class UsersService {
     const lastItem = rows[rows.length - 1];
     const nextCursor = hasMore && lastItem ? lastItem.id : null;
 
-    const items: UserSummary[] = rows.map((u) => ({
-      id: u.id,
-      displayName: u.displayName,
-      roles: u.roles.map((r) => r.role as Role),
-      teamIds: u.memberships.map((m) => m.teamId),
-    }));
+    const userIds = rows.map((u) => u.id);
+    const official = await officialResults(this.prisma, userIds);
+
+    const provisionalSet = new Set<string>();
+    if (userIds.length > 0) {
+      const provisional = await this.prisma.assessmentResult.findMany({
+        where: {
+          status: 'provisional',
+          assessment: { subjectUserId: { in: userIds } },
+        },
+        select: {
+          assessment: { select: { subjectUserId: true } },
+        },
+      });
+      for (const r of provisional) {
+        provisionalSet.add(r.assessment.subjectUserId);
+      }
+    }
+
+    const items: UserPickerItem[] = rows.map((u) => {
+      const memberships = u.memberships.sort((a, b) => (a.team.name < b.team.name ? -1 : a.team.name > b.team.name ? 1 : 0));
+      return {
+        id: u.id,
+        displayName: u.displayName,
+        roles: u.roles.map((r) => r.role as Role),
+        teamIds: memberships.map((m) => m.teamId),
+        teamNames: memberships.map((m) => m.team.name),
+        gradeLabel: official.get(u.id)?.label ?? null,
+        gradeProvisional: !official.has(u.id) && provisionalSet.has(u.id),
+      };
+    });
 
     return {
       items,
