@@ -573,7 +573,8 @@ export interface paths {
                         "application/json": {
                             teams?: components["schemas"]["Team"][];
                             teamCount?: number;
-                            warnings?: "MULTI_TEAM"[];
+                            /** @description computed live; shown to Admin/Committee */
+                            warnings?: ("MULTI_TEAM" | "NO_APPROVED_GRADE" | "GRADE_OUT_OF_BAND" | "FRESH_ASSESSMENT_REQUIRED")[];
                         };
                     };
                 };
@@ -1941,10 +1942,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Entries of an event */
+        /** Entries of an event. Guest/Member/Reviewer/Umpire see approved entries only; Admin/Committee see every status (filter with ?status=) */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    status?: components["schemas"]["EntryStatus"];
+                };
                 header?: never;
                 path: {
                     eventId: components["parameters"]["EventId"];
@@ -1965,7 +1968,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Enter an event (singles = 1 player, doubles = 2). Grade must fall in the event band; tournament must be open (ENTRIES_CLOSED otherwise). No clip on entries: clips belong to assessments (A13 fresh assessment). */
+        /** Create an entry on behalf of players (architecture §6.10): status draft. Doubles = exactly 2 players, singles = 1. Grade/team problems do NOT block creation; they come back as warnings for the Committee. Member self-registration (x-roles Member) is reserved for later and OUT of Demo Slice 1. No clip on entries. */
         post: {
             parameters: {
                 query?: never;
@@ -1977,9 +1980,7 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": {
-                        playerIds: string[];
-                    };
+                    "application/json": components["schemas"]["EntryInput"];
                 };
             };
             responses: {
@@ -1992,7 +1993,254 @@ export interface paths {
                         "application/json": components["schemas"]["Entry"];
                     };
                 };
-                /** @description ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE | FRESH_ASSESSMENT_REQUIRED */
+                /** @description ENTRIES_CLOSED | ENTRY_PLAYER_COUNT (2 for doubles, 1 for singles) | ENTRY_DUPLICATE_PLAYER (a player already has a non-withdrawn entry in this event) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Committee queue across events, e.g. ?status=pending_committee (bl-21) */
+        get: {
+            parameters: {
+                query?: {
+                    status?: components["schemas"]["EntryStatus"];
+                    eventId?: string;
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["Entry"][];
+                            nextCursor?: string | null;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit a draft or rejected entry (a rejected entry returns to draft) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["EntryInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Entry"];
+                    };
+                };
+                /** @description ENTRY_NOT_EDITABLE */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/entries/{entryId}/forward": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forward a draft entry to the Committee (draft -> pending_committee) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Entry"];
+                    };
+                };
+                /** @description ENTRY_NOT_DRAFT */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entries/{entryId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Committee approves eligibility (pending_committee -> approved). Blocked while any player lacks an approved grade; a grade outside the event band needs a reason (audited) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        /** @description required when warnings include GRADE_OUT_OF_BAND */
+                        reason?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Entry"];
+                    };
+                };
+                /** @description ENTRY_NOT_PENDING | ENTRY_PLAYER_UNGRADED | ENTRY_OUT_OF_BAND_REASON_REQUIRED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/entries/{entryId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Committee rejects (pending_committee -> rejected) with a reason; Admin may edit and forward again */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReasonInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Entry"];
+                    };
+                };
+                /** @description ENTRY_NOT_PENDING */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3395,13 +3643,41 @@ export interface components {
             gradesDisclosedAt?: string | null;
             gradesDisclosedReason?: string | null;
         };
+        /**
+         * @description architecture §6.10; draw/group draws use approved entries only
+         * @enum {string}
+         */
+        EntryStatus: "draft" | "pending_committee" | "approved" | "rejected" | "withdrawn";
+        EntryInput: {
+            /** @description optional pair/team display name */
+            name?: string;
+            players: {
+                /** Format: uuid */
+                userId: string;
+                /**
+                 * Format: uuid
+                 * @description club picked via GET /teams/suggest (A8); added as a dated membership if new for the player (MULTI_TEAM warning applies)
+                 */
+                teamId?: string;
+            }[];
+        };
         Entry: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             eventId: string;
-            /** @enum {string} */
-            status: "active" | "withdrawn";
+            status: components["schemas"]["EntryStatus"];
+            /** @description optional pair/team display name */
+            name?: string | null;
+            /** Format: uuid */
+            createdBy?: string;
+            /** Format: date-time */
+            forwardedAt?: string | null;
+            /** Format: uuid */
+            decidedBy?: string | null;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            decisionReason?: string | null;
             players: {
                 /** Format: uuid */
                 userId?: string;

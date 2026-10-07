@@ -32,10 +32,10 @@ import { TeamsModule } from './modules/teams/teams.module';
     CoreModule,
     HealthModule,
     AuthModule,
+    TeamsModule,
     TournamentsModule,
     EntriesModule,
     UsersModule,
-    TeamsModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
