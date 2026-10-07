@@ -13,7 +13,7 @@
 
 ## Reviewer
 
-- ใช้ S07 โหมด calibration: ป้าย "ชุดมาตรฐาน — ไม่กระทบผลผู้เล่น"; ไม่เห็นเกรดอ้างอิงจนครบชุด; หลังครบเห็น bias ของตน
+- ดู "รายละเอียดเพิ่ม" ท้ายไฟล์ (ห้ามบอก Reviewer ว่าเป็นชุดมาตรฐาน)
 
 | State | แสดง |
 |---|---|
@@ -23,3 +23,11 @@
 | error/loading | มาตรฐาน |
 
 Components: CalibrationSetCard, GradePicker, DataTable, BiasCell
+
+## รายละเอียดเพิ่ม (G19 = (b) อนุมัติแล้ว; grading v2 frozen)
+
+**สร้างชุด (Committee):** ชื่อชุด/รอบ → เพิ่มคลิปทีละคลิปด้วย ClipUploader เดิมจาก S05 (ขอ upload-url ด้วย fileName/contentType/sizeBytes/referenceKey แล้ว PUT ตรงไป MinIO; สถานะคลิป pending_upload/uploaded/rejected ตาม S05) + **GradePicker เลือกเกรดอ้างอิง 1 ค่าต่อคลิป (ภาพรวม ไม่ใช่ต่อหัวข้อ)** → มอบหมายกรรมการ → เผยแพร่ (หลังเผยแพร่แก้เกรดอ้างอิง/คลิปไม่ได้)
+
+**ผล:** ต่อ reviewer แสดง `biasVsReference` (ขั้น พร้อมข้อความทิศทาง) และ `meanAbsError` (ขั้น); ตารางคลิป × reviewer เทียบเกรดอ้างอิง; ข้อมูลน้อย → "—"
+
+**Reviewer:** ต้องแยกไม่ออกจากการประเมินจริงในหน้าตา S07 (ห้ามมีป้าย "calibration" ที่ทำให้รู้ว่าเป็นชุดมาตรฐาน — ตาม GR-33 ของ Dwight); ลบข้อความป้าย "ชุดมาตรฐาน" ที่ระบุข้างต้นออก และไม่เห็นเกรดอ้างอิง/bias จนกว่า Committee เผยแพร่ผล
