@@ -144,19 +144,19 @@ export function EntryTable({
                 <div className="flex gap-2">
                   {mode === 'admin' && (
                     <>
-                      {(entry.status === 'draft' || entry.status === 'rejected') && (
+                      {onEdit && (entry.status === 'draft' || entry.status === 'rejected') && (
                         <button
                           data-testid="entry-edit"
-                          onClick={() => onEdit?.(entry)}
+                          onClick={() => onEdit(entry)}
                           className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"
                         >
                           แก้ไข
                         </button>
                       )}
-                      {entry.status === 'draft' && (
+                      {onForward && entry.status === 'draft' && (
                         <button
                           data-testid="entry-forward"
-                          onClick={() => onForward?.(entry)}
+                          onClick={() => onForward(entry)}
                           className="px-3 py-1 text-sm rounded bg-secondary text-secondary-foreground hover:bg-secondary/90"
                         >
                           ส่งให้คณะกรรมการ
