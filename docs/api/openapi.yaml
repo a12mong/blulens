@@ -279,7 +279,7 @@ paths:
             schema:
               type: object
               properties:
-                note: { type: string, maxLength: 1000 }
+                note: { type: string, maxLength: 1000, description: 'Member context for the reviewers (stored in assessments.note; shown to assigned reviewers and the Committee)' }
                 eventId: { type: string, format: uuid, description: 'A13: event-bound assessment for an event with requiresFreshAssessment' }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Assessment' } } } }
@@ -1386,12 +1386,11 @@ components:
         comment: { type: string, maxLength: 2000 }
     ReviewAssignment:
       type: object
-      required: [id, assessmentId, state, dueAt]
+      description: 'Reviewer-facing task. BLIND: never exposes the assessment id, the subject, or whether the task is a calibration clip; the assignment id is the neutral task id used in every reviewer endpoint. Committee views (AssessmentDetail.reviewerRows, /calibration-sets/*) carry the kind and the link to the assessment or calibration clip.'
+      required: [id, state, dueAt]
       properties:
-        id: { type: string, format: uuid }
-        assessmentId: { type: string, format: uuid }
+        id: { type: string, format: uuid, description: neutral task id (assignment id) }
         state: { type: string, enum: [open, submitted, expired, declined] }
-        kind: { type: string, enum: [assessment, calibration], default: assessment, description: 'calibration tasks look identical to the reviewer (blind)' }
         dueAt: { type: string, format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time }
     ReviewAssignmentDetail:
