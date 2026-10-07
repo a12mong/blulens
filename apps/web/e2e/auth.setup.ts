@@ -6,6 +6,7 @@ import {
   ADMIN_AUTH_FILE,
   COMMITTEE_AUTH_FILE,
   MEMBER_AUTH_FILE,
+  REVIEWER_AUTH_FILE,
 } from './selectors';
 import fs from 'fs';
 
@@ -65,4 +66,19 @@ setup('authenticate as member1', async ({ page }) => {
 
   await expect(page).not.toHaveURL(/\/login$/, { timeout: 20000 });
   await page.context().storageState({ path: MEMBER_AUTH_FILE });
+});
+
+setup('authenticate as reviewer1', async ({ page }) => {
+  ensureAuthDir();
+  const password = process.env.SEED_DEMO_PASSWORD || process.env.SEED_ADMIN_PASSWORD;
+  expect(password, 'SEED_DEMO_PASSWORD or SEED_ADMIN_PASSWORD must be set for reviewer auth').toBeTruthy();
+
+  await page.goto(ROUTES.login);
+  await expect(page.getByTestId(SELECTORS.login.identifier)).toBeVisible({ timeout: 20000 });
+  await page.getByTestId(SELECTORS.login.identifier).fill('reviewer1@blulens.local');
+  await page.getByTestId(SELECTORS.login.password).fill(password!);
+  await page.getByTestId(SELECTORS.login.submit).click();
+
+  await expect(page).not.toHaveURL(/\/login$/, { timeout: 20000 });
+  await page.context().storageState({ path: REVIEWER_AUTH_FILE });
 });
