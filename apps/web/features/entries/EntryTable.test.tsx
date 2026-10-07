@@ -256,4 +256,24 @@ describe('EntryTable', () => {
     expect(row).toHaveAttribute('data-entry-id', 'uuid-123');
     expect(row).toHaveAttribute('data-status', 'draft');
   });
+
+  it('does not render edit button when onEdit callback is not provided', () => {
+    const entries: Entry[] = [createMockEntry({ id: '1', status: 'draft' as const })];
+
+    render(<EntryTable entries={entries} mode="admin" onForward={vi.fn()} />);
+
+    // Draft entry should have forward button (onForward provided) but no edit button
+    expect(screen.getByTestId('entry-forward')).toBeInTheDocument();
+    expect(screen.queryByTestId('entry-edit')).not.toBeInTheDocument();
+  });
+
+  it('does not render approve/reject buttons when callbacks are not provided', () => {
+    const entries: Entry[] = [createMockEntry({ id: '1', status: 'pending_committee' as const })];
+
+    render(<EntryTable entries={entries} mode="committee" />);
+
+    // No buttons should render when neither onApprove nor onReject is provided
+    expect(screen.queryByTestId('entry-approve')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('entry-reject')).not.toBeInTheDocument();
+  });
 });

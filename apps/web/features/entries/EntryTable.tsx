@@ -144,19 +144,19 @@ export function EntryTable({
                 <div className="flex gap-2">
                   {mode === 'admin' && (
                     <>
-                      {(entry.status === 'draft' || entry.status === 'rejected') && (
+                      {onEdit && (entry.status === 'draft' || entry.status === 'rejected') && (
                         <button
                           data-testid="entry-edit"
-                          onClick={() => onEdit?.(entry)}
+                          onClick={() => onEdit(entry)}
                           className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"
                         >
                           แก้ไข
                         </button>
                       )}
-                      {entry.status === 'draft' && (
+                      {onForward && entry.status === 'draft' && (
                         <button
                           data-testid="entry-forward"
-                          onClick={() => onForward?.(entry)}
+                          onClick={() => onForward(entry)}
                           className="px-3 py-1 text-sm rounded bg-secondary text-secondary-foreground hover:bg-secondary/90"
                         >
                           ส่งให้คณะกรรมการ
@@ -167,20 +167,24 @@ export function EntryTable({
 
                   {mode === 'committee' && entry.status === 'pending_committee' && (
                     <>
-                      <button
-                        data-testid="entry-approve"
-                        onClick={() => onApprove?.(entry)}
-                        className="px-3 py-1 text-sm rounded bg-green-600 text-white hover:bg-green-700"
-                      >
-                        อนุมัติ
-                      </button>
-                      <button
-                        data-testid="entry-reject"
-                        onClick={() => onReject?.(entry)}
-                        className="px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700"
-                      >
-                        ปฏิเสธ
-                      </button>
+                      {onApprove && (
+                        <button
+                          data-testid="entry-approve"
+                          onClick={() => onApprove(entry)}
+                          className="px-3 py-1 text-sm rounded bg-green-600 text-white hover:bg-green-700"
+                        >
+                          อนุมัติ
+                        </button>
+                      )}
+                      {onReject && (
+                        <button
+                          data-testid="entry-reject"
+                          onClick={() => onReject(entry)}
+                          className="px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700"
+                        >
+                          ปฏิเสธ
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
