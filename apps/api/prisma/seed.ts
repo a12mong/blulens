@@ -3,7 +3,7 @@
  * Roles are a fixed enum (A2), so there is nothing to seed for them.
  * Run: pnpm db:seed   (reads ../../.env; SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD)
  */
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/common/crypto/password';
 import { normalizeTeamName } from '@blulens/shared';
 
@@ -108,6 +108,37 @@ async function upsertUser(email: string, displayName: string, password: string, 
   return user;
 }
 
+type DemoCandidate = { userId: string; grade: number; resultId: string; teamKey: string };
+
+/** One demo entry with its players: 1 for singles, 2 for doubles. Skipped if a player's club is unknown. */
+async function createDemoEntry(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  players: DemoCandidate[],
+  teamByKey: Map<string, string>,
+  status: 'approved' | 'pending_committee',
+  adminId: string | null,
+  now: Date,
+) {
+  const rows = players.map((c) => ({ c, teamId: teamByKey.get(c.teamKey) }));
+  if (rows.some((r) => !r.teamId)) return;
+  await tx.entry.create({
+    data: {
+      eventId,
+      status,
+      forwardedAt: now,
+      ...(status === 'approved' ? { decidedAt: now, decidedBy: adminId } : {}),
+      players: {
+        create: rows.map(({ c, teamId }) => ({ userId: c.userId, eventId, gradeResultId: c.resultId, teamId, gradeConsent: false })),
+      },
+    },
+  });
+}
+
+/** Candidates whose grade index lies in [min, max], in seed order. */
+const inBand = (map: Map<string, Omit<DemoCandidate, 'userId'>>, min: number, max: number): DemoCandidate[] =>
+  [...map.entries()].filter(([, i]) => i.grade >= min && i.grade <= max).map(([userId, i]) => ({ userId, ...i }));
+
 async function seedDemoTournament(adminId: string | null): Promise<{ created: number; draftCreated: boolean }> {
   const tournamentName = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3';
   const draftTournamentName = 'แบดมินตันสัมพันธ์ประจำเดือน';
@@ -145,9 +176,9 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
     });
 
     if (assessmentWithResult && assessmentWithResult.results.length > 0) {
-      const result = assessmentWithResult.results[0];
-      if (result.lowerIndex !== null) {
-        const teamKey = memberDef.teams[0];
+      const [result] = assessmentWithResult.results;
+      if (result && result.lowerIndex !== null) {
+        const teamKey = memberDef.teams[0] ?? '';
         userGradeMap.set(user.id, {
           grade: result.lowerIndex,
           resultId: result.id,
@@ -212,92 +243,16 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
       },
     });
 
-    // MD: 3 approved + 2 pending from members 7..14 (and 1..2 if needed)
-    const mdCandidates = Array.from(userGradeMap.entries())
-      .filter(([_, info]) => info.grade >= 6 && info.grade <= 8)
-      .map(([userId, info]) => ({ userId, ...info }));
-
-    const mdApprovedCount = 3;
-    const mdPendingCount = 2;
-    for (let i = 0; i < mdApprovedCount && i < mdCandidates.length; i++) {
-      const candidate = mdCandidates[i];
-      const teamId = teamByKey.get(candidate.teamKey) || '';
-      if (teamId) {
-        const entry = await tx.entry.create({
-          data: {
-            eventId: mdEvent.id,
-            status: 'approved',
-            forwardedAt: now,
-            decidedAt: now,
-            decidedBy: adminId ?? null,
-          },
-        });
-        await tx.entryPlayer.create({
-          data: {
-            entryId: entry.id,
-            userId: candidate.userId,
-            eventId: mdEvent.id,
-            gradeResultId: candidate.resultId,
-            teamId,
-            gradeConsent: false,
-          },
-        });
-      }
+    // MD (doubles, 2 players each): 3 approved + 2 pending pairs from S-..S+ players
+    const md = inBand(userGradeMap, 6, 8);
+    for (let i = 0; i < 5 && 2 * i + 1 < md.length; i++) {
+      await createDemoEntry(tx, mdEvent.id, [md[2 * i]!, md[2 * i + 1]!], teamByKey, i < 3 ? 'approved' : 'pending_committee', adminId, now);
     }
 
-    for (let i = mdApprovedCount; i < mdApprovedCount + mdPendingCount && i < mdCandidates.length; i++) {
-      const candidate = mdCandidates[i];
-      const teamId = teamByKey.get(candidate.teamKey) || '';
-      if (teamId) {
-        const entry = await tx.entry.create({
-          data: {
-            eventId: mdEvent.id,
-            status: 'pending_committee',
-            forwardedAt: now,
-          },
-        });
-        await tx.entryPlayer.create({
-          data: {
-            entryId: entry.id,
-            userId: candidate.userId,
-            eventId: mdEvent.id,
-            gradeResultId: candidate.resultId,
-            teamId,
-            gradeConsent: false,
-          },
-        });
-      }
-    }
-
-    // MS: 2 approved entries from members with grade S..N (7-10)
-    const msCandidates = Array.from(userGradeMap.entries())
-      .filter(([_, info]) => info.grade >= 7 && info.grade <= 10)
-      .map(([userId, info]) => ({ userId, ...info }));
-
-    for (let i = 0; i < 2 && i < msCandidates.length; i++) {
-      const candidate = msCandidates[i];
-      const teamId = teamByKey.get(candidate.teamKey) || '';
-      if (teamId) {
-        const entry = await tx.entry.create({
-          data: {
-            eventId: msEvent.id,
-            status: 'approved',
-            forwardedAt: now,
-            decidedAt: now,
-            decidedBy: adminId ?? null,
-          },
-        });
-        await tx.entryPlayer.create({
-          data: {
-            entryId: entry.id,
-            userId: candidate.userId,
-            eventId: msEvent.id,
-            gradeResultId: candidate.resultId,
-            teamId,
-            gradeConsent: false,
-          },
-        });
-      }
+    // MS (singles): 2 approved from S..N players
+    const ms = inBand(userGradeMap, 7, 10);
+    for (let i = 0; i < 2 && i < ms.length; i++) {
+      await createDemoEntry(tx, msEvent.id, [ms[i]!], teamByKey, 'approved', adminId, now);
     }
 
     // XD: no entries (shows empty event)
@@ -391,36 +346,11 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
         },
       });
 
-      // MD entries: 2 approved from members with grade S..N (7-10)
-      const mdCandidates2027 = Array.from(userGradeMap.entries())
-        .filter(([_, info]) => info.grade >= 7 && info.grade <= 10)
-        .map(([userId, info]) => ({ userId, ...info }));
-
+      // MD (doubles): 2 approved pairs from S..N players
+      const md2027 = inBand(userGradeMap, 7, 10);
       const now = new Date();
-      for (let i = 0; i < 2 && i < mdCandidates2027.length; i++) {
-        const candidate = mdCandidates2027[i];
-        const teamId = teamByKey.get(candidate.teamKey) || '';
-        if (teamId) {
-          const entry = await tx.entry.create({
-            data: {
-              eventId: mdEvent2027.id,
-              status: 'approved',
-              forwardedAt: now,
-              decidedAt: now,
-              decidedBy: adminId ?? null,
-            },
-          });
-          await tx.entryPlayer.create({
-            data: {
-              entryId: entry.id,
-              userId: candidate.userId,
-              eventId: mdEvent2027.id,
-              gradeResultId: candidate.resultId,
-              teamId,
-              gradeConsent: false,
-            },
-          });
-        }
+      for (let i = 0; i < 2 && 2 * i + 1 < md2027.length; i++) {
+        await createDemoEntry(tx, mdEvent2027.id, [md2027[2 * i]!, md2027[2 * i + 1]!], teamByKey, 'approved', adminId, now);
       }
 
       return 1;
