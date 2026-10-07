@@ -134,6 +134,10 @@ describe('entries (bl-21 demo slice)', () => {
     await http().post(`/api/v1/entries/${e1.id}/forward`).set('Cookie', adminCommittee).expect(200);
     expect((await http().post(`/api/v1/entries/${e1.id}/approve`).set('Cookie', committee).send({}).expect(409)).body.error.code)
       .toBe('ENTRY_PLAYER_UNGRADED');
+    // entry reject reason is >= 10 chars after trim (EntryRejectInput), in the DTO and the DB CHECK
+    const short = await http().post(`/api/v1/entries/${e1.id}/reject`).set('Cookie', committee).send({ reason: '  123456789  ' }).expect(400);
+    expect(short.body.error.code).toBe('VALIDATION_FAILED');
+    await expect(prisma.entry.update({ where: { id: e1.id }, data: { status: 'rejected', decisionReason: '123456789' } })).rejects.toThrow();
     const rej = await http().post(`/api/v1/entries/${e1.id}/reject`).set('Cookie', committee).send({ reason: 'ผู้เล่นยังไม่มีเกรด' }).expect(200);
     expect(rej.body.data).toMatchObject({ status: 'rejected', decisionReason: 'ผู้เล่นยังไม่มีเกรด' });
 
