@@ -119,4 +119,9 @@ describe('projectGrade', () => {
     expect(() => projectGrade(Infinity, 0)).toThrow(RangeError);
     expect(() => projectGrade(Infinity, 0)).toThrow('GRADE_INVALID_INPUT');
   });
+
+  it('never inverts the bounds for an integer score with zero margin (QA bl-12)', () => {
+    expect(projectGrade(7, 0)).toMatchObject({ lower: 'S', upper: 'S', center: 'S', kind: 'exact', label: 'S' });
+    expect(projectGrade(0, 0)).toMatchObject({ lower: 'RK1', upper: 'RK1', kind: 'exact' });
+  });
 });
