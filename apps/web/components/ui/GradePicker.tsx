@@ -57,7 +57,7 @@ export function GradePicker({
   'aria-label': ariaLabel,
 }: GradePickerProps) {
   const [expandedTier, setExpandedTier] = useState<Tier | null>(null);
-  const [focusedKey, setFocusedKey] = useState<GradeKey | 'NA' | null>(null);
+  const [focusedKey, setFocusedKey] = useState<GradeKey | 'NA' | null>(value || (allowNA ? null : GRADE_KEYS[0]));
   const radioRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   const currentTier = value ? TIERS[GRADE_KEYS.indexOf(value)] : null;
@@ -119,12 +119,13 @@ export function GradePicker({
                       if (el) radioRefs.current.set(key, el);
                     }}
                     role="radio"
+                    tabIndex={focusedKey === key ? 0 : -1}
                     aria-checked={value === key}
                     onClick={() => !disabled && onChange(key)}
                     onKeyDown={(e) => handleKeyDown(e, key)}
                     disabled={disabled}
                     data-testid={`gp-key-${key}`}
-                    className={`px-3 py-2 rounded font-medium transition-all ${
+                    className={`min-h-[44px] min-w-[44px] px-3 py-2 rounded font-medium transition-all ${
                       value === key ? 'ring-2 ring-blue-500 bg-white' : 'bg-gray-100 hover:bg-gray-200'
                     } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
@@ -181,11 +182,12 @@ export function GradePicker({
           <button
             key={tier}
             role="radio"
+            tabIndex={displayTier === tier ? 0 : -1}
             aria-checked={displayTier === tier}
             onClick={() => !disabled && setExpandedTier(displayTier === tier ? null : tier)}
             disabled={disabled}
             data-testid={`gp-tier-${tier}`}
-            className={`px-4 py-2 rounded font-medium transition-all ${TIER_COLORS[tier]} ${
+            className={`min-h-[44px] min-w-[44px] px-4 py-2 rounded font-medium transition-all ${TIER_COLORS[tier]} ${
               displayTier === tier ? 'ring-2 ring-blue-500' : ''
             } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >
@@ -224,7 +226,7 @@ export function GradePicker({
           data-testid="gp-clear"
           onClick={() => !disabled && onChange(undefined)}
           disabled={disabled}
-          className={`px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 ${
+          className={`min-h-[44px] px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 ${
             disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           }`}
         >
@@ -238,12 +240,13 @@ export function GradePicker({
             if (el) radioRefs.current.set('NA', el);
           }}
           role="radio"
+          tabIndex={focusedKey === 'NA' ? 0 : -1}
           aria-checked={value === null}
           onClick={() => !disabled && onChange(value === null ? undefined : null)}
           onKeyDown={(e) => handleKeyDown(e, 'NA')}
           disabled={disabled}
           data-testid="gp-na"
-          className={`w-full px-3 py-2 rounded font-medium transition-all ${
+          className={`w-full min-h-[44px] px-3 py-2 rounded font-medium transition-all ${
             value === null ? 'ring-2 ring-red-500 bg-white' : 'bg-gray-100 hover:bg-gray-200'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >

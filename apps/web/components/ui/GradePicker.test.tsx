@@ -235,4 +235,28 @@ describe('GradePicker', () => {
     const radioGroup = screen.getByTestId('grade-picker');
     expect(radioGroup).toHaveAttribute('aria-label', 'Custom grade selection');
   });
+
+  it('exactly one radio has tabIndex 0', () => {
+    const onChangeMock = vi.fn();
+
+    render(
+      <GradePicker value="S" onChange={onChangeMock} variant="ladder" />
+    );
+
+    const radios = screen.getAllByRole('radio');
+    const tabIndex0 = radios.filter((r) => r.getAttribute('tabindex') === '0');
+    expect(tabIndex0).toHaveLength(1);
+    expect(tabIndex0[0]).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('all buttons have 44px min height and width classes', () => {
+    const onChangeMock = vi.fn();
+
+    render(
+      <GradePicker value={undefined} onChange={onChangeMock} variant="tiered" allowNA />
+    );
+
+    const tierBtn = screen.getByTestId('gp-tier-Standard');
+    expect(tierBtn).toHaveClass('min-h-[44px]', 'min-w-[44px]');
+  });
 });
