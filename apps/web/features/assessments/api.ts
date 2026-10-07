@@ -25,3 +25,22 @@ export function useAssessments(
     ...options,
   });
 }
+
+export type AssessmentDetail = components['schemas']['AssessmentDetail'];
+
+export const assessmentDetailKey = (id: string) =>
+  ['assessments', 'detail', id] as const;
+
+export function useAssessmentDetail(
+  id: string,
+  options?: Omit<UseQueryOptions<AssessmentDetail>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: assessmentDetailKey(id),
+    queryFn: async () => {
+      return apiFetch<AssessmentDetail>(`/assessments/${id}`);
+    },
+    ...options,
+  });
+}
+
