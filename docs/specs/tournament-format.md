@@ -1,6 +1,6 @@
 # สเปกรูปแบบการแข่ง: รอบแบ่งกลุ่ม + รอบน็อคเอาท์ + รูปแบบแมตช์ (bl-17)
 
-> สถานะ: **ร่าง — รอเจ้าของอนุมัติ** `[WAITING FOR OWNER APPROVAL]` · ห้ามสร้างงานให้ Dev จนกว่าเจ้าของอนุมัติ
+> สถานะ: **v1 — เจ้าของอนุมัติแล้ว 2026-10-07** (F1–F11, F13 ตามข้อเสนอ · **F12 แก้: เพิ่ม role กรรมการสนาม (Umpire) กรอกผล + Committee ยืนยันขั้นสุดท้าย** — §5.1) · ตรึงแล้ว · คำถามเรื่องจัดคิวสนาม/หน้าแมตช์สดยังเปิด (ไม่ขวางงาน)
 > ผู้เขียน: Jim (Lead Dev) · 2026-10-07
 > ต่อยอดจาก [`draw.md`](draw.md) (bl-04 **อนุมัติแล้ว** D1–D8 — เอกสารนั้นไม่แก้; ส่วนขยายสำหรับการจับกลุ่มอยู่ในเอกสารนี้)
 > อ้างอิงกติกา: `bbfriendlymatch` (`config/app.config.ts`, `REQ.md`, `src/lib/standings.ts`, `src/lib/knockout.ts`) — ลอก **กติกา** ไม่ลอกโค้ด
@@ -102,7 +102,24 @@
 - แต่ละเกม: ผู้ชนะต้องได้ `pointsPerGame` พอดี และอีกฝ่ายน้อยกว่า — ถ้า `deuce`: ผู้ชนะนำ ≥ 2 แต้ม หรือได้ `cap` พอดีเมื่อ `cap − 1 : cap − 1`
 - `fixed_games`: ต้องกรอกครบทุกเกม · `best_of`: หยุดเมื่อมีผู้ชนะครบ และห้ามกรอกเกมเกิน
 - รอบน็อคเอาท์ไม่มีเสมอเสมอ (ห้ามใช้ `fixed_games` จำนวนเกมคู่)
-- ผู้กรอกผล: Committee (decision F12) · แก้ผลหลังบันทึกได้จนกว่าจะยืนยันผลรอบนั้น และทุกการแก้ลง audit
+- ผู้กรอกผล: **กรรมการสนาม (Umpire)** หรือ Committee — ดู §5.1
+
+### 5.1 ผลแมตช์ 2 ขั้น: กรรมการสนามรายงาน → Committee ยืนยัน (F12 ตามที่เจ้าของอนุมัติ)
+
+| สถานะแมตช์ | ใครทำ | ไปสถานะ |
+|---|---|---|
+| `scheduled` | Umpire ที่ได้รับมอบหมายกรอกผล (ตรวจตาม §5) | `reported` (รอยืนยัน) |
+| `reported` | Umpire คนเดิมแก้ได้จนกว่าจะยืนยัน | `reported` |
+| `reported` | Committee **ยืนยัน** | `confirmed` |
+| `reported` | Committee **ตีกลับ** พร้อมเหตุผล | `scheduled` (Umpire กรอกใหม่) |
+| `scheduled` | Committee กรอกเอง | `confirmed` ทันที (ลง audit ว่าข้ามขั้นรายงาน) |
+| `confirmed` | Committee แก้ผล (ต้องมีเหตุผล) — ทำได้จนกว่ารอบกลุ่มถูกยืนยัน (§4.4) หรือแมตช์รอบถัดไปของผู้ชนะยังไม่เริ่ม | `confirmed` (เวอร์ชันใหม่ ลง audit) |
+
+- **นับเฉพาะผล `confirmed`** ในตารางคะแนนและการเลื่อนรอบน็อคเอาท์ · หน้าสาธารณะแสดงผล `reported` พร้อมป้าย "รอยืนยัน"
+- ยืนยันผลรอบกลุ่ม (§4.4) ได้เมื่อทุกแมตช์ในกลุ่มเป็น `confirmed`/`void`
+- การมอบหมาย: Committee มอบหมาย Umpire ต่อรายการแข่ง (เลือกสนามได้ เช่น "สนาม 1–2") และ/หรือระบุ Umpire รายแมตช์ · Umpire กรอกได้เฉพาะแมตช์ที่มอบหมายให้ตัวเองหรืออยู่ในสนามของตัวเอง
+- ห้าม Umpire กรอกผลแมตช์ที่ตัวเองเป็นผู้เล่น · ถ้า Umpire มีทีมร่วมกับผู้เล่นในแมตช์ → กรอกได้แต่ติดธง `UMPIRE_TEAM_CONFLICT` ให้ Committee เห็นตอนยืนยัน (ข้อสันนิษฐาน — สนามเล็กมักใช้คนในสโมสร)
+- ทุกการรายงาน/แก้/ยืนยัน/ตีกลับ ลง audit (ใคร, เมื่อไร, ค่าก่อน/หลัง, เหตุผล)
 
 ## 6. สายน็อคเอาท์หลังรอบกลุ่ม
 
@@ -123,7 +140,8 @@
 | `events.format` (jsonb) | ค่าตั้งทั้งหมดใน §2 + match format ทั้งสองรอบ + `lockedAt` |
 | `groups` | `id`, `event_id`, `draw_id` (ผลการจับกลุ่มเป็น draw ชนิด `group`), `label` (A, B, …) |
 | `group_members` | `group_id`, `entry_id`, `seed_in_group` (1..n), `pot` |
-| `matches` (ขยาย) | + `stage` (`group`/`knockout`/`third_place`), `group_id?`, `round`, `games` (jsonb `[{a, b}]`), `result` (`a_win`/`b_win`/`draw`/`walkover_a`/`walkover_b`/`void`), `entered_by`, `entered_at` |
+| `matches` (ขยาย) | + `stage` (`group`/`knockout`/`third_place`), `group_id?`, `round`, `court?`, `umpire_id?`, `games` (jsonb `[{a, b}]`), `result` (`a_win`/`b_win`/`draw`/`walkover_a`/`walkover_b`/`void`), `status` (`scheduled`/`bye`/`reported`/`confirmed`/`walkover`/`void`), `reported_by/at`, `confirmed_by/at`, `flags` |
+| `event_umpires` | `event_id`, `user_id`, `courts` (text[] — ว่าง = ทุกสนาม) |
 | `draws` (ขยาย) | + `kind` (`group` / `knockout`) · knockout หลังกลุ่มเก็บ `source_standings_snapshot_id` |
 | `group_standings` | snapshot ตอนยืนยันผลรอบกลุ่ม: `group_id`, `entry_id`, `rank`, `played`, `won`, `drawn`, `lost`, `points`, `points_for`, `points_against`, `diff`, `tiebreak_note`, `qualification` (`qualified`/`best_third`/`out`) |
 
@@ -134,7 +152,11 @@
 | `POST /events/{eventId}/groups/preview` | Committee | สุ่มจับกลุ่ม (ได้ `Draw` kind `group`) — publish/verify ใช้ endpoint ของ draws เดิม |
 | `GET /events/{eventId}/groups` | ทุกคน | กลุ่ม + สมาชิก + ตารางแข่ง |
 | `GET /events/{eventId}/standings` | ทุกคน | ตารางคะแนนสด (หรือ snapshot หลังยืนยัน) |
-| `PUT /matches/{matchId}/result` | Committee | กรอก/แก้ผล (ตรวจตาม §5) |
+| `PUT /matches/{matchId}/result` | Umpire / Committee | กรอก/แก้ผล (ตรวจตาม §5) — Umpire → `reported`, Committee → `confirmed` |
+| `POST /matches/{matchId}/result/approve` · `/reject` | Committee | ยืนยัน / ตีกลับ (เหตุผล) |
+| `PUT /events/{eventId}/umpires` · `GET` | Committee | มอบหมายกรรมการสนาม + สนาม |
+| `PATCH /matches/{matchId}/assignment` | Committee | ระบุสนาม/Umpire รายแมตช์ |
+| `GET /umpire/matches` | Umpire | แมตช์ที่ตัวเองกรอกได้ |
 | `POST /events/{eventId}/groups/confirm` | Committee | ยืนยันผลรอบกลุ่ม → snapshot |
 | `POST /events/{eventId}/knockout/preview` | Committee | สร้างสายน็อคเอาท์จาก snapshot (ได้ `Draw` kind `knockout`) |
 
@@ -165,11 +187,11 @@ P1 กับ P2 คะแนนเท่ากัน (4) → ข้อ 2 ผล�
 ข้อสันนิษฐาน:
 1. กลุ่มใช้กับทั้งประเภทเดี่ยวและคู่ · 1 ประเภท = 1 ชุดกลุ่ม (ไม่มีกลุ่มรอบสอง)
 2. ไม่มีระบบจัดสนาม/เวลาอัตโนมัติในเฟสนี้ (bbfriendlymatch ใช้ตารางที่ผู้จัดพิมพ์เอง)
-3. ผลแมตช์กรอกโดย Committee (ไม่มี role กรรมการผู้ตัดสินหน้าสนามแยก)
+3. ผลแมตช์กรอกโดยกรรมการสนาม (Umpire) แล้ว Committee ยืนยัน (F12 ตามเจ้าของ)
 
 คำถามเปิด:
 1. ต้องการระบบจัดคิวสนาม/เวลา (court scheduling) และหน้าแมตช์สดแบบ bbfriendlymatch หรือไม่ — ถ้าต้องการเป็นสเปกแยก
-2. ต้องการ role "ผู้ตัดสิน/คนกรอกผลหน้าสนาม" ที่กรอกผลได้อย่างเดียวหรือไม่ (กระทบตารางสิทธิ์ architecture §3)
+2. ~~role ผู้ตัดสินหน้าสนาม~~ → เจ้าของตอบแล้ว: เพิ่ม Umpire (F12, §5.1)
 
 ## 10. ตารางการตัดสินใจสำหรับเจ้าของ
 
@@ -186,7 +208,7 @@ P1 กับ P2 คะแนนเท่ากัน (4) → ข้อ 2 ผล�
 | F9 | รูปแบบแมตช์รอบน็อคเอาท์ | (ก) **2 ใน 3 × 21 ดิวส์ถึง 30 (BWF/bbfriendlymatch)** (ข) เกมเดียว 21 (ค) ผู้จัดเลือกต่อประเภท | **(ก)** เป็นค่าเริ่มต้น + ผู้จัดเลือก preset อื่นได้ | ค่าเริ่มต้นเปลี่ยน |
 | F10 | ชิงที่ 3 | (ก) **มีแมตช์ชิงที่ 3** (ข) ที่ 3 ร่วม | **(ก)** (bbfriendlymatch) | (ข) ไม่ต้องจัดแมตช์เพิ่ม 1 แมตช์ต่อประเภท |
 | F11 | ถอนตัว/ไม่มาแข่งในรอบกลุ่ม | (ก) **ถอนตัวกลางรอบกลุ่ม → ผลทุกแมตช์ของผู้นั้นเป็นโมฆะ (แบบ BWF); ไม่มาแข่งแมตช์เดียว → วอล์กโอเวอร์ นับเป็นชนะด้วยแต้มเต็มทุกเกม** (ข) ผลที่แข่งไปแล้วยังนับ ที่เหลือเป็นวอล์กโอเวอร์ | **(ก)** | (ข) คนที่เจอผู้ถอนตัวก่อน/หลังได้ประโยชน์ไม่เท่ากัน |
-| F12 | ใครกรอกผลแมตช์ | (ก) **Committee เท่านั้น (เฟสแรก)** (ข) เพิ่ม role ผู้ตัดสินที่กรอกผลได้อย่างเดียว | **(ก)** | (ข) ต้องเพิ่ม role ที่ 6 ในตารางสิทธิ์ (architecture §3) ≈ +1–2 วันงาน |
+| F12 ✅ **เจ้าของ: เพิ่ม Umpire กรอกผล + Committee ยืนยัน — §5.1** | ใครกรอกผลแมตช์ | (ก) **Committee เท่านั้น (เฟสแรก)** (ข) เพิ่ม role ผู้ตัดสินที่กรอกผลได้อย่างเดียว | **(ก)** | (ข) ต้องเพิ่ม role ที่ 6 ในตารางสิทธิ์ (architecture §3) ≈ +1–2 วันงาน |
 | F13 | การสร้างสายน็อคเอาท์หลังกลุ่ม | (ก) **Committee ยืนยันผลรอบกลุ่มก่อน แล้วจึงสร้างสาย (preview/publish ตาม draw.md)** (ข) สร้างอัตโนมัติทันทีเมื่อแมตช์กลุ่มจบครบ | **(ก)** — มีจุดตรวจผลก่อนตรึงสาย | (ข) เร็วกว่า แต่ผลที่กรอกผิดจะไหลเข้าสายทันที |
 
 > **สิ่งที่เจ้าของต้องตอบ:** อนุมัติ F1–F13 (สำคัญที่สุด: F3 กฎทีมในรอบกลุ่ม, F6 ลำดับตัดสินคะแนนเท่ากัน, F8 วิธีจัด seed น็อคเอาท์) + คำถามเปิด §9

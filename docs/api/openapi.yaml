@@ -773,8 +773,8 @@ paths:
   /matches/{matchId}/result:
     put:
       tags: [format]
-      summary: Enter/edit a match result (validated against the stage MatchFormat; audited)
-      x-roles: [Committee]
+      summary: 'Enter/edit a match result (validated against the stage MatchFormat; audited). Umpire -> status reported; Committee -> confirmed directly (or correction of a confirmed result, reason required)'
+      x-roles: [Umpire, Committee]
       parameters: [{ name: matchId, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
         required: true
@@ -785,13 +785,95 @@ paths:
               required: [outcome]
               properties:
                 outcome: { type: string, enum: [played, walkover_a, walkover_b] }
+                reason: { type: string, description: required when the Committee corrects a confirmed result }
                 games:
                   type: array
                   items: { type: object, required: [a, b], properties: { a: { type: integer, minimum: 0 }, b: { type: integer, minimum: 0 } } }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Match' } } } }
         '422': { description: 'MATCH_SCORE_INVALID', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
-        '409': { description: 'STAGE_CONFIRMED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '409': { description: 'STAGE_CONFIRMED | MATCH_ALREADY_CONFIRMED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '403': { description: 'UMPIRE_NOT_ASSIGNED | UMPIRE_OWN_MATCH', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /matches/{matchId}/result/approve:
+    post:
+      tags: [format]
+      summary: Committee confirms a reported result (reported -> confirmed; audited)
+      x-roles: [Committee]
+      parameters: [{ name: matchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Match' } } } }
+        '409': { description: 'MATCH_NOT_REPORTED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /matches/{matchId}/result/reject:
+    post:
+      tags: [format]
+      summary: Committee sends a reported result back to the umpire (reported -> scheduled; reason required)
+      x-roles: [Committee]
+      parameters: [{ name: matchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Match' } } } }
+  /matches/{matchId}/assignment:
+    patch:
+      tags: [format]
+      summary: Set court label and/or umpire for one match
+      x-roles: [Committee]
+      parameters: [{ name: matchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                court: { type: [string, 'null'], maxLength: 32 }
+                umpireId: { type: [string, 'null'], format: uuid }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Match' } } } }
+  /events/{eventId}/umpires:
+    get:
+      tags: [format]
+      summary: Umpires assigned to the event (with courts)
+      x-roles: [Committee, Umpire]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/EventUmpire' } }
+    put:
+      tags: [format]
+      summary: Replace the umpire assignment of the event (courts empty = all courts)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: array, items: { $ref: '#/components/schemas/EventUmpire' } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/EventUmpire' } }
+  /umpire/matches:
+    get:
+      tags: [format]
+      summary: Matches the calling umpire may report (assigned directly or on an assigned court)
+      x-roles: [Umpire]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, reported, confirmed] } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Match' } }
 
   # ---------------- audit ----------------
   /audit-logs:
@@ -841,7 +923,7 @@ components:
             details: { type: object, additionalProperties: true }
 
     # ---- identity ----
-    Role: { type: string, enum: [Admin, Committee, Reviewer, Member] }
+    Role: { type: string, enum: [Admin, Committee, Umpire, Reviewer, Member], description: 'Guest = not logged in (not a stored role)' }
     RegisterInput:
       type: object
       required: [email, password, displayName]
@@ -1193,7 +1275,7 @@ components:
                     top: { type: [string, 'null'], format: uuid, description: entryId }
                     bottom: { type: [string, 'null'], format: uuid }
                     winner: { type: [string, 'null'], format: uuid }
-                    status: { type: string, enum: [scheduled, bye, walkover, finished] }
+                    status: { type: string, enum: [scheduled, bye, reported, confirmed, walkover] }
 
     # ---- format (bl-17 DRAFT) ----
     MatchFormat:
@@ -1237,7 +1319,21 @@ components:
         b: { type: [string, 'null'], format: uuid }
         games: { type: array, items: { type: object, properties: { a: { type: integer }, b: { type: integer } } } }
         result: { type: [string, 'null'], enum: [a_win, b_win, draw, walkover_a, walkover_b, void, null] }
-        status: { type: string, enum: [scheduled, bye, walkover, finished, void] }
+        status: { type: string, enum: [scheduled, bye, reported, confirmed, walkover, void], description: 'standings and knockout progression count confirmed only' }
+        court: { type: [string, 'null'] }
+        umpireId: { type: [string, 'null'], format: uuid }
+        reportedBy: { type: [string, 'null'], format: uuid }
+        reportedAt: { type: [string, 'null'], format: date-time }
+        confirmedBy: { type: [string, 'null'], format: uuid }
+        confirmedAt: { type: [string, 'null'], format: date-time }
+        flags: { type: array, items: { type: string, enum: [UMPIRE_TEAM_CONFLICT, COMMITTEE_DIRECT_ENTRY, CORRECTED] } }
+    EventUmpire:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string, readOnly: true }
+        courts: { type: array, items: { type: string }, description: 'empty = all courts of the event' }
     Group:
       type: object
       properties:
