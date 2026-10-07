@@ -3,6 +3,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommitteeQueue } from './CommitteeQueue';
 import * as entriesApi from './api';
+import { ApiRequestError } from '@/lib/api/client';
 
 vi.mock('./api', async () => {
   const actual = await vi.importActual<typeof import('./api')>('./api');
@@ -168,7 +169,7 @@ describe('CommitteeQueue', () => {
 
   it('approve error message is shown in queue-action-error on direct approve failure', () => {
     mockApproveMutate.mockImplementation((_vars, options) => {
-      options?.onError?.(new Error('ENTRY_NOT_PENDING'));
+      options?.onError?.(new ApiRequestError(409, 'ENTRY_NOT_PENDING', 'x'));
     });
 
     const normalEntry: entriesApi.Entry = {
@@ -194,13 +195,13 @@ describe('CommitteeQueue', () => {
     fireEvent.click(screen.getByTestId('entry-approve'));
 
     const alert = screen.getByTestId('queue-action-error');
-    expect(alert).toHaveTextContent('ENTRY_NOT_PENDING');
+    expect(alert).toHaveTextContent('ผู้สมัครไม่อยู่ในสถานะรอพิจารณา');
     expect(alert).toHaveAttribute('role', 'alert');
   });
 
   it('dialog error message is shown in ReasonDialog error alert', () => {
     mockApproveMutate.mockImplementation((_vars, options) => {
-      options?.onError?.(new Error('ENTRY_OUT_OF_BAND_REASON_REQUIRED'));
+      options?.onError?.(new ApiRequestError(409, 'ENTRY_OUT_OF_BAND_REASON_REQUIRED', 'x'));
     });
 
     const oobEntry: entriesApi.Entry = {
@@ -232,7 +233,7 @@ describe('CommitteeQueue', () => {
     fireEvent.click(screen.getByTestId('reason-submit'));
 
     const errorAlert = screen.getByTestId('reason-error');
-    expect(errorAlert).toHaveTextContent('ENTRY_OUT_OF_BAND_REASON_REQUIRED');
+    expect(errorAlert).toHaveTextContent('ต้องระบุเหตุผลสำหรับเกรดนอกช่วง');
   });
 
   it('empty queue shows the table empty state', () => {
