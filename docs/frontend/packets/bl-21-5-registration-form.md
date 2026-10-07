@@ -1,28 +1,30 @@
-# PACKET bl-21-5: RegisterPlayerForm (Committee registers a player on behalf) (Ryan)
+# PACKET bl-21-5-registration-form: AdminEntryForm (Admin creates a doubles entry) (Ryan)
 
-GOAL: On an event page a Committee user picks a player, picks the player's team with the type-ahead, and registers the player into the event. (Slice decision D-S4: Member self-registration comes later; the form is the same shape.)
+GOAL: On the event page an Admin (or Committee) creates a doubles entry: two players, a club for each, optional pair name. The entry is saved as a draft, then forwarded to the Committee.
 
 STATE:
-- WORKTREE RULE: never switch branches in the shared checkout. Own worktree, branch `fe/bl-21-register-player-form` from `origin/develop`, `pnpm install` there; before typecheck run `pnpm --filter @blulens/shared build`. Dev servers on port 3190 (not 3100). Never commit to main/develop.
+- WORKTREE RULE: never switch branches in the shared checkout. Own worktree, branch `fe/bl-21-admin-entry-form` from `origin/develop`, `pnpm install` there; before typecheck run `pnpm --filter @blulens/shared build`. Run `pnpm --filter @blulens/web gen:api` if types look stale. Dev servers on port 3190 (not 3100). Never commit to main/develop.
 - Review gate: after done, Andy sends your branch to Stanley; merge only on APPROVE.
-- Depends on: bl-21-1 (hooks), bl-21-4 (TeamCombobox), bl-21-7 (PlayerPicker) merged. Until then vi.mock their modules in your test.
+- Depends on: bl-21-8, bl-21-4 (TeamCombobox) and bl-21-7 (PlayerPicker) merged; vi.mock them until then
 
 SOURCES:
-- docs/api/openapi.yaml: POST `/teams/{teamId}/members` body {userId, validFrom: 'YYYY-MM-DD'} -> 201 (409 Conflict if already a member: treat 409 as OK, continue); POST `/events/{eventId}/entries` body {playerIds:[userId]} -> Entry with `warnings` (409 codes ENTRY_GRADE_OUT_OF_BAND, ENTRIES_CLOSED, NO_APPROVED_GRADE, FRESH_ASSESSMENT_REQUIRED); entry.players[].teamCount (A11 multi-team warning when > 1).
-- Components: `PlayerPicker` (bl-21-7, props `{ value: {userId,displayName}|null, onChange }`), `TeamCombobox` (bl-21-4, props `{ value: {teamId,name}|null, onChange }`), `useCreateEntry` (bl-21-1).
+- Contract (docs/api/openapi.yaml, develop 07543e2): EntryInput `{ name?, players: [{ userId, teamId? }] }` (doubles = exactly 2 players; slice 1 = doubles); Entry `{ id, eventId, status, name, forwardedAt, decidedAt, decisionReason, players[{userId, displayName, teamIds, teamCount, grade|null}], warnings[] }`; EntryStatus = draft | pending_committee | approved | rejected | withdrawn. Warnings (strings): MULTI_TEAM, NO_APPROVED_GRADE, GRADE_OUT_OF_BAND, FRESH_ASSESSMENT_REQUIRED. Lifecycle: POST `/events/{id}/entries` -> draft; POST `/entries/{id}/forward` (Admin|Committee) draft -> pending_committee; POST `/entries/{id}/approve` (Committee; body `{reason?}`; 409 ENTRY_PLAYER_UNGRADED, 409 ENTRY_OUT_OF_BAND_REASON_REQUIRED needs reason >= 20 chars); POST `/entries/{id}/reject` (Committee; body `{reason}`); PATCH `/entries/{id}` (draft/rejected only). Queue: GET `/entries?status=pending_committee&eventId=`; GET `/events/{id}/entries?status=`. Hard errors on create: ENTRIES_CLOSED, ENTRY_PLAYER_COUNT, ENTRY_DUPLICATE_PLAYER. (Check the exact request bodies of approve/reject/PATCH in openapi before coding.)
+- Components: `PlayerPicker` (`{ value: {userId,displayName}|null, onChange }`), `TeamCombobox` (`{ value: {teamId,name}|null, onChange }`), hooks from bl-21-8. Owner decision: no self-registration; slice = doubles; singles later.
 
 SPEC:
-- Files (ONLY these): `apps/web/features/events/RegisterPlayerForm.tsx`, `apps/web/features/events/RegisterPlayerForm.test.tsx`, `apps/web/features/events/api.ts` ONLY to add `useAddTeamMember()` (POST `/teams/{teamId}/members`, variables `{ teamId, userId, validFrom }`; treat ApiRequestError status 409 as success by catching and returning undefined). Nothing else in api.ts changes.
-- Props: `{ eventId: string; onRegistered?: (e: Entry) => void }`.
-- Fields: player via PlayerPicker (wrapper `data-testid="reg-player"`); team via TeamCombobox (wrapper `data-testid="reg-team"`); NO clip field at all (contract: clips belong to assessments, Jim 2026-10-07); submit `reg-submit` text "ลงทะเบียนผู้เล่น", disabled until player and team are picked.
-- Submit sequence: (1) addTeamMember({teamId, userId, validFrom: today as YYYY-MM-DD from `new Date().toISOString().slice(0,10)`}); (2) createEntry({playerIds:[userId]}). On success: show `<p role="status" data-testid="reg-success">ลงทะเบียนเรียบร้อย</p>`, call onRegistered(entry), reset both pickers. If entry.warnings includes 'MULTI_TEAM' (or any player teamCount > 1) show `<p role="alert" data-testid="reg-multiteam-warning">ผู้เล่นสังกัด {teamCount} ทีมแล้ว</p>` with the max teamCount.
-- API error from either call: `role="alert"` `data-testid="reg-error"` with the ApiRequestError message (Thai from server).
+- Files (ONLY these): `apps/web/features/entries/AdminEntryForm.tsx`, `apps/web/features/entries/AdminEntryForm.test.tsx`.
+- Props: `{ eventId: string; onDone?: (entry: Entry) => void }`.
+- Layout: two player blocks "ผู้เล่นคนที่ 1" / "ผู้เล่นคนที่ 2", each = PlayerPicker (wrapper `data-testid="entry-player-1"` / `entry-player-2`) + TeamCombobox (wrapper `entry-team-1` / `entry-team-2`); optional text input `entry-name` (max 80, label "ชื่อคู่ (ไม่บังคับ)"); buttons: `entry-save-draft` text "บันทึกร่าง", `entry-forward` text "ส่งให้คณะกรรมการ".
+- Both buttons disabled until both players picked, both distinct (same userId twice -> inline `role="alert"` `entry-error` "เลือกผู้เล่นซ้ำกัน"). Team per player is optional (but show helper text "ควรเลือกสโมสร เพราะกติกาจับสายใช้ทีม" if empty).
+- Save draft: createEntry({name?, players:[{userId, teamId?},{...}]}) (omit empty name and missing teamId). Forward: createEntry then forwardEntry({entryId}) in sequence; on success call onDone(entry) and reset.
+- Show returned `entry.warnings` after create as chips with Thai text in `<ul data-testid="entry-warnings">`: MULTI_TEAM "ผู้เล่นสังกัดหลายทีม", NO_APPROVED_GRADE "ผู้เล่นยังไม่มีเกรดที่อนุมัติ", GRADE_OUT_OF_BAND "เกรดอยู่นอกช่วงอีเวนต์", FRESH_ASSESSMENT_REQUIRED "อีเวนต์นี้ต้องประเมินใหม่" (warnings do NOT block saving or forwarding).
+- API error: `role="alert"` `entry-error` with ApiRequestError message; pending state disables both buttons.
 
-CONSTRAINTS: only the listed files; no new dependencies; no `any`; Thai UI text; tokens/tailwind classes only, no hex; no business logic (API decides); no direct fetch in components.
+CONSTRAINTS: only the listed files; no new dependencies; no `any`; Thai UI text; tailwind classes with theme tokens only, no hex; no business logic (API decides eligibility/status, web only renders and sends); no direct fetch in components (hooks only).
 
-TOOLS: `pnpm --filter @blulens/web test RegisterPlayerForm` · `pnpm --filter @blulens/web typecheck`
+TOOLS: `pnpm --filter @blulens/web test AdminEntryForm` · `pnpm --filter @blulens/web typecheck`
 
 DONE:
-- Proving test "adds the player to the team, then posts the entry, then shows the multi-team warning": vi.mock PlayerPicker/TeamCombobox as stubs that call onChange({userId:'u1',displayName:'A'}) / ({teamId:'t1',name:'T'}); addTeamMember resolves; createEntry resolves an Entry with warnings ['MULTI_TEAM'] and players [{teamCount:2}]; click submit -> addTeamMember called with {teamId:'t1', userId:'u1', validFrom: <today>} BEFORE createEntry called with {playerIds:['u1']}; text 'ผู้เล่นสังกัด 2 ทีมแล้ว' visible; reg-success visible.
-- Others: submit disabled until both picked; 409 on addTeamMember is swallowed and createEntry still runs; entry API error shown in reg-error.
+- Proving test "forward creates the draft with two players then forwards it": vi.mock PlayerPicker/TeamCombobox as stubs that call onChange with fixed values per instance; mock hooks; click `entry-forward` -> createEntry mutateAsync called with {players:[{userId:'u1',teamId:'t1'},{userId:'u2',teamId:'t2'}]} (no name key) THEN forwardEntry called with {entryId:<created id>}; onDone called once.
+- Others: buttons disabled until both players picked; same player twice shows entry-error; warnings rendered after save draft; API error shown.
 - Report to andy-muxsqkra (act=done): paths, exact commands with real pass counts, unverified, open items.
