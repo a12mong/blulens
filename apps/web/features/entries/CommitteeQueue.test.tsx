@@ -4,6 +4,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommitteeQueue } from './CommitteeQueue';
 import * as entriesApi from './api';
+import { ApiRequestError } from '@/lib/api/client';
 
 vi.mock('./ApproveConfirmDialog', () => ({
   ApproveConfirmDialog: vi.fn(({ open, entry, onConfirm, onCancel, error, pending }) => {
@@ -209,7 +210,7 @@ describe('CommitteeQueue', () => {
 
   it('approve error message is shown in confirm dialog on approval failure', async () => {
     mockApproveMutate.mockImplementation((_vars, options) => {
-      options?.onError?.(new Error('ENTRY_NOT_PENDING'));
+      options?.onError?.(new ApiRequestError(409, 'ENTRY_NOT_PENDING', 'x'));
     });
 
     const normalEntry: entriesApi.Entry = {
@@ -242,12 +243,12 @@ describe('CommitteeQueue', () => {
 
     expect(mockApproveMutate).toHaveBeenCalled();
     const errorEl = screen.getByTestId('approve-dialog-error');
-    expect(errorEl).toHaveTextContent('ENTRY_NOT_PENDING');
+    expect(errorEl).toHaveTextContent('ผู้สมัครไม่อยู่ในสถานะรอพิจารณา');
   });
 
   it('dialog error message is shown in ReasonDialog error alert', () => {
     mockApproveMutate.mockImplementation((_vars, options) => {
-      options?.onError?.(new Error('ENTRY_OUT_OF_BAND_REASON_REQUIRED'));
+      options?.onError?.(new ApiRequestError(409, 'ENTRY_OUT_OF_BAND_REASON_REQUIRED', 'x'));
     });
 
     const oobEntry: entriesApi.Entry = {
@@ -279,7 +280,7 @@ describe('CommitteeQueue', () => {
     fireEvent.click(screen.getByTestId('reason-submit'));
 
     const errorAlert = screen.getByTestId('reason-error');
-    expect(errorAlert).toHaveTextContent('ENTRY_OUT_OF_BAND_REASON_REQUIRED');
+    expect(errorAlert).toHaveTextContent('ต้องระบุเหตุผลสำหรับเกรดนอกช่วง');
   });
 
   it('empty queue shows the table empty state', () => {

@@ -10,6 +10,7 @@ import {
   useRejectEntry,
   type Entry,
 } from './api';
+import { thaiError } from '@/lib/errors';
 
 export type CommitteeQueueProps = {
   eventId?: string;
@@ -44,7 +45,7 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
         data-testid="queue-error"
         className="text-sm text-destructive"
       >
-        {queryError?.message || 'เกิดข้อผิดพลาดในการโหลดคิว'}
+        {thaiError(queryError, 'เกิดข้อผิดพลาดในการโหลดคิว')}
       </div>
     );
   }
@@ -79,7 +80,7 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
           setDialogError(undefined);
         },
         onError: (err) => {
-          setDialogError(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
+          setDialogError(thaiError(err, 'เกิดข้อผิดพลาดในการอนุมัติ'));
         },
       },
     );
@@ -94,7 +95,7 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
           setDialogError(undefined);
         },
         onError: (err) => {
-          setDialogError(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
+          setDialogError(thaiError(err, 'เกิดข้อผิดพลาดในการอนุมัติ'));
         },
       },
     );
@@ -109,7 +110,7 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
           setDialogError(undefined);
         },
         onError: (err) => {
-          setDialogError(err.message || 'เกิดข้อผิดพลาดในการปฏิเสธ');
+          setDialogError(thaiError(err, 'เกิดข้อผิดพลาดในการปฏิเสธ'));
         },
       },
     );
