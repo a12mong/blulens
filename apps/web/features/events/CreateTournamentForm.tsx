@@ -2,7 +2,7 @@
 
 import { ApiRequestError } from '@/lib/api/client';
 import { useState } from 'react';
-import { useCreateTournament } from './api';
+import { useCreateTournament } from '@/features/events/api';
 import type { components } from '@/lib/api/schema';
 
 type Tournament = components['schemas']['Tournament'];
