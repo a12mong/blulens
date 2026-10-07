@@ -7,6 +7,8 @@ GOAL:
   which entries are seeds and which virtual rank each seed and each bye occupies.
 
 STATE:
+  AMENDED 2026-10-07: origin/be/bl-18-draw-foundation now holds a stub of your file with the final signature (commit 6d74a21).
+  If you already branched: git fetch origin && git rebase origin/be/bl-18-draw-foundation
   Repo: D:/_work/SourceDev/_code/blulens  (work in your own worktree, not in that shared folder:
     git worktree add ../blulens-angela -b dev/bl-18-plan-seeding origin/be/bl-18-draw-foundation)
   Branch to create: dev/bl-18-plan-seeding — based on origin/be/bl-18-draw-foundation
@@ -36,10 +38,9 @@ SOURCES (everything you need is here; read nothing else):
   Sibling pattern: packages/shared/src/draw/prng.ts (style, RangeError usage)
 
 SPEC:
-  Files to create/touch (ONLY these 3):
-    - packages/shared/src/draw/plan-seeding.ts
+  Files to touch (ONLY these 2):
+    - packages/shared/src/draw/plan-seeding.ts   (EXISTS as a stub since 6d74a21: keep the exact exported names/types, replace the body)
     - packages/shared/src/draw/plan-seeding.test.ts
-    - packages/shared/src/draw/index.ts   (add exactly one line: export * from './plan-seeding';)
   Types + signature (exact, export all of them):
     export interface SeedPlacement { entryId: string; seedNo: number; rank: number }
     export interface SeedingPlan {
@@ -77,7 +78,7 @@ SPEC:
   Pure: no Date, no Math.random, no I/O.
 
 CONSTRAINTS:
-  - Touch only the 3 files listed. No new dependencies. No `any`.
+  - Touch only the 2 files listed. index.ts already exports this module: do not edit it, stub.ts or stubs.test.ts. No new dependencies. No `any`.
   - Use the existing shuffle() and Rng from ./prng; do not write another shuffle.
   - Do not modify foundation files. Conventional commits (feat(shared): add planSeeding). Push your branch.
 

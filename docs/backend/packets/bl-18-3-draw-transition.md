@@ -7,6 +7,8 @@ GOAL:
   and returns either the next status or the exact error code the API will send.
 
 STATE:
+  AMENDED 2026-10-07: origin/be/bl-18-draw-foundation now holds a stub of your file with the final signature (commit 6d74a21).
+  If you already branched: git fetch origin && git rebase origin/be/bl-18-draw-foundation
   Repo: D:/_work/SourceDev/_code/blulens  (work in your own worktree, not in that shared folder:
     git worktree add ../blulens-creed -b dev/bl-18-draw-transition origin/be/bl-18-draw-foundation)
   Branch to create: dev/bl-18-draw-transition — based on origin/be/bl-18-draw-foundation
@@ -29,10 +31,9 @@ SOURCES (everything you need is here; read nothing else):
   Sibling pattern: packages/shared/src/draw/conflict.ts (small pure function + JSDoc)
 
 SPEC:
-  Files to create/touch (ONLY these 3):
-    - packages/shared/src/draw/transition.ts
+  Files to touch (ONLY these 2):
+    - packages/shared/src/draw/transition.ts   (EXISTS as a stub since 6d74a21: keep the exact exported names/types, replace the body)
     - packages/shared/src/draw/transition.test.ts
-    - packages/shared/src/draw/index.ts   (add exactly one line: export * from './transition';)
   Types + signature (exact, export all):
     export type DrawStatus = 'preview' | 'published' | 'discarded' | 'superseded' | 'locked';
     export type DrawAction =
@@ -67,7 +68,7 @@ SPEC:
   Pure: no Date, no Math.random, no I/O.
 
 CONSTRAINTS:
-  - Touch only the 3 files listed. No new dependencies. No `any`. Do not throw; always return a result.
+  - Touch only the 2 files listed. index.ts already exports this module: do not edit it, stub.ts or stubs.test.ts. No new dependencies. No `any`. Do not throw; always return a result.
   - Do not modify foundation files. Conventional commits (feat(shared): add drawTransition). Push your branch.
 
 TOOLS (from your worktree root):

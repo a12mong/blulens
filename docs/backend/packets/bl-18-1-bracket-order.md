@@ -7,6 +7,8 @@ GOAL:
   rank r meets rank S+1-r in round 1 and top ranks are spread across halves/quarters/eighths.
 
 STATE:
+  AMENDED 2026-10-07: origin/be/bl-18-draw-foundation now holds a stub of your file with the final signature (commit 6d74a21).
+  If you already branched: git fetch origin && git rebase origin/be/bl-18-draw-foundation
   Repo: D:/_work/SourceDev/_code/blulens  (do your work in your own worktree, not in that shared folder)
   Branch to create: dev/bl-18-bracket-order  — base it on origin/be/bl-18-draw-foundation
     git fetch origin && git switch -c dev/bl-18-bracket-order origin/be/bl-18-draw-foundation
@@ -26,10 +28,9 @@ SOURCES (everything you need is here; read nothing else):
   Sibling pattern to copy (style, JSDoc, RangeError usage): packages/shared/src/draw/prng.ts
 
 SPEC:
-  Files to create/touch (ONLY these 3):
-    - packages/shared/src/draw/bracket-order.ts
+  Files to touch (ONLY these 2):
+    - packages/shared/src/draw/bracket-order.ts   (EXISTS as a stub since 6d74a21: keep the exact exported names/types, replace the body)
     - packages/shared/src/draw/bracket-order.test.ts
-    - packages/shared/src/draw/index.ts   (add exactly one line: export * from './bracket-order';)
   Signature (exact):
     /** Virtual rank at each position: result[p - 1] = rank of position p (1-based). */
     export function bracketOrder(size: number): number[]
@@ -45,7 +46,7 @@ SPEC:
   Pure: no Date, no Math.random, no I/O, no imports except vitest in the test file.
 
 CONSTRAINTS:
-  - Touch only the 3 files listed. No new dependencies. No `any`.
+  - Touch only the 2 files listed. index.ts already exports this module: do not edit it, stub.ts or stubs.test.ts. No new dependencies. No `any`.
   - Do not modify types.ts, prng.ts, conflict.ts or any test you did not create.
   - Conventional commits, e.g. feat(shared): add bracketOrder for draw-v1. Push your branch to origin.
   - No secrets, no .env printing.
