@@ -19,6 +19,7 @@
     "^@blulens/shared$": "<rootDir>/../../packages/shared/src/index.ts"
   },
   "testTimeout": 30000,
+  "globalSetup": "<rootDir>/test/global-setup.ts",
   "setupFiles": [
     "<rootDir>/test/setup-env.ts"
   ]

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseEnv } from 'node:util';
+import { testDatabaseUrl } from './test-db';
 
 // e2e tests read DATABASE_URL etc. from the repo-root .env (same file the dev servers use).
 // Assign into process.env here: Jest gives each test file its own copy of process.env, so
@@ -11,4 +12,8 @@ if (existsSync(envFile)) {
     process.env[key] ??= value;
   }
 }
+
+// Override DATABASE_URL to use test database
+process.env.DATABASE_URL = testDatabaseUrl(process.env);
+
 process.env.DISABLE_RATE_LIMIT = '1';
