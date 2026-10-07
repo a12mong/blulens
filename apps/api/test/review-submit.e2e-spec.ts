@@ -82,8 +82,7 @@ describe('PUT /reviews/assignments/:assignmentId (bl-10-3d submit review)', () =
     });
     await prisma.review.deleteMany({ where: { assignmentId: { in: assignmentIds } } });
     await prisma.reviewAssignment.deleteMany({ where: { id: { in: assignmentIds } } });
-    await prisma.assessment.deleteMany({ where: { id: { in: assessmentIds } } });
-    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.user.updateMany({ where: { id: { in: userIds } }, data: { status: 'disabled' } });
     await prisma.$disconnect();
     await app.close();
   });
