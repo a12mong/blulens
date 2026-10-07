@@ -163,6 +163,173 @@ export class AssessmentsService {
     return this.mapAssessment(updated, 0, updated.reviewsRequired);
   }
 
+  async assign(
+    assessmentId: string,
+    actor: AuthUser,
+    body: {
+      reviewerIds: string[];
+      dueAt?: string;
+    },
+  ) {
+    // Load assessment
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      include: { subject: true },
+    });
+
+    if (!assessment) {
+      throw ApiException.notFound('ไม่พบคำขอประเมิน', 'ASSESSMENT_NOT_FOUND');
+    }
+
+    // Check status is assignable
+    const assignableStatuses = ['submitted', 'in_review', 'needs_reviewers'];
+    if (!assignableStatuses.includes(assessment.status)) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'ASSESSMENT_NOT_ASSIGNABLE',
+        'มอบหมายกรรมการได้เฉพาะคำขอที่ส่งแล้วหรือกำลังประเมิน',
+      );
+    }
+
+    // Set default dueAt (now + 72 hours)
+    const dueAt = body.dueAt ? new Date(body.dueAt) : new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+    // Validate reviewers and check conflicts
+    for (const reviewerId of body.reviewerIds) {
+      // Check reviewer exists and has Reviewer role
+      const reviewer = await this.prisma.user.findUnique({
+        where: { id: reviewerId },
+        include: { roles: true },
+      });
+
+      if (!reviewer || !reviewer.roles.some((r) => r.role === 'Reviewer')) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'REVIEWER_NOT_ELIGIBLE',
+          'ผู้ใช้นี้ไม่ใช่กรรมการ',
+          { reviewerId },
+        );
+      }
+
+      // Check for conflict of interest
+      if (reviewerId === assessment.subjectUserId) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'REVIEWER_CONFLICT_OF_INTEREST',
+          'กรรมการติดส่วนได้เสียกับผู้เล่น',
+          { reviewerId, teamIds: [] },
+        );
+      }
+
+      // Check shared teams (current memberships)
+      const now = new Date();
+      const sharedTeams = await this.prisma.teamMembership.findMany({
+        where: {
+          teamId: {
+            in: (
+              await this.prisma.teamMembership.findMany({
+                where: {
+                  userId: assessment.subjectUserId,
+                  validFrom: { lte: now },
+                  OR: [{ validTo: null }, { validTo: { gt: now } }],
+                },
+                select: { teamId: true },
+              })
+            ).map((m) => m.teamId),
+          },
+          userId: reviewerId,
+          validFrom: { lte: now },
+          OR: [{ validTo: null }, { validTo: { gt: now } }],
+        },
+        select: { teamId: true },
+      });
+
+      if (sharedTeams.length > 0) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'REVIEWER_CONFLICT_OF_INTEREST',
+          'กรรมการติดส่วนได้เสียกับผู้เล่น',
+          { reviewerId, teamIds: sharedTeams.map((t) => t.teamId) },
+        );
+      }
+    }
+
+    // Assign in transaction
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // Create review assignments
+      for (const reviewerId of body.reviewerIds) {
+        try {
+          await tx.reviewAssignment.create({
+            data: {
+              kind: 'assessment',
+              assessmentId,
+              reviewerId,
+              dueAt,
+              assignedBy: actor.id,
+            },
+          });
+        } catch (error: any) {
+          if (error.code === 'P2002') {
+            throw new ApiException(
+              HttpStatus.CONFLICT,
+              'REVIEWER_ALREADY_ASSIGNED',
+              'กรรมการนี้ได้รับมอบหมายแล้ว',
+              { reviewerId },
+            );
+          }
+          throw error;
+        }
+      }
+
+      // Update assessment status if needed
+      if (['submitted', 'needs_reviewers'].includes(assessment.status)) {
+        const result = await tx.assessment.updateMany({
+          where: { id: assessmentId, status: { in: ['submitted', 'needs_reviewers'] } },
+          data: {
+            status: 'in_review',
+            version: { increment: 1 },
+          },
+        });
+
+        if (result.count === 0) {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'ASSESSMENT_NOT_ASSIGNABLE',
+            'มอบหมายกรรมการได้เฉพาะคำขอที่ส่งแล้วหรือกำลังประเมิน',
+          );
+        }
+
+        // Insert transition
+        await tx.assessmentTransition.create({
+          data: {
+            assessmentId,
+            fromStatus: assessment.status,
+            toStatus: 'in_review',
+            actorId: actor.id,
+          },
+        });
+      }
+
+      // Audit
+      await this.audit.record(
+        {
+          actorId: actor.id,
+          action: 'assessment.assign',
+          entityType: 'assessment',
+          entityId: assessmentId,
+          after: { reviewerIds: body.reviewerIds, dueAt },
+        },
+        tx,
+      );
+
+      return tx.assessment.findUniqueOrThrow({
+        where: { id: assessmentId },
+      });
+    });
+
+    return this.mapAssessment(updated, 0, updated.reviewsRequired);
+  }
+
   private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number) {
     return {
       id: assessment.id,
