@@ -177,6 +177,63 @@ describe('TournamentList', () => {
 
     const errorAlert = await screen.findByTestId('tournament-publish-error');
     expect(errorAlert).toHaveAttribute('role', 'alert');
-    expect(errorAlert).toHaveTextContent('409 TOURNAMENT_INVALID_TRANSITION');
+    expect(errorAlert).toHaveTextContent('ไม่สามารถเปิดรับสมัครได้');
+  });
+
+  it('search and status filter narrow the list and show a no-match state', () => {
+    const mockThreeTournaments = [
+      {
+        id: 't-cm',
+        name: 'เชียงใหม่ โอเพ่น',
+        startsOn: '2026-11-12',
+        status: 'open' as const,
+      },
+      {
+        id: 't-bkk',
+        name: 'กรุงเทพ คัพ',
+        startsOn: '2026-12-01',
+        status: 'draft' as const,
+      },
+      {
+        id: 't-pk',
+        name: 'ภูเก็ต โอเพ่น',
+        startsOn: '2026-12-15',
+        status: 'open' as const,
+      },
+    ];
+
+    vi.mocked(useMe).mockReturnValue({ data: null } as any);
+    vi.mocked(useTournaments).mockReturnValue({
+      data: { items: mockThreeTournaments },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    render(<TournamentList />);
+
+    // Initially 3 cards
+    expect(screen.getAllByTestId('tournament-card')).toHaveLength(3);
+
+    // Type 'โอเพ่น' in search input -> 2 cards
+    const searchInput = screen.getByTestId('tournament-search');
+    fireEvent.change(searchInput, { target: { value: 'โอเพ่น' } });
+    expect(screen.getAllByTestId('tournament-card')).toHaveLength(2);
+
+    // Choose status draft -> 0 cards and tournament-no-match
+    const statusSelect = screen.getByTestId('tournament-status-filter');
+    fireEvent.change(statusSelect, { target: { value: 'draft' } });
+    expect(screen.queryByTestId('tournament-card')).toBeNull();
+    const noMatch = screen.getByTestId('tournament-no-match');
+    expect(noMatch).toHaveTextContent('ไม่พบทัวร์นาเมนต์ที่ตรงกับการค้นหา');
+
+    // Click 'ล้างตัวกรอง' -> 3 cards
+    const clearBtn = screen.getByRole('button', { name: 'ล้างตัวกรอง' });
+    fireEvent.click(clearBtn);
+    expect(screen.getAllByTestId('tournament-card')).toHaveLength(3);
+    expect(screen.queryByTestId('tournament-no-match')).toBeNull();
+    expect(searchInput).toHaveValue('');
+    expect(statusSelect).toHaveValue('');
   });
 });

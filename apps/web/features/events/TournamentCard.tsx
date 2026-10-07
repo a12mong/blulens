@@ -92,7 +92,7 @@ export function TournamentCard({
             type="button"
             data-testid="tournament-publish"
             onClick={() => onOpen?.(tournament)}
-            className="px-3 py-1.5 text-xs font-medium rounded border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+            className="px-3 py-1.5 text-xs font-medium rounded border border-border bg-card text-foreground hover:bg-muted transition-colors cursor-pointer"
           >
             เปิดรับสมัคร
           </button>
