@@ -13,7 +13,7 @@ SOURCES:
 SPEC:
 - Files (ONLY these): `apps/web/features/entries/CommitteeQueue.tsx`, `apps/web/features/entries/CommitteeQueue.test.tsx`, new `apps/web/features/entries/ApproveConfirmDialog.tsx` and `ApproveConfirmDialog.test.tsx`.
 - ApproveConfirmDialog props `{ entry: Entry; open: boolean; pending?: boolean; error?: string; onConfirm(): void; onCancel(): void }`: modal (role=dialog, aria-modal, focus on confirm) listing each player (displayName + grade label when the Entry carries one, else 'ยังไม่มีเกรด'), the entry's warnings in Thai (MULTI_TEAM 'ผู้เล่นสังกัดหลายสโมสร', NO_APPROVED_GRADE 'ผู้เล่นยังไม่มีเกรดที่อนุมัติ', GRADE_OUT_OF_BAND 'เกรดอยู่นอกช่วงของประเภทนี้', FRESH_ASSESSMENT_REQUIRED 'ต้องประเมินใหม่ก่อนลงแข่ง'), buttons `approve-confirm` 'ยืนยันอนุมัติ' and `approve-cancel` 'ยกเลิก'.
-- In CommitteeQueue: approve click on an entry WITHOUT GRADE_OUT_OF_BAND opens ApproveConfirmDialog; confirm calls approve({entryId}). With GRADE_OUT_OF_BAND keep the ReasonDialog unchanged. Reject unchanged: do NOT change its min length (Jim is deciding 5 vs 10).
+- In CommitteeQueue: approve click on an entry WITHOUT GRADE_OUT_OF_BAND opens ApproveConfirmDialog; confirm calls approve({entryId}). With GRADE_OUT_OF_BAND keep the ReasonDialog unchanged. Reject: set its ReasonDialog minLength to 10 (Jim decided, openapi 5518cd5; out-of-band approve stays 20) and update the tests that assert 5.
 
 CONSTRAINTS: only the listed files; no new dependencies; no `any`; Thai UI; theme tokens only (no bg-blue-500 etc.); no direct fetch in components.
 
