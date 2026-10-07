@@ -490,10 +490,12 @@ paths:
     get:
       tags: [reviews]
       summary: Assignment detail with clip view URLs and the rubric (never other reviewers' scores)
+      description: 'Only the assigned reviewer (404 for anyone else, to not leak task ids). Used by /review/tasks/[id]. Clip viewUrl is a fresh 15-min presigned GET; when it expires the web calls /clips/{clipId}/playback-url.'
       x-roles: [Reviewer]
       parameters: [{ $ref: '#/components/parameters/AssignmentId' }]
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewAssignmentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [reviews]
       summary: Submit the review (once; immutable after submit)
@@ -1421,11 +1423,12 @@ components:
             reviewerRows: { type: array, items: { $ref: '#/components/schemas/ReviewerScoreRow' }, description: Committee only }
     Clip:
       type: object
+      required: [id, status, viewUrl]
       properties:
         id: { type: string, format: uuid }
-        status: { type: string, enum: [pending_upload, uploaded, rejected] }
-        viewUrl: { type: string, format: uri, description: presigned GET, short-lived }
-        durationSec: { type: integer }
+        status: { type: string, enum: [pending_upload, uploaded, rejected], description: 'uploaded = playable (there is no separate ready state in v1; no transcoding)' }
+        viewUrl: { type: [string, 'null'], format: uri, description: 'presigned GET (15 min); null unless status = uploaded' }
+        durationSec: { type: [integer, 'null'] }
 
     # ---- reviews ----
     Rubric:
@@ -1482,10 +1485,11 @@ components:
       allOf:
         - { $ref: '#/components/schemas/ReviewAssignment' }
         - type: object
+          required: [clips, rubric, myScores]
           properties:
             clips: { type: array, items: { $ref: '#/components/schemas/Clip' } }
             rubric: { $ref: '#/components/schemas/Rubric' }
-            myScores: { type: array, items: { $ref: '#/components/schemas/CriterionScore' } }
+            myScores: { type: array, items: { $ref: '#/components/schemas/CriterionScore' }, description: 'empty while state = open; the submitted scores after submit' }
 
     # ---- rater stats ----
     AgreementValue:
