@@ -63,5 +63,5 @@ pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ขอ�
 ```
 ถ้าจำเป็นต้องรันบน DB ร่วม ให้ล้างหลังรันด้วย `docs/qa/cleanup-qa-data.sql` (dry-run ก่อนด้วย `-v apply=0`, ลบจริง `-v apply=1`): ลบเฉพาะทัวร์นาเมนต์ชื่อ `QA Tourney %`, `Diag %`, `API Test Tournament %`, `Test Tournament` ที่ไม่มี assessment/draw/match ผูกอยู่ ไม่แตะ audit_log/users/teams
 
-## 7. ข้อกำหนดที่อาจเปลี่ยน
-- ความยาวขั้นต่ำของเหตุผล reject (ตอนนี้ 5 ตัวอักษร) — Jim กำลังตัดสิน (5 vs 10); ถ้าเปลี่ยน ต้องแก้ assertion ใน Step 7 และที่นี่
+## 7. ข้อกำหนดที่เจ้าของตัดสินแล้ว
+- เหตุผล reject ต้องยาว **อย่างน้อย 10 ตัวอักษร** (Jim; มี DB CHECK แล้ว): ปุ่ม submit ใน dialog ปิดจนกว่าจะครบ 10; ขอบที่ต้องทดสอบคือ 9 ตัว = ปิด, 10 ตัว = เปิด; API คืน 400 สำหรับ < 10
