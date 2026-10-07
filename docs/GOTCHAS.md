@@ -23,3 +23,4 @@
 - พอร์ต 3100 อาจถูกใช้อยู่ (เจ้าของรัน `pnpm dev`) — Dev ควรรัน dev server ของตัวเองที่พอร์ต 3190 (`next dev --port 3190`) แล้วปิดด้วย PID ของตัวเองเท่านั้น (บันทึกโดย Andy, bl-08)
 ## Windows: pnpm scripts run in cmd.exe
 - No `>/dev/null`. In cmd `a || b && c` means `a || (b && c)`, so write `(a || b) && c` explicitly (same meaning in sh).
+- **provenMinimal false claim (draw solver, merged bl-18-4):** when the search exhausts its node limit and falls back to first-fit, the result still says provenMinimal=true; draw.md §4 step 4 requires 'best found, not proven'. Owner of the fix: Kevin via bl-18-4b. Do not show 'minimum possible' in the UI until it is fixed.
