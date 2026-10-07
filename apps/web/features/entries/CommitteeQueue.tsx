@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { ApproveConfirmDialog } from './ApproveConfirmDialog';
 import { ReasonDialog } from '@/components/ui/ReasonDialog';
 import { EntryTable } from './EntryTable';
 import {
@@ -15,6 +16,7 @@ export type CommitteeQueueProps = {
 };
 
 type ActiveDialog =
+  | { type: 'approve_confirm'; entry: Entry }
   | { type: 'approve_out_of_band'; entry: Entry }
   | { type: 'reject'; entry: Entry };
 
@@ -53,20 +55,12 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
 
   const handleApprove = (entry: Entry) => {
     const isOutOfBand = entry.warnings?.includes('GRADE_OUT_OF_BAND');
+    setActionError(null);
+    setDialogError(undefined);
     if (isOutOfBand) {
-      setActionError(null);
-      setDialogError(undefined);
       setDialog({ type: 'approve_out_of_band', entry });
     } else {
-      setActionError(null);
-      approveMutation.mutate(
-        { entryId: entry.id },
-        {
-          onError: (err) => {
-            setActionError(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
-          },
-        },
-      );
+      setDialog({ type: 'approve_confirm', entry });
     }
   };
 
@@ -74,6 +68,21 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
     setActionError(null);
     setDialogError(undefined);
     setDialog({ type: 'reject', entry });
+  };
+
+  const handleApproveConfirmed = (entry: Entry) => {
+    approveMutation.mutate(
+      { entryId: entry.id },
+      {
+        onSuccess: () => {
+          setDialog(null);
+          setDialogError(undefined);
+        },
+        onError: (err) => {
+          setDialogError(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
+        },
+      },
+    );
   };
 
   const handleApproveWithReason = (entry: Entry, reason: string) => {
@@ -125,7 +134,21 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
         onReject={handleReject}
       />
 
-      {dialog ? (
+      {dialog?.type === 'approve_confirm' ? (
+        <ApproveConfirmDialog
+          entry={dialog.entry}
+          open={true}
+          pending={approveMutation.isPending}
+          error={dialogError}
+          onConfirm={() => handleApproveConfirmed(dialog.entry)}
+          onCancel={() => {
+            setDialog(null);
+            setDialogError(undefined);
+          }}
+        />
+      ) : null}
+
+      {dialog && (dialog.type === 'approve_out_of_band' || dialog.type === 'reject') ? (
         <ReasonDialog
           open={true}
           title={
@@ -136,7 +159,7 @@ export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
           confirmLabel={
             dialog.type === 'approve_out_of_band' ? 'อนุมัติ' : 'ปฏิเสธ'
           }
-          minLength={dialog.type === 'approve_out_of_band' ? 20 : 5}
+          minLength={dialog.type === 'approve_out_of_band' ? 20 : 10}
           onSubmit={(reason) => {
             if (dialog.type === 'approve_out_of_band') {
               handleApproveWithReason(dialog.entry, reason);
