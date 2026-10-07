@@ -63,6 +63,130 @@ export class ReviewsService {
     }));
   }
 
+  async getAssignmentDetail(assignmentId: string, actor: AuthUser) {
+    const assignment = await this.prisma.reviewAssignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        assessment: {
+          select: {
+            rubricId: true,
+            clips: {
+              orderBy: { createdAt: 'asc' },
+              select: {
+                id: true,
+                status: true,
+                objectKey: true,
+                durationSec: true,
+              },
+            },
+          },
+        },
+        calibrationClip: {
+          select: {
+            id: true,
+            status: true,
+            objectKey: true,
+            durationSec: true,
+          },
+        },
+        review: {
+          include: {
+            scores: {
+              select: {
+                criterion: true,
+                gradeIndex: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!assignment || assignment.reviewerId !== actor.id) {
+      throw ApiException.notFound('ไม่พบงานตรวจที่ต้องการ', 'ASSIGNMENT_NOT_FOUND');
+    }
+
+    let rubric = null;
+    if (assignment.kind === 'assessment' && assignment.assessment?.rubricId) {
+      rubric = await this.prisma.rubric.findUnique({
+        where: { id: assignment.assessment.rubricId },
+      });
+    }
+    if (!rubric) {
+      rubric = await this.prisma.rubric.findFirst({ where: { active: true } });
+    }
+
+    if (!rubric) {
+      throw ApiException.notFound('ไม่พบเกณฑ์การประเมิน', 'RUBRIC_NOT_FOUND');
+    }
+
+    const rawClips =
+      assignment.kind === 'assessment'
+        ? (assignment.assessment?.clips ?? [])
+        : assignment.calibrationClip
+          ? [assignment.calibrationClip]
+          : [];
+
+    const clips = rawClips.map((c) => ({
+      id: c.id,
+      status: c.status,
+      viewUrl: this.computeViewUrl(c.status, c.objectKey),
+      durationSec: c.durationSec,
+    }));
+
+    let myScores: Array<{ criterion: string; gradeKey: (typeof GRADE_KEYS)[number] | null }> = [];
+    if (assignment.state === 'submitted') {
+      const criteriaOrder = new Map(
+        Array.isArray(rubric.criteria)
+          ? (rubric.criteria as Array<{ key?: string }>).map((c, idx) => [c?.key, idx])
+          : [],
+      );
+
+      const sortedReviewScores = [...(assignment.review?.scores ?? [])].sort((a, b) => {
+        const ia = criteriaOrder.get(a.criterion) ?? 999;
+        const ib = criteriaOrder.get(b.criterion) ?? 999;
+        return ia - ib || a.criterion.localeCompare(b.criterion);
+      });
+
+      myScores = sortedReviewScores.map((s) => ({
+        criterion: s.criterion,
+        gradeKey:
+          s.gradeIndex !== null && s.gradeIndex !== undefined
+            ? (GRADE_KEYS[s.gradeIndex] ?? null)
+            : null,
+      }));
+    }
+
+    return {
+      id: assignment.id,
+      state: assignment.state,
+      dueAt: assignment.dueAt.toISOString(),
+      submittedAt: assignment.review?.submittedAt
+        ? assignment.review.submittedAt.toISOString()
+        : null,
+      clips,
+      rubric: {
+        methodVersion: rubric.methodVersion,
+        criteria: rubric.criteria,
+      },
+      myScores,
+    };
+  }
+
+  private computeViewUrl(status: string, objectKey: string): string | null {
+    if (status !== 'uploaded') {
+      return null;
+    }
+    if (
+      objectKey.startsWith('/') ||
+      objectKey.startsWith('http://') ||
+      objectKey.startsWith('https://')
+    ) {
+      return objectKey;
+    }
+    return null;
+  }
+
   async submit(assignmentId: string, input: ReviewInputDto, actor: AuthUser, ip?: string) {
     return this.prisma.$transaction(async (tx) => {
       const assignment = await tx.reviewAssignment.findUnique({
