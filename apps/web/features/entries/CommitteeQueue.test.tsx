@@ -1,9 +1,36 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommitteeQueue } from './CommitteeQueue';
 import * as entriesApi from './api';
 import { ApiRequestError } from '@/lib/api/client';
+
+vi.mock('./ApproveConfirmDialog', () => ({
+  ApproveConfirmDialog: vi.fn(({ open, entry, onConfirm, onCancel, error, pending }) => {
+    if (!open) return null;
+    return (
+      <div data-testid="approve-confirm-dialog">
+        <div data-testid="approve-dialog-entry">{entry.id}</div>
+        {error && <div data-testid="approve-dialog-error">{error}</div>}
+        <button
+          data-testid="approve-confirm-btn"
+          onClick={onConfirm}
+          disabled={pending}
+        >
+          ยืนยันอนุมัติ
+        </button>
+        <button
+          data-testid="approve-cancel-btn"
+          onClick={onCancel}
+          disabled={pending}
+        >
+          ยกเลิก
+        </button>
+      </div>
+    );
+  }),
+}));
 
 vi.mock('./api', async () => {
   const actual = await vi.importActual<typeof import('./api')>('./api');
@@ -86,7 +113,7 @@ describe('CommitteeQueue', () => {
     );
   });
 
-  it('approve without out-of-band warning calls approve immediately', () => {
+  it('approve without out-of-band warning shows confirm dialog, not calling approve until confirmed', async () => {
     const normalEntry: entriesApi.Entry = {
       id: 'entry-norm-1',
       eventId: 'ev-1',
@@ -110,14 +137,28 @@ describe('CommitteeQueue', () => {
     const approveBtn = screen.getByTestId('entry-approve');
     fireEvent.click(approveBtn);
 
-    expect(screen.queryByTestId('reason-input')).toBeNull();
+    // Confirm dialog shows, approve not yet called
+    expect(screen.getByTestId('approve-confirm-dialog')).toBeInTheDocument();
+    expect(mockApproveMutate).not.toHaveBeenCalled();
+
+    // Cancel the dialog
+    await userEvent.click(screen.getByTestId('approve-cancel-btn'));
+    expect(mockApproveMutate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('approve-confirm-dialog')).not.toBeInTheDocument();
+
+    // Click approve again
+    fireEvent.click(screen.getByTestId('entry-approve'));
+    expect(screen.getByTestId('approve-confirm-dialog')).toBeInTheDocument();
+
+    // Confirm the approve
+    await userEvent.click(screen.getByTestId('approve-confirm-btn'));
     expect(mockApproveMutate).toHaveBeenCalledWith(
       { entryId: 'entry-norm-1' },
       expect.any(Object),
     );
   });
 
-  it('reject needs 5 chars then calls reject with the reason', () => {
+  it('reject needs 10 chars then calls reject with the reason', () => {
     const entry: entriesApi.Entry = {
       id: 'entry-rej-1',
       eventId: 'ev-1',
@@ -148,12 +189,12 @@ describe('CommitteeQueue', () => {
     const submitBtn = screen.getByTestId('reason-submit');
     expect(submitBtn).toBeDisabled();
 
-    // Type 4 chars
-    fireEvent.change(reasonInput, { target: { value: '1234' } });
+    // Type 9 chars
+    fireEvent.change(reasonInput, { target: { value: '123456789' } });
     expect(submitBtn).toBeDisabled();
 
-    // Type 5 chars
-    fireEvent.change(reasonInput, { target: { value: '12345' } });
+    // Type 10 chars
+    fireEvent.change(reasonInput, { target: { value: '1234567890' } });
     expect(submitBtn).not.toBeDisabled();
 
     fireEvent.click(submitBtn);
@@ -161,13 +202,13 @@ describe('CommitteeQueue', () => {
     expect(mockRejectMutate).toHaveBeenCalledWith(
       {
         entryId: 'entry-rej-1',
-        reason: '12345',
+        reason: '1234567890',
       },
       expect.any(Object),
     );
   });
 
-  it('approve error message is shown in queue-action-error on direct approve failure', () => {
+  it('approve error message is shown in confirm dialog on approval failure', async () => {
     mockApproveMutate.mockImplementation((_vars, options) => {
       options?.onError?.(new ApiRequestError(409, 'ENTRY_NOT_PENDING', 'x'));
     });
@@ -194,9 +235,15 @@ describe('CommitteeQueue', () => {
 
     fireEvent.click(screen.getByTestId('entry-approve'));
 
-    const alert = screen.getByTestId('queue-action-error');
-    expect(alert).toHaveTextContent('ผู้สมัครไม่อยู่ในสถานะรอพิจารณา');
-    expect(alert).toHaveAttribute('role', 'alert');
+    expect(screen.getByTestId('approve-confirm-dialog')).toBeInTheDocument();
+    expect(mockApproveMutate).not.toHaveBeenCalled();
+
+    // Confirm the approve, which triggers the error
+    await userEvent.click(screen.getByTestId('approve-confirm-btn'));
+
+    expect(mockApproveMutate).toHaveBeenCalled();
+    const errorEl = screen.getByTestId('approve-dialog-error');
+    expect(errorEl).toHaveTextContent('ผู้สมัครไม่อยู่ในสถานะรอพิจารณา');
   });
 
   it('dialog error message is shown in ReasonDialog error alert', () => {
