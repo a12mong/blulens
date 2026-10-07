@@ -12,3 +12,7 @@
 ## Windows / Git Bash
 - `docker run -v` ใน Git Bash: ใช้ `MSYS_NO_PATHCONV=1` และ `$(pwd -W)` ไม่งั้น path ใน container ถูกแปลงเป็น `C:/Program Files/Git/...`
 - heredoc ของ bash อาจกิน backslash ใน JSON (เช่น regex `\.` ใน jest config) — คัดลอกไฟล์ต้นฉบับแทนการพิมพ์ใหม่
+
+## API e2e: env in Jest
+- `process.loadEnvFile` inside a Jest setup file does not reach the test (Jest gives each test file its own copy of `process.env`). `apps/api/test/setup-env.ts` parses the root `.env` with `util.parseEnv` and assigns into `process.env` instead.
+- e2e tests need the shared package built once in a fresh worktree: `pnpm --filter @blulens/shared build`.

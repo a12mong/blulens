@@ -13,7 +13,9 @@
     "test": "turbo run test",
     "db:migrate": "pnpm --filter @blulens/api db:migrate",
     "db:deploy": "pnpm --filter @blulens/api db:deploy",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "db:seed": "pnpm --filter @blulens/api db:seed",
+    "db:setup": "pnpm --filter @blulens/api db:setup"
   },
   "devDependencies": {
     "prettier": "^3.5.3",

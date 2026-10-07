@@ -10,7 +10,9 @@
     "test": "jest --config test/jest-e2e.json --runInBand",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:setup": "dotenv -e ../../.env -- prisma migrate deploy && pnpm db:seed"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
@@ -43,6 +45,7 @@
     "prisma": "^6.6.0",
     "supertest": "^7.1.0",
     "ts-jest": "^29.3.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.8.0"
   }
 }
