@@ -95,7 +95,7 @@ describe('Entry Workflow Hooks', () => {
     });
   });
 
-  it('useApproveEntry omits body.reason when not given', async () => {
+  it('useApproveEntry sends an empty JSON object when no reason is given', async () => {
     const queryClient = createQueryClient();
     const mockEntry = { id: 'E1', status: 'approved' } as unknown;
 
@@ -113,7 +113,7 @@ describe('Entry Workflow Hooks', () => {
 
     expect(vi.mocked(apiFetch)).toHaveBeenCalledWith('/entries/E1/approve', {
       method: 'POST',
-      body: undefined,
+      body: {},
     });
   });
 

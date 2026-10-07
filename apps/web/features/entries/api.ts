@@ -113,7 +113,7 @@ export function useApproveEntry(
       if (reason) body.reason = reason;
       return apiFetch<Entry>(`/entries/${entryId}/approve`, {
         method: 'POST',
-        body: Object.keys(body).length > 0 ? body : undefined,
+        body, // API requires a JSON object body even when empty
       });
     },
     ...options,
