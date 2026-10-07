@@ -92,51 +92,34 @@ describe('GR-01/02/03: Outlier Detection (detectOutliers)', () => {
       expect(report2.excludedIndexes).toEqual([3]);
     });
 
-    it('z-score boundary: actual z computation with MAD > 0', () => {
-      // Construct a case where z is just below and just above 3.5
-      // z = 0.6745 * (value - median) / MAD
-      // We want: 0.6745 * dev / MAD = 3.5 exactly
-      // => dev / MAD = 3.5 / 0.6745 = 5.1854...
-      // Let's use MAD = 1, dev = 5.2 for z > 3.5
-      // and dev = 5.1 for z < 3.5
-      // But we also need dev > 2.0 for the first condition
+    it('z-score boundary: just below and just above 3.5 threshold', () => {
+      // Test just below 3.5: [7, 7, 8, 9, 13.18] => M=8, MAD=1, z=3.4939 < 3.5 => candidate=false
+      const values_below = [7, 7, 8, 9, 13.18];
+      const report_below = detectOutliers(values_below);
+      const item_below = report_below.items[4]; // 13.18
+      expect(item_below.robustZ).toBeCloseTo(3.4939, 3);
+      expect(item_below.deviation).toBeCloseTo(5.18, 2);
+      expect(item_below.candidate).toBe(false); // z < 3.5, so NOT candidate
 
-      // Case: dev=5.2, MAD=1 => z=0.6745*5.2/1=3.5074 > 3.5, AND dev > 2 => outlier
-      const values_above = [7.5, 7.5, 7.5, 7.5, 7.5, 12.7]; // median=7.5, dev of 12.7 is 5.2
+      // Test just above 3.5: [7, 7, 8, 9, 13.20] => M=8, MAD=1, z=3.5074 > 3.5 => candidate=true
+      const values_above = [7, 7, 8, 9, 13.2];
       const report_above = detectOutliers(values_above);
-      // After sorting: [7.5, 7.5, 7.5, 7.5, 7.5, 12.7]
-      // Median = (7.5+7.5)/2 = 7.5, MAD = |7.5-7.5| = 0
-      // This doesn't give us MAD > 0. Let me use a different fixture.
+      const item_above = report_above.items[4]; // 13.20
+      expect(item_above.robustZ).toBeCloseTo(3.5074, 3);
+      expect(item_above.deviation).toBeCloseTo(5.2, 1);
+      expect(item_above.candidate).toBe(true); // z > 3.5, AND dev > 2 => candidate
+      expect(report_above.excludedIndexes).toEqual([4]);
+    });
 
-      // Better: [6.4, 7.5, 8.6, 12.7]
-      // Sorted: [6.4, 7.5, 8.6, 12.7], M = (7.5+8.6)/2 = 8.05
-      // deviations: 1.65, 0.55, 0.55, 4.65, MAD = 0.55
-      // z for 12.7 = 0.6745 * 4.65 / 0.55 = 5.68 > 3.5, and dev=4.65 > 2.0 => outlier
-      const values_z_high = [6.4, 7.5, 8.6, 12.7];
-      const report_z_high = detectOutliers(values_z_high);
-      const item_high = report_z_high.items.find((it) => it.value === 12.7)!;
-      expect(item_high.robustZ).not.toBeNull();
-      if (item_high.robustZ !== null) {
-        expect(Math.abs(item_high.robustZ)).toBeGreaterThan(3.5 + OUTLIER_EPSILON);
-      }
-      expect(item_high.candidate).toBe(true);
-
-      // Case: values just below z threshold
-      // dev=5.0, MAD=1 => z=0.6745*5.0/1=3.3725 < 3.5, but dev > 2 and MAD > 0
-      // Need: (value - M) = 5.0, MAD = 1
-      // Try: [7, 7, 7, 7, 12] => M=7, MAD=0 (doesn't work)
-      // Try: [5.5, 7.5, 9.5, 12.5] => M=8.5, deviations=[3,1,1,4], MAD=1
-      // z for 12.5 = 0.6745*4/1 = 2.698 < 3.5, dev=4 > 2 => only MAD condition matters
-      const values_z_low = [5.5, 7.5, 9.5, 12.5];
-      const report_z_low = detectOutliers(values_z_low);
-      const item_low = report_z_low.items.find((it) => it.value === 12.5)!;
-      expect(item_low.robustZ).not.toBeNull();
-      if (item_low.robustZ !== null) {
-        expect(Math.abs(item_low.robustZ)).toBeLessThan(3.5 + OUTLIER_EPSILON);
-      }
-      expect(item_low.deviation).toBeGreaterThan(2.0); // Still > 2.0
-      // If MAD > 0 and |z| <= 3.5, but dev > 2, both conditions required
-      expect(item_low.candidate).toBe(false); // Because |z| <= 3.5
+    it('clear outlier with high z-score', () => {
+      // [8.0, 8.5, 9.0, 9.5, 15.0] => M=9, MAD=0.5, z(15)=8.0940 => definitely candidate
+      const values = [8.0, 8.5, 9.0, 9.5, 15.0];
+      const report = detectOutliers(values);
+      const item = report.items[4]; // 15.0
+      expect(item.robustZ).toBeCloseTo(8.094, 2);
+      expect(item.deviation).toBe(6.0);
+      expect(item.candidate).toBe(true);
+      expect(report.excludedIndexes).toEqual([4]);
     });
   });
 
