@@ -1,11 +1,12 @@
-export type Role = 'Admin' | 'Committee' | 'Reviewer' | 'Member';
-export type Area = 'public' | 'member' | 'reviewer' | 'committee' | 'admin';
+export type Role = 'Admin' | 'Committee' | 'Umpire' | 'Reviewer' | 'Member';
+export type Area = 'public' | 'member' | 'reviewer' | 'umpire' | 'committee' | 'admin';
 
 /** home path per area; Guest = no session */
 export const AREA_PATH: Record<Area, string> = {
   public: '/',
   member: '/me',
   reviewer: '/review',
+  umpire: '/umpire',
   committee: '/committee',
   admin: '/admin',
 };
@@ -13,19 +14,28 @@ export const AREA_PATH: Record<Area, string> = {
 const ROLE_AREAS: Record<Role, Area[]> = {
   Member: ['member'],
   Reviewer: ['reviewer'],
+  Umpire: ['umpire'],
   Committee: ['committee'],
   Admin: ['admin'],
 };
 
-/** Strict per architecture.md §3: Admin does NOT get committee/reviewer areas unless the user also holds that role.
- * Roles can be combined (user has several); area 'public' is always allowed. API stays authoritative. */
+/**
+ * Strict per architecture.md section 3: a role grants only its own area; users hold several roles when needed.
+ * Area 'public' is always allowed. The API stays authoritative.
+ */
 export function canAccess(roles: readonly Role[], area: Area): boolean {
   if (area === 'public') return true;
   return roles.some((r) => ROLE_AREAS[r].includes(area));
 }
 
-const HOME_AREA: Record<Role, Area> = { Admin: 'admin', Committee: 'committee', Reviewer: 'reviewer', Member: 'member' };
-const HOME_ORDER: Role[] = ['Admin', 'Committee', 'Reviewer', 'Member'];
+const HOME_AREA: Record<Role, Area> = {
+  Admin: 'admin',
+  Committee: 'committee',
+  Umpire: 'umpire',
+  Reviewer: 'reviewer',
+  Member: 'member',
+};
+const HOME_ORDER: Role[] = ['Admin', 'Committee', 'Umpire', 'Reviewer', 'Member'];
 
 /** where to send a logged-in user: highest role's home area */
 export function homePathFor(roles: readonly Role[]): string {
