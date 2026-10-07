@@ -14,7 +14,7 @@ SOURCES:
 SPEC:
 - Files (ONLY these): `apps/web/features/users/PlayerPicker.tsx`, `apps/web/features/users/PlayerPicker.test.tsx`, and in `apps/web/features/entries/AdminEntryForm.tsx` only the two `<PlayerPicker .../>` lines.
 - New optional prop `excludeUserIds?: string[]`. Results whose `id` is in it are filtered out of the list (not shown). If after filtering the list is empty but the raw result was not, show the existing empty text variant 'ผู้เล่นคนนี้ถูกเลือกไปแล้ว'.
-- Each option shows the name and, when `teamIds` has entries, a small muted text `data-testid="player-option-clubs"` '{n} สโมสร' (nothing when none or unknown).
+- Each option shows the name, then a small muted line `data-testid="player-option-meta"`: clubs `teamNames.join(', ')` (or 'ไม่มีสโมสร' when empty) and the grade `gradeLabel` (or 'ยังไม่มีเกรด' when null), with ' (ชั่วคราว)' appended when `gradeProvisional`.
 - AdminEntryForm: picker 1 gets `excludeUserIds={player2 ? [player2.userId] : []}`, picker 2 `excludeUserIds={player1 ? [player1.userId] : []}`.
 
 CONSTRAINTS: only the listed files; no new dependencies; no `any`; Thai UI; theme tokens ONLY (grep -E 'bg-(white|blue|gray|red|green|orange|yellow)|text-(gray|blue|red|green|orange|yellow)|border-(gray|red)' must be empty on every line you touch or add); keep every existing data-testid (the Playwright gate uses them).
