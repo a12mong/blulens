@@ -13,6 +13,7 @@
 | `flows.md` | flow ครบทุกบทบาท (mermaid) |
 | `screens/S01-public-home.md` … `S12-rubric-editor.md` | สเปกต่อหน้าจอ: วัตถุประสงค์ · บทบาท · wireframe · states · empty/error · ข้อมูล |
 | `contract-alignment.md` | **v2: จัดให้ตรง API contract (ยึดไฟล์นี้ก่อน)** |
+| `v3-umpire-grading-v2.md` | v3: Umpire, ผล 2 ขั้น, provisional/disputed, S13–S16 |
 | `fe-questions.md` | คำตอบ P1–P5 ของ Andy |
 | `components.md` | ชื่อ component · props · variants · state (หน่วยงานของ Andy → 1 component = 1 packet) |
 

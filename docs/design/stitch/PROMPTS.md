@@ -13,3 +13,13 @@
 | `bracket` | S10 | **pixel style bad8bit**: พื้น night #1c1926 panel #262234 line #7d7292, ตัวเลข/หัวรอบ Press Start 2P, เส้นสายมุมฉาก 2px, ไม่มีมุมโค้ง, ไม่มี GradeBand (Guest), ชื่อ+ทีม+ผลแมตช์, BYE, ผู้ชนะ badge; mobile = รายการตามรอบ |
 
 ข้อกำหนดการส่งออก: HTML/CSS + screenshot ต่อหน้าจอ → `docs/design/stitch/<screen>/` (ไฟล์ `index.html`, `screenshot.png`) และลิงก์จากสเปกหน้าจอ. ห้ามใส่ API key ในไฟล์ใด ๆ.
+
+## เพิ่ม (v3)
+
+| Screen | Spec | ใจความ prompt |
+|---|---|---|
+| `umpire-matches` | S13 | มือถือ: รายการแมตช์ของฉัน + หน้ากรอกผลสองเกม ปุ่ม +/- ใหญ่ ตรวจรูปแบบ 2x15 / bo3x21 ป้ายรอยืนยัน |
+| `results-queue` | S14 | desktop: ตารางผลรอยืนยัน ธง ปุ่มยืนยัน/ตีกลับ(เหตุผล) |
+| `umpire-assignment` | S15 | แผงสนาม + chip Umpire + ตารางแมตช์ |
+| `calibration` | S16 | ตารางคลิป × reviewer + bias |
+| bracket เพิ่ม | S10 | แท็บรอบกลุ่ม ตารางอันดับ + ป้าย "รอยืนยัน" (pixel night ไม่มีเกรด) |
