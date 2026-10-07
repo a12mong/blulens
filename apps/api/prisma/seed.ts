@@ -206,7 +206,7 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
         tournamentId: tournament.id,
         discipline: 'MS',
         gradeMinIndex: 7, // S
-        gradeMaxIndex: 11, // N+
+        gradeMaxIndex: 10, // N
         maxEntries: 16,
         minReviewers: 2,
       },
@@ -269,9 +269,9 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
       }
     }
 
-    // MS: 2 approved entries from members with grade S..N (7-11)
+    // MS: 2 approved entries from members with grade S..N (7-10)
     const msCandidates = Array.from(userGradeMap.entries())
-      .filter(([_, info]) => info.grade >= 7 && info.grade <= 11)
+      .filter(([_, info]) => info.grade >= 7 && info.grade <= 10)
       .map(([userId, info]) => ({ userId, ...info }));
 
     for (let i = 0; i < 2 && i < msCandidates.length; i++) {
@@ -315,6 +315,10 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
     const draftStartsOn = new Date(`${today}T00:00:00Z`);
     draftStartsOn.setUTCDate(draftStartsOn.getUTCDate() + 60);
 
+    const draftEntriesCloseAt = new Date(draftStartsOn);
+    draftEntriesCloseAt.setUTCDate(draftEntriesCloseAt.getUTCDate() - 5);
+    draftEntriesCloseAt.setUTCHours(10, 0, 0, 0);
+
     await prisma.$transaction(async (tx) => {
       const draftTournament = await tx.tournament.create({
         data: {
@@ -322,7 +326,7 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
           venue: '',
           status: 'draft',
           startsOn: draftStartsOn,
-          entriesCloseAt: draftStartsOn,
+          entriesCloseAt: draftEntriesCloseAt,
         },
       });
 
@@ -330,8 +334,8 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
         data: {
           tournamentId: draftTournament.id,
           discipline: 'MD',
-          gradeMinIndex: 0,
-          gradeMaxIndex: 14,
+          gradeMinIndex: 6, // S-
+          gradeMaxIndex: 8, // S+
           maxEntries: 16,
           minReviewers: 2,
         },
@@ -341,7 +345,91 @@ async function seedDemoTournament(adminId: string | null): Promise<{ created: nu
     draftCreated = true;
   }
 
-  return { created: result, draftCreated };
+  // 2027 tournament (idempotent by name)
+  const tournament2027Name = 'ศึกแบดมินตันสงกรานต์สัมพันธ์ 2027';
+  const existing2027 = await prisma.tournament.findFirst({
+    where: { name: tournament2027Name },
+  });
+
+  let tournament2027Created = false;
+  if (!existing2027) {
+    const tournament2027StartsOn = new Date('2027-04-10T00:00:00Z');
+    const tournament2027EntriesCloseAt = new Date('2027-04-03T10:00:00Z');
+
+    const tournament2027Result = await prisma.$transaction(async (tx) => {
+      const t2027 = await tx.tournament.create({
+        data: {
+          name: tournament2027Name,
+          venue: 'สนามแบดมินตันเทศบาลนนทบุรี',
+          status: 'open',
+          startsOn: tournament2027StartsOn,
+          entriesCloseAt: tournament2027EntriesCloseAt,
+        },
+      });
+
+      // MD S..N event with 2 approved entries
+      const mdEvent2027 = await tx.event.create({
+        data: {
+          tournamentId: t2027.id,
+          discipline: 'MD',
+          gradeMinIndex: 7, // S
+          gradeMaxIndex: 10, // N
+          maxEntries: 16,
+          minReviewers: 2,
+        },
+      });
+
+      // WS S-..S+ event with no entries
+      await tx.event.create({
+        data: {
+          tournamentId: t2027.id,
+          discipline: 'WS',
+          gradeMinIndex: 6, // S-
+          gradeMaxIndex: 8, // S+
+          maxEntries: 12,
+          minReviewers: 2,
+        },
+      });
+
+      // MD entries: 2 approved from members with grade S..N (7-10)
+      const mdCandidates2027 = Array.from(userGradeMap.entries())
+        .filter(([_, info]) => info.grade >= 7 && info.grade <= 10)
+        .map(([userId, info]) => ({ userId, ...info }));
+
+      const now = new Date();
+      for (let i = 0; i < 2 && i < mdCandidates2027.length; i++) {
+        const candidate = mdCandidates2027[i];
+        const teamId = teamByKey.get(candidate.teamKey) || '';
+        if (teamId) {
+          const entry = await tx.entry.create({
+            data: {
+              eventId: mdEvent2027.id,
+              status: 'approved',
+              forwardedAt: now,
+              decidedAt: now,
+              decidedBy: adminId ?? null,
+            },
+          });
+          await tx.entryPlayer.create({
+            data: {
+              entryId: entry.id,
+              userId: candidate.userId,
+              eventId: mdEvent2027.id,
+              gradeResultId: candidate.resultId,
+              teamId,
+              gradeConsent: false,
+            },
+          });
+        }
+      }
+
+      return 1;
+    });
+
+    tournament2027Created = tournament2027Result > 0;
+  }
+
+  return { created: result + (tournament2027Created ? 1 : 0), draftCreated };
 }
 
 async function seedDemo(): Promise<string> {
