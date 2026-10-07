@@ -123,4 +123,141 @@ export class TeamRequestsService {
       createdAt: r.createdAt,
     }));
   }
+
+  async resolveTeamRequest(
+    requestId: string,
+    body: {
+      action: 'create_team' | 'alias_to_team' | 'reject';
+      teamId?: string;
+      reason?: string;
+    },
+    user: AuthUser,
+  ) {
+    // Load the request
+    const request = await this.prisma.teamRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      throw ApiException.notFound('ไม่พบคำขอเพิ่มทีม', 'TEAM_REQUEST_NOT_FOUND');
+    }
+
+    if (request.status !== 'pending') {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'TEAM_REQUEST_NOT_PENDING',
+        'คำขอนี้ถูกดำเนินการแล้ว',
+      );
+    }
+
+    // Handle resolution in a transaction
+    let resolvedTeamId: string | null = null;
+    let status: 'created' | 'aliased' | 'rejected' = 'created';
+    let reason: string | undefined;
+
+    if (body.action === 'create_team') {
+      status = 'created';
+      try {
+        const newTeam = await this.prisma.team.create({
+          data: {
+            name: request.text,
+            nameKey: request.textKey,
+            status: 'active',
+          },
+        });
+        resolvedTeamId = newTeam.id;
+      } catch (err) {
+        if ((err as any).code === 'P2002') {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'TEAM_EXISTS',
+            'มีทีมนี้อยู่แล้ว กรุณาเลือกจากรายการ',
+          );
+        }
+        throw err;
+      }
+    } else if (body.action === 'alias_to_team') {
+      status = 'aliased';
+      const targetTeam = await this.prisma.team.findUnique({
+        where: { id: body.teamId! },
+      });
+
+      if (!targetTeam || targetTeam.status !== 'active') {
+        throw ApiException.notFound('ไม่พบทีม', 'TEAM_NOT_FOUND');
+      }
+
+      try {
+        await this.prisma.teamAlias.create({
+          data: {
+            teamId: body.teamId!,
+            alias: request.text,
+            aliasKey: request.textKey,
+          },
+        });
+      } catch (err) {
+        if ((err as any).code === 'P2002') {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'TEAM_EXISTS',
+            'มีทีมนี้อยู่แล้ว กรุณาเลือกจากรายการ',
+          );
+        }
+        throw err;
+      }
+
+      resolvedTeamId = body.teamId!;
+    } else {
+      status = 'rejected';
+      reason = body.reason;
+    }
+
+    // Update the request
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.teamRequest.updateMany({
+        where: { id: requestId, status: 'pending' },
+        data: {
+          status,
+          resolvedTeamId,
+          resolvedBy: user.id,
+          resolvedAt: new Date(),
+          reason,
+        },
+      });
+
+      if (result.count === 0) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'TEAM_REQUEST_NOT_PENDING',
+          'คำขอนี้ถูกดำเนินการแล้ว',
+        );
+      }
+
+      // Audit the resolution
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'team_request.resolve',
+          entityType: 'team_request',
+          entityId: requestId,
+          before: { status: 'pending' },
+          after: { status, teamId: resolvedTeamId },
+          reason,
+        },
+        tx,
+      );
+
+      return tx.teamRequest.findUniqueOrThrow({
+        where: { id: requestId },
+      });
+    });
+
+    return {
+      id: updated.id,
+      name: updated.text,
+      requestedBy: updated.requestedBy,
+      status: updated.status,
+      teamId: updated.resolvedTeamId,
+      createdAt: updated.createdAt,
+    };
+  }
 }
