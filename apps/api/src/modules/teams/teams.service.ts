@@ -33,8 +33,9 @@ export class TeamsService {
     }
 
     // Add aliases
+    const teamById = new Map(teams.map((t) => [t.id, t]));
     for (const alias of aliases) {
-      const team = teams.find((t: typeof teams[0]) => t.id === alias.teamId);
+      const team = teamById.get(alias.teamId);
       if (team) {
         candidates.push({
           teamId: alias.teamId,

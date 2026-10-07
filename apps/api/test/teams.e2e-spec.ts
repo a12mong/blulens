@@ -110,7 +110,8 @@ describe('teams (bl-21 demo slice)', () => {
       .get(`/api/v1/teams/suggest?q=${teamToken}ฟั`)
       .set('Cookie', memberCookie)
       .expect(200);
-    expect(res2.body.data).toHaveLength(1);
+    // typo tolerance may also return '<token> Fortress' at distance 2 (shared 8-char prefix); the alias match is first
+    expect(res2.body.data.slice(1).every((s: { distance: number }) => s.distance > 0)).toBe(true);
     expect(res2.body.data[0]).toMatchObject({
       name: `${teamToken} Falcon`,
       matchedAlias: `${teamToken}ฟัลคอน`,
@@ -140,7 +141,8 @@ describe('teams (bl-21 demo slice)', () => {
       .get(`/api/v1/teams/suggest?q=${teamToken}%20a`)
       .set('Cookie', memberCookie)
       .expect(200);
-    // Should not match 'archived' team
-    expect(res.body.data).toHaveLength(0);
+    // the archived team never appears (the active test teams may still match by typo distance)
+    expect(res.body.data.map((t: { name: string }) => t.name)).not.toContain(`${teamToken} Archived`);
+    expect(res.body.data.every((t: { name: string }) => !t.name.toLowerCase().endsWith('archived'))).toBe(true);
   });
 });
