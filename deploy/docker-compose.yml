@@ -44,8 +44,17 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # URL สาธารณะของโดเมนไฟล์ (หลัง Caddy) + อนุญาต CORS ให้เว็บ PUT/GET คลิปตรงด้วย presigned URL
+      MINIO_SERVER_URL: ${S3_PUBLIC_ENDPOINT}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${WEB_URL}
     volumes:
       - minio_data:/data
+    networks:
+      default: {}
+      # caddy เรียกหา minio ของแต่ละ instance ด้วยชื่อ live-minio / dev-minio (เหมือน web)
+      edge:
+        aliases:
+          - ${EDGE_ALIAS}-minio
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -65,10 +74,13 @@ services:
       API_PORT: "3001"
       WEB_URL: ${WEB_URL}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # S3_ENDPOINT = ทางภายใน (api ↔ minio), S3_PUBLIC_ENDPOINT = host ที่ใช้เซ็น presigned URL
+      # ให้เบราว์เซอร์เรียก (ลายเซ็น SigV4 ผูกกับ host จึงต้องเซ็นด้วยโดเมนสาธารณะเท่านั้น)
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET: ${S3_BUCKET:-blulens}
+      S3_BUCKET: ${S3_BUCKET:-clips}
       S3_REGION: ${S3_REGION:-us-east-1}
     depends_on:
       postgres:
@@ -101,6 +113,8 @@ services:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
       DEV_SITE_ADDRESS: ${DEV_SITE_ADDRESS:-}
+      FILES_ADDRESS: ${FILES_ADDRESS}
+      DEV_FILES_ADDRESS: ${DEV_FILES_ADDRESS:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
