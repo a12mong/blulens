@@ -220,10 +220,20 @@ describe('entries (bl-21 demo slice)', () => {
     expect(multiTeam.teamNames.length).toBe(2);
     expect(multiTeam.teamNames[0] <= multiTeam.teamNames[1]).toBe(true);
 
-    // Forward and approve entry to make it visible to others
+    // Verify warnings array includes both codes (sorted)
+    expect(entry.warnings).toEqual(['GRADE_OUT_OF_BAND', 'MULTI_TEAM']);
+
+    // Forward entry
     await http().post(`/api/v1/entries/${entry.id}/forward`).set('Cookie', adminCommittee).expect(200);
+
+    // Try to approve without reason -> 409 ENTRY_OUT_OF_BAND_REASON_REQUIRED
+    const noReasonRes = await http().post(`/api/v1/entries/${entry.id}/approve`).set('Cookie', committee)
+      .send({}).expect(409);
+    expect(noReasonRes.body.error?.code).toBe('ENTRY_OUT_OF_BAND_REASON_REQUIRED');
+
+    // Approve with valid reason (20+ chars)
     await http().post(`/api/v1/entries/${entry.id}/approve`).set('Cookie', committee)
-      .send({ reason: 'test approval for warningDetails visibility' }).expect(200);
+      .send({ reason: 'test approval for warningDetails visibility and out-of-band reason' }).expect(200);
 
     // As Member: verify warningDetails is empty
     const memberRes = await http().get(`/api/v1/events/${eventId}/entries`).set('Cookie', cookieFor(randomUUID(), ['Member'])).expect(200);
