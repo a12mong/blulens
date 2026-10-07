@@ -23,3 +23,5 @@
 | `umpire-assignment` | S15 | แผงสนาม + chip Umpire + ตารางแมตช์ |
 | `calibration` | S16 | ตารางคลิป × reviewer + bias |
 | bracket เพิ่ม | S10 | แท็บรอบกลุ่ม ตารางอันดับ + ป้าย "รอยืนยัน" (pixel night ไม่มีเกรด) |
+| `team-requests` | S17 | ตารางคำขอทีม + ทีมคล้าย + สร้าง/alias/ปฏิเสธ |
+| `group-draw` | S18 | การ์ดกลุ่ม + ตารางคะแนน + พรีวิวน็อคเอาท์ |
