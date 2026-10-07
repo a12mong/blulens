@@ -8,9 +8,9 @@ import { TournamentCard } from './TournamentCard';
 import {
   useEvents,
   useSetTournamentStatus,
-  useTournaments,
   type Tournament,
 } from './api';
+import { useTournamentsInfinite } from './tournamentsInfinite';
 
 export type TournamentDetail = components['schemas']['TournamentDetail'];
 
@@ -55,10 +55,19 @@ export function TournamentList() {
   const { data: me } = useMe();
   const canManage = Boolean(me?.roles?.includes('Committee'));
 
-  const { data, isLoading, isError, error, refetch } = useTournaments();
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useTournamentsInfinite();
   const [publishError, setPublishError] = useState<string | null>(null);
 
-  const items = data?.items ?? [];
+  const items = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -134,6 +143,20 @@ export function TournamentList() {
               onError={setPublishError}
             />
           ))}
+
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                data-testid="tournament-load-more"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="px-4 py-2 rounded-lg border border-border bg-background hover:bg-muted text-sm font-medium text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                โหลดเพิ่ม
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
