@@ -10,3 +10,4 @@ coverage/
 docker-data/
 *.tsbuildinfo
 .claude/settings.local.json
+apps/web/e2e/.auth/
