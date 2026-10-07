@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useRef, useState } from 'react';
 import { useRequestTeam, useTeamSuggestions, type TeamSuggestion } from './api';
 
