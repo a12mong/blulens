@@ -5,6 +5,7 @@ import { PlayerPicker, type PlayerValue } from '@/features/users/PlayerPicker';
 import { TeamCombobox, type TeamValue } from '@/features/teams/TeamCombobox';
 import { useCreateEntry, useForwardEntry, type Entry } from './api';
 import { ApiRequestError } from '@/lib/api/client';
+import { thaiError } from '@/lib/errors';
 
 export interface AdminEntryFormProps {
   eventId: string;
@@ -26,7 +27,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
       setWarnings(entry.warnings || []);
     },
     onError: (err: ApiRequestError) => {
-      setError(err.message || 'Error creating entry');
+      setError(thaiError(err, 'เกิดข้อผิดพลาดในการสร้างผู้สมัคร'));
       setIsSubmitting(false);
     },
   });
@@ -37,7 +38,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
       resetForm();
     },
     onError: (err: ApiRequestError) => {
-      setError(err.message || 'Error forwarding entry');
+      setError(thaiError(err, 'เกิดข้อผิดพลาดในการส่งต่อผู้สมัคร'));
       setIsSubmitting(false);
     },
   });
