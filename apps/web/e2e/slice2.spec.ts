@@ -13,7 +13,8 @@ import { ROUTES, REVIEWER_AUTH_FILE } from './selectors';
 const API_BASE = (process.env.API_URL ?? 'http://localhost:3191').replace(/\/+$/, '') + '/api/v1/';
 const PG_CONTAINER = process.env.E2E_PG_CONTAINER ?? 'blulens-postgres';
 const PG_USER = process.env.E2E_PG_USER ?? 'blulens';
-const SAMPLE_KEY = 'e2e/sample.mp4';
+// Clip.object_key is UNIQUE: '/e2e/sample.mp4' + a per-assessment query suffix keeps it a '/'-prefixed viewUrl.
+const SAMPLE_KEY = '/e2e/sample.mp4';
 
 async function data<T = any>(res: APIResponse): Promise<T> {
   const json = await res.json();
@@ -77,7 +78,7 @@ test.describe.serial('bl-24 slice 2: reviewer scoring path', () => {
 
     const clipId = sqlE2e(
       `insert into clips (id, assessment_id, object_key, status, content_type, created_at) ` +
-        `values (gen_random_uuid(), '${assessmentId}', '${SAMPLE_KEY}/${assessmentId}', 'uploaded', 'video/mp4', now()) returning id`,
+        `values (gen_random_uuid(), '${assessmentId}', '${SAMPLE_KEY}?a=${assessmentId}', 'uploaded', 'video/mp4', now()) returning id`,
     );
     expect(clipId).toMatch(/^[0-9a-f-]{36}$/);
 
