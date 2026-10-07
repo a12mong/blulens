@@ -154,7 +154,7 @@ describe('GR-01/02/03: Outlier Detection (detectOutliers)', () => {
       expect(report.excludedIndexes).toEqual([6, 7]);
     });
 
-    it('exclusion quota: n=7 can exclude up to 1', () => {
+    it('n=7: excludes outlier up to quota of 1', () => {
       const values = [7.5, 7.5, 7.5, 7.5, 7.5, 7.5, 12.0];
       const report = detectOutliers(values);
 
@@ -163,26 +163,12 @@ describe('GR-01/02/03: Outlier Detection (detectOutliers)', () => {
       expect(report.excludedIndexes).toEqual([6]);
     });
 
-    it('quota cap with ties: [7.5, 7.5, 7.5, 11.5, 3.0] → exclude [4] (index 2 skipped by later iteration)', () => {
-      // Sorted: [3.0, 7.5, 7.5, 7.5, 11.5], M = 7.5
-      // deviations: [4.5, 0, 0, 0, 4.0]
-      // Both indices 0 and 4 are candidates (dev > 2)
-      // MAD = 0, so z undefined, but dev > 2 alone is enough
-      // Cap = 1 (n=5 < 8), so only the one with largest dev gets excluded
-      // dev[0] = 4.5 > dev[4] = 4.0, so exclude index 0
-      // But the original order: [7.5, 7.5, 7.5, 11.5, 3.0]
-      // Sorted indices: input[4]=3.0 → pos 0, input[3]=11.5 → pos 4
-      // excludedIndexes should be sorted indices in ascending order
+    it('quota cap with multiple candidates: excludes largest deviation only', () => {
       const values = [7.5, 7.5, 7.5, 11.5, 3.0];
       const report = detectOutliers(values);
 
       expect(report.n).toBe(5);
       expect(report.maxExclusions).toBe(1);
-      // Sort: [3.0, 7.5, 7.5, 7.5, 11.5]
-      // dev: [4.5, 0, 0, 0, 4.0] => candidates at indices 0,4
-      // Sort by dev desc: index 0 (dev=4.5) first
-      // Exclude index 0, which maps to input index 4
-      // So excludedIndexes = [4]
       expect(report.excludedIndexes).toEqual([4]);
     });
   });
