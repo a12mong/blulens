@@ -14,7 +14,7 @@ SOURCES:
 SPEC:
 - Files (ONLY these): `apps/web/features/events/RegisterPlayerForm.tsx`, `apps/web/features/events/RegisterPlayerForm.test.tsx`, `apps/web/features/events/api.ts` ONLY to add `useAddTeamMember()` (POST `/teams/{teamId}/members`, variables `{ teamId, userId, validFrom }`; treat ApiRequestError status 409 as success by catching and returning undefined). Nothing else in api.ts changes.
 - Props: `{ eventId: string; onRegistered?: (e: Entry) => void }`.
-- Fields: player via PlayerPicker (wrapper `data-testid="reg-player"`); team via TeamCombobox (wrapper `data-testid="reg-team"`); clip link input `reg-clip-link` (type=url, optional, helper text "ลิงก์คลิป (ตัวอย่าง) ยังไม่ถูกส่งในรุ่นนี้", NOT sent to API); submit `reg-submit` text "ลงทะเบียนผู้เล่น", disabled until player and team are picked.
+- Fields: player via PlayerPicker (wrapper `data-testid="reg-player"`); team via TeamCombobox (wrapper `data-testid="reg-team"`); NO clip field at all (contract: clips belong to assessments, Jim 2026-10-07); submit `reg-submit` text "ลงทะเบียนผู้เล่น", disabled until player and team are picked.
 - Submit sequence: (1) addTeamMember({teamId, userId, validFrom: today as YYYY-MM-DD from `new Date().toISOString().slice(0,10)`}); (2) createEntry({playerIds:[userId]}). On success: show `<p role="status" data-testid="reg-success">ลงทะเบียนเรียบร้อย</p>`, call onRegistered(entry), reset both pickers. If entry.warnings includes 'MULTI_TEAM' (or any player teamCount > 1) show `<p role="alert" data-testid="reg-multiteam-warning">ผู้เล่นสังกัด {teamCount} ทีมแล้ว</p>` with the max teamCount.
 - API error from either call: `role="alert"` `data-testid="reg-error"` with the ApiRequestError message (Thai from server).
 
