@@ -319,4 +319,27 @@ describe('EntryTable', () => {
     expect(chip).toHaveClass('text-warning-foreground');
     expect(chip?.className).not.toMatch(/yellow/);
   });
+
+  it('approve and reject buttons use theme tokens and have no raw color classes', () => {
+    const entry = createMockEntry({ status: 'pending_committee' as const });
+
+    render(
+      <EntryTable
+        entries={[entry]}
+        mode="committee"
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+
+    const approveBtn = screen.getByTestId('entry-approve');
+    expect(approveBtn).toHaveClass('bg-success');
+    expect(approveBtn).toHaveClass('text-success-foreground');
+    expect(approveBtn.className).not.toMatch(/green/);
+
+    const rejectBtn = screen.getByTestId('entry-reject');
+    expect(rejectBtn).toHaveClass('bg-destructive');
+    expect(rejectBtn).toHaveClass('text-destructive-foreground');
+    expect(rejectBtn.className).not.toMatch(/red/);
+  });
 });
