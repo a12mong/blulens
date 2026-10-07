@@ -53,3 +53,15 @@ pnpm exec playwright test --project=setup --project=chromium   # ส่วน UI
 | เปลี่ยน testid `entry-forward` เป็นค่าผิดใน `e2e/selectors.ts` | Step 6 (forward) |
 | ถอดตัวกรอง “Member เห็นเฉพาะ approved” ใน `entries.service.ts` | Step 10 (มุมมอง Member) |
 | ให้ approve คืน 500 / ปิด API | Step 8 (approve) |
+
+## 6. ห้ามรันบน DB เดโมที่ใช้ร่วมกัน — ใช้ DB แยกของ e2e (ตัดสินใจโดย god)
+การรัน e2e ทุกรอบสร้างทัวร์นาเมนต์/entry ใหม่ จึงทำให้หน้า `/events` ของเดโมรก (Pam review #12-13) — ให้ใช้ฐานข้อมูลแยกชื่อ `blulens_e2e`:
+```bash
+docker exec blulens-postgres psql -U blulens -c "CREATE DATABASE blulens_e2e;"      # ครั้งแรก
+export DATABASE_URL="postgresql://<user>:<pass>@localhost:5442/blulens_e2e?schema=public"   # ใช้ user/pass จาก .env (อย่าพิมพ์ค่า)
+pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ของ e2e (ตัวแปรนี้ใช้กับ API process ของ e2e เท่านั้น)
+```
+ถ้าจำเป็นต้องรันบน DB ร่วม ให้ล้างหลังรันด้วย `docs/qa/cleanup-qa-data.sql` (dry-run ก่อนด้วย `-v apply=0`, ลบจริง `-v apply=1`): ลบเฉพาะทัวร์นาเมนต์ชื่อ `QA Tourney %`, `Diag %`, `API Test Tournament %`, `Test Tournament` ที่ไม่มี assessment/draw/match ผูกอยู่ ไม่แตะ audit_log/users/teams
+
+## 7. ข้อกำหนดที่อาจเปลี่ยน
+- ความยาวขั้นต่ำของเหตุผล reject (ตอนนี้ 5 ตัวอักษร) — Jim กำลังตัดสิน (5 vs 10); ถ้าเปลี่ยน ต้องแก้ assertion ใน Step 7 และที่นี่
