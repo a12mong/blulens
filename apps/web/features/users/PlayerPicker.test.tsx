@@ -291,6 +291,74 @@ describe('PlayerPicker', () => {
     expect(metas[2]).toHaveTextContent('ClubX · A (ชั่วคราว)');
   });
 
+  it('defensively handles undefined teamNames and gradeLabel', async () => {
+    vi.mocked(apiFetch).mockResolvedValueOnce({
+      items: [
+        {
+          id: 'u-1',
+          displayName: 'ผู้เล่นไร้ฟิลด์',
+          // teamNames and gradeLabel both undefined (e.g. unmigrated backend)
+        },
+        {
+          id: 'u-2',
+          displayName: 'มีแต่สโมสร',
+          teamNames: ['Club Alpha'],
+          gradeLabel: undefined,
+        },
+        {
+          id: 'u-3',
+          displayName: 'มีแต่เกรดเป็น null',
+          teamNames: undefined,
+          gradeLabel: null,
+        },
+        {
+          id: 'u-4',
+          displayName: 'สโมสรว่างเกรดไม่มี',
+          teamNames: [],
+          gradeLabel: undefined,
+        },
+      ],
+    });
+
+    render(<PlayerPicker value={null} onChange={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+
+    const input = screen.getByTestId('player-input');
+    fireEvent.change(input, { target: { value: 'ผู้เล่น' } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('player-option')).toHaveLength(4);
+    });
+
+    const options = screen.getAllByTestId('player-option');
+
+    // Option 1: both undefined -> whole meta line omitted!
+    expect(options[0].querySelector('[data-testid="player-option-meta"]')).toBeNull();
+
+    // Option 2: only teamNames present -> only club name shown, no grade
+    const meta1 = options[1].querySelector('[data-testid="player-option-meta"]');
+    expect(meta1).not.toBeNull();
+    expect(meta1).toHaveTextContent('Club Alpha');
+    expect(meta1?.textContent).not.toContain('·');
+
+    // Option 3: only gradeLabel null -> only 'ยังไม่มีเกรด' shown, no club
+    const meta2 = options[2].querySelector('[data-testid="player-option-meta"]');
+    expect(meta2).not.toBeNull();
+    expect(meta2).toHaveTextContent('ยังไม่มีเกรด');
+    expect(meta2?.textContent).not.toContain('·');
+
+    // Option 4: teamNames empty array -> 'ไม่มีสโมสร', gradeLabel undefined -> no grade
+    const meta3 = options[3].querySelector('[data-testid="player-option-meta"]');
+    expect(meta3).not.toBeNull();
+    expect(meta3).toHaveTextContent('ไม่มีสโมสร');
+    expect(meta3?.textContent).not.toContain('·');
+  });
+
   it('shows ผู้เล่นคนนี้ถูกเลือกไปแล้ว when all returned results are excluded', async () => {
     vi.mocked(apiFetch).mockResolvedValueOnce({
       items: [{ id: 'u-x', displayName: 'สมชาย', roles: ['Member'] }],
