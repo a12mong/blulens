@@ -844,7 +844,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReasonInput' }
+            schema: { $ref: '#/components/schemas/EntryRejectInput' }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
         '409': { description: 'ENTRY_NOT_PENDING', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
@@ -1808,6 +1808,12 @@ components:
         centerKey: { $ref: '#/components/schemas/GradeKey' }
         resultVersion: { type: integer, description: optimistic check, must equal the latest version }
         reason: { type: string, minLength: 20, maxLength: 2000 }
+    EntryRejectInput:
+      type: object
+      description: 'entry reject reason, min 10 chars (decision 2026-10-07, matches the design; other ReasonInput uses stay at 5)'
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 2000 }
     ReasonInput:
       type: object
       required: [reason]
