@@ -25,17 +25,7 @@ export default async function globalSetup() {
 
   console.log(`Setting up test database: ${testDbName}`);
 
-  // Try to create the database if it doesn't exist
-  try {
-    const postgresUrl = new URL(env.DATABASE_URL!);
-    postgresUrl.pathname = '/postgres'; // Connect to 'postgres' database to issue CREATE DATABASE
-    const createDbCommand = `psql "${postgresUrl.toString()}" -c "CREATE DATABASE ${testDbName};" 2>/dev/null || true`;
-    execSync(createDbCommand, { cwd: resolve(__dirname, '..') });
-  } catch {
-    // Ignore errors; database might already exist
-  }
-
-  // Run migrations
+  // Run migrations (prisma migrate deploy creates the database if it does not exist yet)
   try {
     execSync('prisma migrate deploy', {
       cwd: resolve(__dirname, '..'),
