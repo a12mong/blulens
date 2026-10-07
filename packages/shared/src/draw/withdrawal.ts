@@ -1,4 +1,3 @@
-import { notImplemented } from './stub';
 import type { SlotValue } from './types';
 
 export type WithdrawalOutcome =
