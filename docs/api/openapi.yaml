@@ -3,7 +3,8 @@ info:
   title: blulens API
   version: 0.1.0-draft
   description: |
-    Single source of truth for the Web <-> API contract (bl-02). DRAFT — waiting for owner approval.
+    Single source of truth for the Web <-> API contract. bl-02 v1 APPROVED by the owner 2026-10-07 (incl. A8/A11/A13/A14 changes).
+    Tag 'format' (bl-17) is still a DRAFT awaiting owner approval; grading v2 changes (provisional, minReviewers) are not in yet.
     Specs: docs/specs/architecture.md, docs/specs/grading.md, docs/specs/draw.md.
     Conventions:
       - Auth via httpOnly cookies: bl_access (JWT 15 min, path /), bl_refresh (7 days, path /api/v1/auth),
@@ -1141,7 +1142,7 @@ components:
         id: { type: string, format: uuid }
         eventId: { type: string, format: uuid }
         version: { type: integer }
-        status: { type: string, enum: [preview, published, superseded, locked] }
+        status: { type: string, enum: [preview, published, discarded, superseded, locked], description: 'discarded = preview not chosen once another version was published (draw.md §6)' }
         sameTeamR1Count: { type: integer }
         createdAt: { type: string, format: date-time }
         createdBy: { type: string, format: uuid }
