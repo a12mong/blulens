@@ -1068,6 +1068,43 @@ paths:
       responses:
         '201': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
         '409': { description: 'GROUP_STAGE_NOT_CONFIRMED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /events/{eventId}/matches:
+    get:
+      tags: [format]
+      summary: 'Matches of an event (schedule, results). Public roles see scheduled/reported/confirmed (reported shown as awaiting confirmation)'
+      x-roles: [Guest, Member, Reviewer, Umpire, Committee, Admin]
+      parameters:
+        - { $ref: '#/components/parameters/EventId' }
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, bye, reported, confirmed, walkover, void] } }
+        - { name: stage, in: query, schema: { type: string, enum: [group, knockout, third_place] } }
+        - { name: round, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Match' } }
+  /matches:
+    get:
+      tags: [format]
+      summary: 'Committee results queue across events, e.g. ?status=reported'
+      x-roles: [Committee]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, reported, confirmed] } }
+        - { name: eventId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Match' } }
+                  nextCursor: { type: [string, 'null'] }
   /matches/{matchId}/result:
     put:
       tags: [format]
@@ -1637,6 +1674,8 @@ components:
                   properties:
                     matchNo: { type: integer }
                     top: { type: [string, 'null'], format: uuid, description: entryId }
+                    topEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
+                    bottomEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
                     bottom: { type: [string, 'null'], format: uuid }
                     winner: { type: [string, 'null'], format: uuid }
                     status: { type: string, enum: [scheduled, bye, reported, confirmed, walkover] }
@@ -1681,6 +1720,8 @@ components:
         round: { type: integer }
         a: { type: [string, 'null'], format: uuid, description: entryId }
         b: { type: [string, 'null'], format: uuid }
+        aEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
+        bEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
         games: { type: array, items: { type: object, properties: { a: { type: integer }, b: { type: integer } } } }
         result: { type: [string, 'null'], enum: [a_win, b_win, draw, walkover_a, walkover_b, void, null] }
         status: { type: string, enum: [scheduled, bye, reported, confirmed, walkover, void], description: 'standings and knockout progression count confirmed only' }
@@ -1698,6 +1739,15 @@ components:
         userId: { type: string, format: uuid }
         displayName: { type: string, readOnly: true }
         courts: { type: array, items: { type: string }, description: 'empty = all courts of the event' }
+    EntryRef:
+      type: object
+      description: 'compact entry label for brackets/standings/matches; public-safe (no grade unless visible per A14)'
+      properties:
+        entryId: { type: string, format: uuid }
+        displayName: { type: string, description: 'pair name, or the player names joined with " / "' }
+        players: { type: array, items: { type: object, properties: { userId: { type: string, format: uuid }, displayName: { type: string } } } }
+        teamNames: { type: array, items: { type: string }, description: clubs picked for this entry }
+        gradeLabel: { type: [string, 'null'], description: 'GradeView.label only when the entry grade is public/disclosed (A14), else null' }
     Group:
       type: object
       properties:
@@ -1717,6 +1767,7 @@ components:
       properties:
         groupId: { type: string, format: uuid }
         entryId: { type: string, format: uuid }
+        entry: { $ref: '#/components/schemas/EntryRef' }
         rank: { type: integer }
         played: { type: integer }
         won: { type: integer }
