@@ -266,6 +266,10 @@ export class ReviewsService {
         },
       });
 
+      if (assignment.kind === 'assessment' && assignment.assessmentId) {
+        await tx.$queryRaw`SELECT id FROM assessments WHERE id = ${assignment.assessmentId}::uuid FOR UPDATE`;
+      }
+
       const { count } = await tx.reviewAssignment.updateMany({
         where: {
           id: assignmentId,
