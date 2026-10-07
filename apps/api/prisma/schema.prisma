@@ -226,6 +226,8 @@ model Assessment {
   eventId         String?                @map("event_id") @db.Uuid
   /// Locked at submit; every review of this request uses the same rubric.
   rubricId        String?                @map("rubric_id") @db.Uuid
+  /// Member's context for the assigned reviewers and the Committee (e.g. "clip 2 = doubles, I'm on the left").
+  note            String?                @db.VarChar(1000)
   status          AssessmentStatus       @default(draft)
   /// Copied from events.min_reviewers, or the system default 2 for standalone requests (G3'). CHECK 1..5.
   reviewsRequired Int                    @default(2) @map("reviews_required") @db.SmallInt
