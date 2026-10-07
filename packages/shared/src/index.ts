@@ -5,3 +5,4 @@ export * from './draw';
 export * from './grading';
 export * from './schemas/auth';
 export * from './constants/permissions';
+export * from './teams';
