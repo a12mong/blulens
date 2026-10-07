@@ -84,11 +84,12 @@
 | RG-07 | **unique ระดับ DB (race)** | สร้างทีม 2 ชื่อที่ normalize เท่ากันพร้อมกัน | DB มี unique บนค่า normalized; ตัวที่สองได้ 409 | I: Promise.all |
 
 ### 3.2 อัปโหลดคลิป (MinIO) — ความล้มเหลว
+สถานะ canonical ของ Clip (docs/api/openapi.yaml): `pending_upload | uploaded | rejected`
 | ID | เคส | Setup | พฤติกรรมที่คาดหวัง | Automated check |
 |---|---|---|---|---|
-| RG-08 | **MinIO ล่ม/timeout** | หยุด MinIO หรือ mock S3 throw | ผู้ใช้เห็นข้อความล้มเหลว + retry ได้; **ไม่มี row คลิปชี้ object ที่ไม่มี** (ไม่ค้าง `ready`) | I (compose MinIO, stop กลางเทส) |
-| RG-09 | **ขาดกลางทาง/ปิดเบราว์เซอร์** | multipart ไม่ครบ | row `uploading` ถูก job เก็บกวาด (expire) ลบ part ค้าง; คลิปไม่ถูกมอบหมายจนกว่า `ready` | I: fake clock + cleanup job |
-| RG-10 | **ไฟล์ผิดชนิด/ใหญ่เกิน/ว่าง/เสีย** | `.exe` ปลอมเป็น `.mp4`, 0 byte, เกินขีดจำกัด, header เสีย | ตรวจ magic bytes ไม่เชื่อ extension/Content-Type; 413/415/422; ไม่เก็บไฟล์ | I: fixture เล็กสร้างใน test |
+| RG-08 | **MinIO ล่ม/timeout** | หยุด MinIO หรือ mock S3 throw | ผู้ใช้เห็นข้อความล้มเหลว + retry ได้; **ไม่มี row คลิปชี้ object ที่ไม่มี** (ไม่ค้าง `uploaded` โดยไม่มี object; ค้างได้เฉพาะ `pending_upload`) | I (compose MinIO, stop กลางเทส) |
+| RG-09 | **ขาดกลางทาง/ปิดเบราว์เซอร์** | multipart ไม่ครบ | row `pending_upload` ถูก job เก็บกวาด (expire) ลบ part ค้าง; คลิปไม่ถูกมอบหมายจนกว่า `uploaded` | I: fake clock + cleanup job |
+| RG-10 | **ไฟล์ผิดชนิด/ใหญ่เกิน/ว่าง/เสีย** | `.exe` ปลอมเป็น `.mp4`, 0 byte, เกินขีดจำกัด, header เสีย | ตรวจ magic bytes ไม่เชื่อ extension/Content-Type; 413/415/422 หรือ clip `status = rejected` ตาม openapi; ไม่เก็บไฟล์ | I: fixture เล็กสร้างใน test |
 | RG-11 | **อัปโหลดซ้ำ** | กดส่งซ้ำ/checksum เดียวกัน | idempotent: ไม่มีสองแถว; object key ไม่ชนข้ามผู้ใช้ | I |
 | RG-12 | **สิทธิ์และ presigned URL** | Guest/Member อื่นขออัปโหลด/ดู; URL หมดอายุ | 403; URL หมดอายุใช้ไม่ได้; กรรมการเข้าถึงเฉพาะคลิปที่ถูกมอบหมาย | I |
 
