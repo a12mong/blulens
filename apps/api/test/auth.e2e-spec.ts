@@ -46,7 +46,17 @@ describe('auth (bl-10 platform)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: { startsWith: 'auth-' }, AND: { email: { endsWith: '@test.local' } } } });
+    // The dev DB is shared: another agent's UI session may already have used a test user (e.g. picked it as a
+    // player). Delete what we can and disable the rest so it never shows in pickers.
+    const users = await prisma.user.findMany({
+      where: { email: { startsWith: 'auth-', endsWith: '@test.local' } },
+      select: { id: true },
+    });
+    for (const u of users) {
+      await prisma.user.delete({ where: { id: u.id } }).catch(() =>
+        prisma.user.update({ where: { id: u.id }, data: { status: 'disabled' } }),
+      );
+    }
     await prisma.$disconnect();
     await app.close();
   });
