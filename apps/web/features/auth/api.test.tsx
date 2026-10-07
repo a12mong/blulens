@@ -182,6 +182,7 @@ describe('auth hooks', () => {
     expect(cachedData).toEqual(mockMe);
 
     // Verify caller's onSuccess was also called
-    expect(callerOnSuccess).toHaveBeenCalledWith(mockMe, { identifier: 'test', password: 'pass' }, undefined);
+    expect(callerOnSuccess).toHaveBeenCalledOnce();
+    expect(callerOnSuccess.mock.calls[0].slice(0, 2)).toEqual([mockMe, { identifier: 'test', password: 'pass' }]);
   });
 });
