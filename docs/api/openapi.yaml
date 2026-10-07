@@ -131,10 +131,103 @@ paths:
                 shortName: { type: string, maxLength: 16 }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Team' } } } }
+  /teams/suggest:
+    get:
+      tags: [teams]
+      summary: Type-ahead team suggestions (names, aliases; tolerant to small typos). User must pick one (A8).
+      x-roles: [Member, Reviewer, Committee, Admin]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 8 } }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [teamId, name]
+                  properties:
+                    teamId: { type: string, format: uuid }
+                    name: { type: string }
+                    matchedAlias: { type: [string, 'null'] }
+                    distance: { type: integer, description: edit distance of the match (0 = exact/prefix) }
+  /team-requests:
+    post:
+      tags: [teams]
+      summary: Request a new team when no suggestion matches (A8)
+      x-roles: [Member, Reviewer, Committee, Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/TeamRequest' } } } }
+    get:
+      tags: [teams]
+      summary: Pending team requests
+      x-roles: [Committee, Admin]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/TeamRequest' } }
+  /team-requests/{requestId}/resolve:
+    post:
+      tags: [teams]
+      summary: Approve as a new team, alias to an existing team, or reject
+      x-roles: [Committee, Admin]
+      parameters: [{ name: requestId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [create_team, alias_to_team, reject] }
+                teamId: { type: string, format: uuid, description: required for alias_to_team }
+                reason: { type: string }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TeamRequest' } } } }
+  /me/teams:
+    post:
+      tags: [teams]
+      summary: Member joins a team (several teams allowed, A11). Response carries the resulting team count.
+      x-roles: [Member]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teamId]
+              properties:
+                teamId: { type: string, format: uuid }
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  teams: { type: array, items: { $ref: '#/components/schemas/Team' } }
+                  teamCount: { type: integer }
+                  warnings: { type: array, items: { type: string, enum: [MULTI_TEAM] } }
   /teams/{teamId}/members:
     post:
       tags: [teams]
-      summary: Add a user to a team from a date (memberships are dated; draw uses membership on draw date)
+      summary: Add a user to a team from a date (several concurrent teams allowed; dated; draw uses memberships on draw date)
       x-roles: [Committee, Admin]
       parameters: [{ $ref: '#/components/parameters/TeamId' }]
       requestBody:
@@ -165,6 +258,7 @@ paths:
               type: object
               properties:
                 note: { type: string, maxLength: 1000 }
+                eventId: { type: string, format: uuid, description: 'A13: event-bound assessment for an event with requiresFreshAssessment' }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Assessment' } } } }
     get:
@@ -454,7 +548,49 @@ paths:
                 playerIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 2 }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
-        '409': { description: 'ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '409': { description: 'ENTRY_GRADE_OUT_OF_BAND | ENTRIES_CLOSED | NO_APPROVED_GRADE | FRESH_ASSESSMENT_REQUIRED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /entries/{entryId}/grade-consent:
+    put:
+      tags: [tournaments]
+      summary: A player of the entry gives/withdraws consent to show the entry grade (A14). Doubles = both must consent.
+      x-roles: [Member]
+      parameters: [{ name: entryId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consent]
+              properties:
+                consent: { type: boolean }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
+  /events/{eventId}/grades/disclose:
+    post:
+      tags: [tournaments]
+      summary: Transparency function, disclose all entry grades of the event regardless of consent (A14; audited, players notified)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuditedReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
+    delete:
+      tags: [tournaments]
+      summary: Revoke the disclosure (reason required; audited)
+      x-roles: [Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuditedReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
   /entries/{entryId}/withdraw:
     post:
       tags: [tournaments]
@@ -725,7 +861,7 @@ components:
         id: { type: string, format: uuid }
         displayName: { type: string }
         roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
-        teamId: { type: [string, 'null'], format: uuid }
+        teamIds: { type: array, items: { type: string, format: uuid }, description: 'current teams (several allowed, A11)' }
     Me:
       allOf:
         - { $ref: '#/components/schemas/UserSummary' }
@@ -741,6 +877,21 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         shortName: { type: string }
+    TeamRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        requestedBy: { type: string, format: uuid }
+        status: { type: string, enum: [pending, created, aliased, rejected] }
+        teamId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+    AuditedReasonInput:
+      type: object
+      description: reason-bearing input (>= 20 chars) for audited privileged actions
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 20, maxLength: 2000 }
     TeamPage:
       type: object
       required: [items]
@@ -782,6 +933,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         subjectUserId: { type: string, format: uuid }
+        eventId: { type: [string, 'null'], format: uuid, description: 'A13 event-bound assessment' }
         status: { $ref: '#/components/schemas/AssessmentStatus' }
         reviewsSubmitted: { type: integer }
         reviewsRequired: { type: integer }
@@ -948,6 +1100,7 @@ components:
         gradeMin: { $ref: '#/components/schemas/GradeKey' }
         gradeMax: { $ref: '#/components/schemas/GradeKey' }
         maxEntries: { type: integer, maximum: 256 }
+        requiresFreshAssessment: { type: boolean, default: false, description: 'A13: entry needs an approved assessment bound to this event' }
     Event:
       allOf:
         - { $ref: '#/components/schemas/EventInput' }
@@ -956,6 +1109,8 @@ components:
           properties:
             id: { type: string, format: uuid }
             tournamentId: { type: string, format: uuid }
+            gradesDisclosedAt: { type: [string, 'null'], format: date-time, description: 'A14 transparency disclosure' }
+            gradesDisclosedReason: { type: [string, 'null'] }
     Entry:
       type: object
       required: [id, eventId, players, status]
@@ -970,9 +1125,13 @@ components:
             properties:
               userId: { type: string, format: uuid }
               displayName: { type: string }
-              teamId: { type: [string, 'null'], format: uuid }
-              grade: { $ref: '#/components/schemas/GradeView' }
-        seedScore: { type: number, description: singles = player score; doubles = mean of both (draw.md §3) }
+              teamIds: { type: array, items: { type: string, format: uuid } }
+              teamCount: { type: integer, description: 'teams the player currently belongs to (A11 warning when > 1)' }
+              gradeConsent: { type: boolean, description: 'A14 consent of this player' }
+              grade: { oneOf: [{ $ref: '#/components/schemas/GradeView' }, { type: 'null' }], description: 'null when hidden to the caller' }
+        seedScore: { type: [number, 'null'], description: 'singles = player score; doubles = mean of both (draw.md §3); null when hidden to the caller' }
+        gradeVisibility: { type: string, enum: [hidden, public, disclosed], description: 'A14: public = all players consented; disclosed = event transparency disclosure' }
+        warnings: { type: array, items: { type: string, enum: [MULTI_TEAM] } }
 
     # ---- draws ----
     DrawSummary:
