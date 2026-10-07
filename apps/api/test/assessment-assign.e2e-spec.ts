@@ -265,4 +265,70 @@ describe('assessment assign (bl-10 wave 3)', () => {
       .send({ reviewerIds: [reviewerId1] })
       .expect(403);
   });
+
+  it('rejects duplicate assignment to same reviewer', async () => {
+    // Create another assessment
+    const subjectCookie = cookieFor(subjectUserId, ['Member']);
+    const createRes = await http()
+      .post('/api/v1/assessments')
+      .set('Cookie', subjectCookie)
+      .send({})
+      .expect(201);
+    const dupAssessmentId = createRes.body.data.id;
+
+    // Add clip
+    await prisma.clip.create({
+      data: {
+        assessmentId: dupAssessmentId,
+        objectKey: `clip-${randomUUID()}`,
+        status: 'uploaded',
+      },
+    });
+
+    // Submit
+    await http()
+      .post(`/api/v1/assessments/${dupAssessmentId}/submit`)
+      .set('Cookie', subjectCookie)
+      .expect(200);
+
+    const committeeCookie = cookieFor(randomUUID(), ['Committee']);
+
+    // Assign reviewer1 first time
+    await http()
+      .post(`/api/v1/assessments/${dupAssessmentId}/assign`)
+      .set('Cookie', committeeCookie)
+      .send({ reviewerIds: [reviewerId1] })
+      .expect(200);
+
+    // Try to assign reviewer1 again -> 409
+    const dupRes = await http()
+      .post(`/api/v1/assessments/${dupAssessmentId}/assign`)
+      .set('Cookie', committeeCookie)
+      .send({ reviewerIds: [reviewerId1] })
+      .expect(409);
+
+    expect(dupRes.body.error?.code).toBe('REVIEWER_ALREADY_ASSIGNED');
+  });
+
+  it('rejects assignment on draft assessment', async () => {
+    // Create draft assessment (don't submit)
+    const subjectCookie = cookieFor(subjectUserId, ['Member']);
+    const createRes = await http()
+      .post('/api/v1/assessments')
+      .set('Cookie', subjectCookie)
+      .send({})
+      .expect(201);
+    const draftAssessmentId = createRes.body.data.id;
+
+    const committeeCookie = cookieFor(randomUUID(), ['Committee']);
+
+    // Try to assign to draft -> 409
+    const draftRes = await http()
+      .post(`/api/v1/assessments/${draftAssessmentId}/assign`)
+      .set('Cookie', committeeCookie)
+      .send({ reviewerIds: [reviewerId1] })
+      .expect(409);
+
+    expect(draftRes.body.error?.code).toBe('ASSESSMENT_NOT_ASSIGNABLE');
+  });
 });
