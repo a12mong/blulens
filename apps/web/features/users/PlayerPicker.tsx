@@ -1,21 +1,21 @@
 'use client';
 
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { useRequestTeam, useTeamSuggestions, type TeamSuggestion } from './api';
+import { usePlayerSearch, type UserSummary } from './api';
 
-export type TeamValue = {
-  teamId: string;
-  name: string;
+export type PlayerValue = {
+  userId: string;
+  displayName: string;
 };
 
-export type TeamComboboxProps = {
-  value: TeamValue | null;
-  onChange: (v: TeamValue | null) => void;
+export type PlayerPickerProps = {
+  value: PlayerValue | null;
+  onChange: (v: PlayerValue | null) => void;
 };
 
-export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
+export function PlayerPicker({ value, onChange }: PlayerPickerProps) {
   const listboxId = useId();
-  const [inputValue, setInputValue] = useState(value?.name ?? '');
+  const [inputValue, setInputValue] = useState(value?.displayName ?? '');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
@@ -27,7 +27,7 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
       isTypingRef.current = false;
       return;
     }
-    setInputValue(value?.name ?? '');
+    setInputValue(value?.displayName ?? '');
   }, [value]);
 
   useEffect(() => {
@@ -37,17 +37,9 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
     return () => clearTimeout(timer);
   }, [inputValue]);
 
-  const { data: suggestions, isLoading } = useTeamSuggestions(debouncedQuery, {
+  const { data: players, isLoading } = usePlayerSearch(debouncedQuery, {
     enabled: isOpen && debouncedQuery.trim().length >= 1,
   });
-
-  const requestTeamMutation = useRequestTeam();
-
-  useEffect(() => {
-    if (requestTeamMutation.isSuccess || requestTeamMutation.isError) {
-      requestTeamMutation.reset();
-    }
-  }, [debouncedQuery]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     isTypingRef.current = true;
@@ -58,10 +50,10 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
     setSelectedIndex(-1);
   };
 
-  const handleSelect = (item: TeamSuggestion) => {
+  const handleSelect = (item: UserSummary) => {
     isTypingRef.current = false;
-    onChange({ teamId: item.teamId, name: item.name });
-    setInputValue(item.name);
+    onChange({ userId: item.id, displayName: item.displayName });
+    setInputValue(item.displayName);
     setIsOpen(false);
     setSelectedIndex(-1);
   };
@@ -80,20 +72,20 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
       return;
     }
 
-    if (!suggestions || suggestions.length === 0) {
+    if (!players || players.length === 0) {
       return;
     }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+      setSelectedIndex((prev) => (prev < players.length - 1 ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : players.length - 1));
     } else if (e.key === 'Enter') {
-      if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+      if (selectedIndex >= 0 && selectedIndex < players.length) {
         e.preventDefault();
-        handleSelect(suggestions[selectedIndex]);
+        handleSelect(players[selectedIndex]);
       }
     }
   };
@@ -105,12 +97,12 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
     setIsOpen(false);
   };
 
-  const showNoMatch = Boolean(
+  const showEmpty = Boolean(
     isOpen &&
       debouncedQuery.trim().length >= 1 &&
       !isLoading &&
-      suggestions &&
-      suggestions.length === 0,
+      players &&
+      players.length === 0,
   );
 
   return (
@@ -121,11 +113,11 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-activedescendant={
-          selectedIndex >= 0 && suggestions && selectedIndex < suggestions.length
+          selectedIndex >= 0 && players && selectedIndex < players.length
             ? `${listboxId}-option-${selectedIndex}`
             : undefined
         }
-        data-testid="team-input"
+        data-testid="player-input"
         value={inputValue}
         onChange={handleInputChange}
         onFocus={() => {
@@ -139,22 +131,22 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
 
       {isOpen && debouncedQuery.trim().length >= 1 && (
         <div className="absolute z-10 w-full mt-1 border rounded bg-card shadow-md">
-          {suggestions && suggestions.length > 0 ? (
+          {players && players.length > 0 ? (
             <ul
               role="listbox"
               id={listboxId}
-              data-testid="team-options"
+              data-testid="player-options"
               className="max-h-60 overflow-auto"
             >
-              {suggestions.map((item, index) => {
+              {players.map((item, index) => {
                 const isSelected = selectedIndex === index;
                 return (
                   <li
-                    key={item.teamId}
+                    key={item.id}
                     id={`${listboxId}-option-${index}`}
                     role="option"
                     aria-selected={isSelected}
-                    data-testid="team-option"
+                    data-testid="player-option"
                     className={`px-3 py-1.5 text-sm cursor-pointer flex items-center justify-between ${
                       isSelected
                         ? 'bg-primary text-primary-foreground'
@@ -163,38 +155,19 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleSelect(item)}
                   >
-                    <span>{item.name}</span>
-                    {item.matchedAlias ? (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        (ชื่อเดิม: {item.matchedAlias})
-                      </span>
-                    ) : null}
+                    <span>{item.displayName}</span>
                   </li>
                 );
               })}
             </ul>
-          ) : showNoMatch ? (
+          ) : showEmpty ? (
             <div className="p-2">
-              {requestTeamMutation.isSuccess ? (
-                <p
-                  role="status"
-                  data-testid="team-request-sent"
-                  className="text-xs text-muted-foreground"
-                >
-                  ส่งคำขอแล้ว รอคณะกรรมการอนุมัติ
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  data-testid="team-request-new"
-                  onClick={() =>
-                    requestTeamMutation.mutate({ name: debouncedQuery.trim() })
-                  }
-                  className="text-xs text-primary hover:underline cursor-pointer"
-                >
-                  {`ขอเพิ่มทีม "${debouncedQuery.trim()}"`}
-                </button>
-              )}
+              <p
+                data-testid="player-empty"
+                className="text-xs text-muted-foreground text-center"
+              >
+                ไม่พบผู้เล่น
+              </p>
             </div>
           ) : null}
         </div>
@@ -203,4 +176,4 @@ export function TeamCombobox({ value, onChange }: TeamComboboxProps) {
   );
 }
 
-export default TeamCombobox;
+export default PlayerPicker;
