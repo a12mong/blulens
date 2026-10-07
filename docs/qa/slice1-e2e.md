@@ -65,3 +65,11 @@ pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ขอ�
 
 ## 7. ข้อกำหนดที่เจ้าของตัดสินแล้ว
 - เหตุผล reject ต้องยาว **อย่างน้อย 10 ตัวอักษร** (Jim; มี DB CHECK แล้ว): ปุ่ม submit ใน dialog ปิดจนกว่าจะครบ 10; ขอบที่ต้องทดสอบคือ 9 ตัว = ปิด, 10 ตัว = เปิด; API คืน 400 สำหรับ < 10
+
+## 8. ผังฐานข้อมูลสุดท้าย (ตัดสินโดย god) — **ห้ามชี้ e2e มาที่ `blulens_demo` เด็ดขาด**
+| ใช้ทำอะไร | DB | หมายเหตุ |
+|---|---|---|
+| เดโมของเจ้าของ | `blulens_demo` (ใหม่; `.env.example` ตั้งเป็นค่าเริ่มต้น, card bl-26) | ข้อมูลเก่าใน DB `blulens` ไม่ถูกลบ |
+| API jest | `<DB ใน DATABASE_URL>_test` (override ด้วย `TEST_DATABASE_URL`) เช่น `blulens_demo_test` | สร้าง/migrate/seed (admin + rubric) อัตโนมัติ (bl-21-9) |
+| Playwright e2e | `blulens_e2e` (seed ด้วย `SEED_DEMO=1`) | ตามข้อ 6 |
+ก่อนรัน e2e ให้ตรวจ `DATABASE_URL` ของ API process ที่ใช้: ต้องลงท้าย `/blulens_e2e` เท่านั้น
