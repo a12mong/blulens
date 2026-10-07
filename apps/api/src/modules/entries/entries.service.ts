@@ -198,7 +198,7 @@ export class EntriesService {
       officialResults(this.prisma, userIds),
       this.prisma.teamMembership.findMany({
         where: { userId: { in: userIds }, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] },
-        select: { userId: true, teamId: true },
+        select: { userId: true, teamId: true, team: { select: { name: true } } },
       }),
       this.prisma.assessmentResult.findMany({
         where: {
@@ -209,22 +209,62 @@ export class EntriesService {
       }),
     ]);
     const teamsOf = new Map<string, string[]>();
-    for (const m of memberships) teamsOf.set(m.userId, [...(teamsOf.get(m.userId) ?? []), m.teamId]);
+    const teamNamesOf = new Map<string, string[]>();
+    for (const m of memberships) {
+      teamsOf.set(m.userId, [...(teamsOf.get(m.userId) ?? []), m.teamId]);
+      const names = teamNamesOf.get(m.userId) ?? [];
+      names.push(m.team.name);
+      teamNamesOf.set(m.userId, names.sort());
+    }
     const fresh = new Set(eventBound.map((r) => `${r.assessment.eventId}:${r.assessment.subjectUserId}`));
 
     return rows.map((r) => {
       const visibility = r.event.gradesDisclosedAt ? 'disclosed' : r.players.every((p) => p.gradeConsent) ? 'public' : 'hidden';
       const showGrades = isStaff(viewer) || visibility !== 'hidden';
       const warnings = new Set<EntryWarning>();
+      const warningDetails: { code: EntryWarning; userId: string | null; displayName: string | null; teamNames: string[]; gradeLabel: string | null }[] = [];
       const players = r.players.map((p) => {
         const teamIds = (teamsOf.get(p.userId) ?? []).sort();
         const result = official.get(p.userId);
-        if (teamIds.length > 1) warnings.add('MULTI_TEAM');
-        if (!result) warnings.add('NO_APPROVED_GRADE');
-        else if (result.centerIndex !== null && (result.centerIndex < r.event.gradeMinIndex || result.centerIndex > r.event.gradeMaxIndex)) {
-          warnings.add('GRADE_OUT_OF_BAND');
+        if (teamIds.length > 1) {
+          warnings.add('MULTI_TEAM');
+          warningDetails.push({
+            code: 'MULTI_TEAM',
+            userId: p.userId,
+            displayName: p.user.displayName,
+            teamNames: teamNamesOf.get(p.userId) ?? [],
+            gradeLabel: null,
+          });
         }
-        if (r.event.requiresFreshAssessment && !fresh.has(`${r.eventId}:${p.userId}`)) warnings.add('FRESH_ASSESSMENT_REQUIRED');
+        if (!result) {
+          warnings.add('NO_APPROVED_GRADE');
+          warningDetails.push({
+            code: 'NO_APPROVED_GRADE',
+            userId: p.userId,
+            displayName: p.user.displayName,
+            teamNames: [],
+            gradeLabel: null,
+          });
+        } else if (result.centerIndex !== null && (result.centerIndex < r.event.gradeMinIndex || result.centerIndex > r.event.gradeMaxIndex)) {
+          warnings.add('GRADE_OUT_OF_BAND');
+          warningDetails.push({
+            code: 'GRADE_OUT_OF_BAND',
+            userId: p.userId,
+            displayName: p.user.displayName,
+            teamNames: [],
+            gradeLabel: result.label,
+          });
+        }
+        if (r.event.requiresFreshAssessment && !fresh.has(`${r.eventId}:${p.userId}`)) {
+          warnings.add('FRESH_ASSESSMENT_REQUIRED');
+          warningDetails.push({
+            code: 'FRESH_ASSESSMENT_REQUIRED',
+            userId: p.userId,
+            displayName: p.user.displayName,
+            teamNames: [],
+            gradeLabel: null,
+          });
+        }
         return {
           userId: p.userId,
           displayName: p.user.displayName,
@@ -240,6 +280,13 @@ export class EntriesService {
         showGrades && scores.every((s) => s !== null && s !== undefined)
           ? scores.reduce((a, s) => a + Number(s), 0) / scores.length
           : null;
+      // Sort warningDetails by code, then by player order
+      const sortedWarningDetails = warningDetails.sort((a, b) => {
+        if (a.code !== b.code) return a.code.localeCompare(b.code);
+        const aIdx = r.players.findIndex((p) => p.userId === a.userId);
+        const bIdx = r.players.findIndex((p) => p.userId === b.userId);
+        return aIdx - bIdx;
+      });
       return {
         id: r.id,
         eventId: r.eventId,
@@ -255,6 +302,7 @@ export class EntriesService {
         gradeVisibility: visibility,
         // warnings are Committee information; others get none
         warnings: isStaff(viewer) ? [...warnings].sort() : [],
+        warningDetails: isStaff(viewer) ? sortedWarningDetails : [],
       };
     });
   }

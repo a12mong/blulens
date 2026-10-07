@@ -179,4 +179,55 @@ describe('entries (bl-21 demo slice)', () => {
     await http().post(`/api/v1/events/${eventId}/entries`).set('Cookie', cookieFor(randomUUID(), ['Member']))
       .send({ players: [{ userId: b }, { userId: c }] }).expect(403);
   });
+
+  it('populates warningDetails per player and warning code (bl-21-12)', async () => {
+    // Create 2 clubs and 2 players:
+    // Player A: in 2 clubs (triggers MULTI_TEAM)
+    // Player B: grade 2 (outside event S-=6..N=10) (triggers GRADE_OUT_OF_BAND)
+    const team1 = await team('warn-team1');
+    const team2 = await team('warn-team2');
+    const playerA = await player('warn-a', 7, [team1, team2]); // S (grade 7), in 2 teams
+    const playerB = await player('warn-b', 2); // grade 2, outside [6,10]
+
+    // Create entry
+    const created = await http().post(`/api/v1/events/${eventId}/entries`).set('Cookie', adminCommittee)
+      .send({ players: [{ userId: playerA, teamId: team1 }, { userId: playerB }] }).expect(201);
+    const entry = created.body.data;
+
+    // As Committee: verify warningDetails
+    expect(entry.warnings).toContain('MULTI_TEAM');
+    expect(entry.warnings).toContain('GRADE_OUT_OF_BAND');
+    expect(entry.warningDetails).toHaveLength(2);
+    // Should be sorted by code: GRADE_OUT_OF_BAND before MULTI_TEAM
+    const gradeOob = entry.warningDetails.find((d: any) => d.code === 'GRADE_OUT_OF_BAND');
+    const multiTeam = entry.warningDetails.find((d: any) => d.code === 'MULTI_TEAM');
+    expect(gradeOob).toMatchObject({
+      code: 'GRADE_OUT_OF_BAND',
+      userId: playerB,
+      displayName: expect.stringContaining('warn-b'),
+      teamNames: [],
+      gradeLabel: 'g2',
+    });
+    expect(multiTeam).toMatchObject({
+      code: 'MULTI_TEAM',
+      userId: playerA,
+      displayName: expect.stringContaining('warn-a'),
+      teamNames: expect.arrayContaining([expect.stringContaining('warn-team')]),
+      gradeLabel: null,
+    });
+
+    // Verify team names are sorted
+    expect(multiTeam.teamNames.length).toBe(2);
+    expect(multiTeam.teamNames[0] <= multiTeam.teamNames[1]).toBe(true);
+
+    // Forward and approve entry to make it visible to others
+    await http().post(`/api/v1/entries/${entry.id}/forward`).set('Cookie', adminCommittee).expect(200);
+    await http().post(`/api/v1/entries/${entry.id}/approve`).set('Cookie', committee)
+      .send({ reason: 'test approval for warningDetails visibility' }).expect(200);
+
+    // As Member: verify warningDetails is empty
+    const memberRes = await http().get(`/api/v1/events/${eventId}/entries`).set('Cookie', cookieFor(randomUUID(), ['Member'])).expect(200);
+    const memberView = memberRes.body.data.find((e: any) => e.id === entry.id);
+    expect(memberView?.warningDetails).toEqual([]);
+  });
 });
