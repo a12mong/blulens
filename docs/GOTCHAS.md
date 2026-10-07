@@ -16,3 +16,8 @@
 ## API e2e: env in Jest
 - `process.loadEnvFile` inside a Jest setup file does not reach the test (Jest gives each test file its own copy of `process.env`). `apps/api/test/setup-env.ts` parses the root `.env` with `util.parseEnv` and assigns into `process.env` instead.
 - e2e tests need the shared package built once in a fresh worktree: `pnpm --filter @blulens/shared build`.
+
+## Web (เครื่อง dev นี้): `next build` ล้มด้วย `<Html> should not be imported outside of pages/_document`
+- สาเหตุ: เครื่องตั้ง `NODE_ENV` เป็นค่าไม่มาตรฐาน — รันแบบ `NODE_ENV=production pnpm --filter @blulens/web build`
+- `pnpm --filter @blulens/web typecheck` ต้อง `pnpm --filter @blulens/shared build` ก่อน (ไม่งั้นหา `@blulens/shared` ไม่เจอ)
+- พอร์ต 3100 อาจถูกใช้อยู่ (เจ้าของรัน `pnpm dev`) — Dev ควรรัน dev server ของตัวเองที่พอร์ต 3190 (`next dev --port 3190`) แล้วปิดด้วย PID ของตัวเองเท่านั้น (บันทึกโดย Andy, bl-08)
