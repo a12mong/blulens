@@ -5,7 +5,7 @@
 | Tester | Model | ขอบเขต | เคส |
 |---|---|---|---|
 | Toby (`toby-muxsx85u`) | Claude | ระบบจัดเกรด: simulation, สูตร kappa, golden fixtures, outlier, สถานะ pending/insufficient, สิทธิ์ของการส่งคะแนน | GR-01..GR-20 |
-| Kelly (`kelly-muxtbxnh`) | Gemini 3.8 Flash | ระบบจับสาย (ล่าการชนกันของทีม, property test หลาย seed, re-draw, concurrent) + ชื่อทีม + อัปโหลดคลิป | DR-01..DR-19, RG-01..RG-12 |
+| Kelly (`kelly-muxtbxnh`) | Gemini 3.8 Flash | ระบบจับสาย (ล่าการชนกันของทีม, property test หลาย seed, re-draw, concurrent) + ชื่อทีม + อัปโหลดคลิป | DR-01..DR-19, RG-01..RG-28 |
 | ร่วมกัน | — | X-01..X-03 (e2e): Toby เขียน X-01, Kelly เขียน X-02/X-03 | X-* |
 
 ## เหตุผล
