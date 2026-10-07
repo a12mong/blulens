@@ -3,19 +3,20 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 // Mock the api module before importing CreateTournamentForm
-vi.mock('./api', () => ({
+vi.mock('@/features/events/api', () => ({
   useCreateTournament: vi.fn(),
   useCreateEvent: vi.fn(),
   useEventEntries: vi.fn(),
 }));
 
 import { CreateTournamentForm } from './CreateTournamentForm';
-import { useCreateTournament } from './api';
+
+const mockUseCreateTournament = vi.fn();
 
 describe('CreateTournamentForm', () => {
   it('submits TournamentInput with ISO close time', async () => {
     const mockMutate = vi.fn();
-    vi.mocked(useCreateTournament).mockReturnValue({
+    mockUseCreateTournament.mockReturnValue({
       mutate: mockMutate,
       isPending: false,
       isSuccess: false,
@@ -55,7 +56,7 @@ describe('CreateTournamentForm', () => {
 
   it('close after start blocks submit with error message', async () => {
     const mockMutate = vi.fn();
-    vi.mocked(useCreateTournament).mockReturnValue({
+    mockUseCreateTournament.mockReturnValue({
       mutate: mockMutate,
       isPending: false,
       isSuccess: false,
