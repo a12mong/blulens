@@ -28,20 +28,19 @@ export interface SeedingPlan {
 export function bracketSize(entryCount: number): number {
   if (entryCount < 2) throw new RangeError('DRAW_TOO_FEW_ENTRIES');
   if (entryCount > 256) throw new RangeError('DRAW_TOO_MANY_ENTRIES');
-  return 1 << Math.ceil(Math.log2(entryCount));
+  let s = 2;
+  while (s < entryCount) s *= 2;
+  return s;
 }
 
 /** Default number of seeds for N entries (draw.md §3, D1). Throws RangeError outside 2..256. */
 export function seedCount(entryCount: number): number {
   if (entryCount < 2) throw new RangeError('DRAW_TOO_FEW_ENTRIES');
   if (entryCount > 256) throw new RangeError('DRAW_TOO_MANY_ENTRIES');
-  const s = bracketSize(entryCount);
-  if (s <= 2) return 0;
-  if (s <= 4) return 2;
-  if (s <= 8) return 2;
-  if (s <= 16) return 4;
-  if (s <= 32) return 8;
-  if (s <= 64) return 16;
+  if (entryCount === 2) return 0;
+  if (entryCount <= 8) return 2;
+  if (entryCount <= 16) return 4;
+  if (entryCount <= 32) return 8;
   return 16;
 }
 
@@ -75,73 +74,57 @@ export function planSeeding(entries: readonly DrawEntry[], rng: Rng): SeedingPla
     seedScore: e.seedScore,
   }));
 
-  ranked.sort((a, b) => a.entryId.localeCompare(b.entryId));
+  // Sort by id ascending
+  ranked.sort((a, b) => (a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : 0));
 
-  // Group by score (while maintaining id-sorted order within each group)
-  const groups: RankedEntry[][] = [];
-  let currentGroup: RankedEntry[] = [];
-  for (const entry of ranked) {
-    if (currentGroup.length > 0 && currentGroup[0]!.seedScore !== entry.seedScore) {
-      groups.push(currentGroup);
-      currentGroup = [];
+  // Stable-sort by seedScore descending (insertion sort maintains stability)
+  for (let i = 1; i < ranked.length; i++) {
+    const key = ranked[i]!;
+    let j = i - 1;
+    while (j >= 0 && ranked[j]!.seedScore < key.seedScore) {
+      ranked[j + 1] = ranked[j]!;
+      j--;
     }
-    currentGroup.push(entry);
+    ranked[j + 1] = key;
   }
-  if (currentGroup.length > 0) groups.push(currentGroup);
 
-  // Sort groups by score descending
-  groups.sort((a, b) => b[0]!.seedScore - a[0]!.seedScore);
-
-  // Flatten groups, shuffling runs of identical scores
+  // Walk and shuffle consecutive runs of identical scores
   const result: RankedEntry[] = [];
-  for (const group of groups) {
-    const shuffled = group.length > 1 ? shuffle(group, rng) : group;
-    result.push(...shuffled);
+  let i = 0;
+  while (i < ranked.length) {
+    const score = ranked[i]!.seedScore;
+    let j = i;
+    while (j < ranked.length && ranked[j]!.seedScore === score) j++;
+    const run = ranked.slice(i, j);
+    if (run.length > 1) {
+      result.push(...shuffle(run, rng));
+    } else {
+      result.push(...run);
+    }
+    i = j;
   }
 
   // Step 4: First seedCount are seeds
   const seedList = result.slice(0, sc);
 
-  // Step 5: Rank assignment
-  // Seed 1 -> rank 1, Seed 2 -> rank 2, then shuffle groups [3..4], [5..8], [9..16]
-  const rankMap = new Map<string, number>();
-  if (sc >= 1) rankMap.set(seedList[0]!.entryId, 1);
-  if (sc >= 2) rankMap.set(seedList[1]!.entryId, 2);
+  // Step 5: Rank assignment with group shuffling
+  const rankOf = new Map<string, number>();
+  if (sc >= 1) rankOf.set(seedList[0]!.entryId, 1);
+  if (sc >= 2) rankOf.set(seedList[1]!.entryId, 2);
 
-  if (sc >= 3) {
-    const groups35: number[] = [];
-    if (sc >= 3) groups35.push(3);
-    if (sc >= 4) groups35.push(4);
-    if (groups35.length > 0) {
-      const entries35 = seedList.slice(2, 4);
-      if (entries35.length > 0) {
-        const shuffled = shuffle(entries35, rng);
-        shuffled.forEach((e, i) => rankMap.set(e.entryId, groups35[i]!));
-      }
-    }
-  }
-
-  if (sc >= 5) {
-    const groups58: number[] = [];
-    for (let i = 5; i <= Math.min(8, sc); i++) groups58.push(i);
-    if (groups58.length > 0) {
-      const entries58 = seedList.slice(4, 8);
-      if (entries58.length > 0) {
-        const shuffled = shuffle(entries58, rng);
-        shuffled.forEach((e, i) => rankMap.set(e.entryId, groups58[i]!));
-      }
-    }
-  }
-
-  if (sc >= 9) {
-    const groups916: number[] = [];
-    for (let i = 9; i <= Math.min(16, sc); i++) groups916.push(i);
-    if (groups916.length > 0) {
-      const entries916 = seedList.slice(8, 16);
-      if (entries916.length > 0) {
-        const shuffled = shuffle(entries916, rng);
-        shuffled.forEach((e, i) => rankMap.set(e.entryId, groups916[i]!));
-      }
+  const rankGroups: [number, number][] = [
+    [3, 4],
+    [5, 8],
+    [9, 16],
+  ];
+  for (const [lo, hi] of rankGroups) {
+    if (lo > sc) break;
+    const ranks: number[] = [];
+    for (let r = lo; r <= Math.min(hi, sc); r++) ranks.push(r);
+    const shuffledRanks = shuffle(ranks, rng);
+    for (let i = 0; i < shuffledRanks.length; i++) {
+      const seed = seedList[lo - 1 + i]!;
+      rankOf.set(seed.entryId, shuffledRanks[i]!);
     }
   }
 
@@ -152,7 +135,7 @@ export function planSeeding(entries: readonly DrawEntry[], rng: Rng): SeedingPla
     seeds.push({
       entryId: seed.entryId,
       seedNo: i + 1,
-      rank: rankMap.get(seed.entryId)!,
+      rank: rankOf.get(seed.entryId)!,
     });
   }
 
@@ -164,7 +147,7 @@ export function planSeeding(entries: readonly DrawEntry[], rng: Rng): SeedingPla
   const unseededIds = result
     .slice(sc)
     .map((e) => e.entryId)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
   return {
     size,

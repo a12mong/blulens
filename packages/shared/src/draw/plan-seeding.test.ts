@@ -72,6 +72,31 @@ describe('seedCount', () => {
 });
 
 describe('planSeeding', () => {
+  it('tie-breaks non-adjacent equal scores (D1 rule)', () => {
+    // Bug test: a=7.0, b=8.0, c=7.0 are not id-adjacent but have same scores
+    // After sort by id: [a,b,c]; after stable sort by score desc: [b, {a,c}]
+    // a and c must shuffle together, so seeds[1] is sometimes a, sometimes c
+    const entries: DrawEntry[] = [
+      { id: 'a', teamIds: [], seedScore: 7.0 },
+      { id: 'b', teamIds: [], seedScore: 8.0 },
+      { id: 'c', teamIds: [], seedScore: 7.0 },
+    ];
+
+    const seed2Results = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const rng = createRng(`t${i}`);
+      const result = planSeeding(entries, rng);
+      if (result.seedCount >= 2) {
+        seed2Results.add(result.seeds[1]!.entryId);
+        // b is always seed 1 (highest score 8.0)
+        expect(result.seeds[0]!.entryId).toBe('b');
+      }
+    }
+    // Both a and c should appear as seed 2 due to tie-breaking shuffle
+    expect(seed2Results).toContain('a');
+    expect(seed2Results).toContain('c');
+  });
+
   it('plans the draw.md appendix B event exactly', () => {
     const entries: DrawEntry[] = [
       { id: 'A1', teamIds: [], seedScore: 8.2 },
