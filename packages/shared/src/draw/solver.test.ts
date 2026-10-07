@@ -16,7 +16,12 @@ describe('solvePlacement', () => {
     for (let i = 0; i < 200; i++) {
       const problem: PlacementProblem = {
         slotCount: 8,
-        units: [[0, 1], [2, 3], [4, 5], [6, 7]],
+        units: [
+          [0, 1],
+          [2, 3],
+          [4, 5],
+          [6, 7],
+        ],
         fixed: new Map([
           [0, A1],
           [1, null],
@@ -48,9 +53,7 @@ describe('solvePlacement', () => {
       // Verify no two A's in same unit
       const slotsByUnit: { [k: number]: string[] } = {};
       for (let u = 0; u < 4; u++) {
-        slotsByUnit[u] = problem.units[u]!
-          .map((s) => result.slots[s])
-          .filter((x) => x);
+        slotsByUnit[u] = problem.units[u]!.map((s) => result.slots[s]).filter((x) => x);
       }
       for (const ids of Object.values(slotsByUnit)) {
         const aCount = ids.filter((id) => id?.startsWith('A')).length;
@@ -68,7 +71,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: [A1, A2, A3, B1],
     };
@@ -131,7 +137,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: [AB, B, C, CD],
     };
@@ -158,7 +167,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 8,
-      units: [[0, 1, 2, 3], [4, 5, 6, 7]],
+      units: [
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+      ],
       fixed: new Map(),
       pool: entries,
     };
@@ -178,7 +190,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: [E1, E2, E3, E4],
     };
@@ -201,7 +216,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: entries,
     };
@@ -226,14 +244,20 @@ describe('solvePlacement', () => {
 
     const problem1: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: entries,
     };
 
     const problem2: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: [...entries].reverse(),
     };
@@ -257,7 +281,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map(),
       pool: entries,
       maxSteps: 1, // Very tight budget
@@ -275,7 +302,10 @@ describe('solvePlacement', () => {
   it('validates invalid units', () => {
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [1, 2]], // Slot 1 appears twice
+      units: [
+        [0, 1],
+        [1, 2],
+      ], // Slot 1 appears twice
       fixed: new Map(),
       pool: [
         { id: 'A', teamIds: ['A'], seedScore: 10 },
@@ -292,7 +322,10 @@ describe('solvePlacement', () => {
   it('validates out-of-range fixed slots', () => {
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map([[5, null]]), // Slot 5 doesn't exist
       pool: [
         { id: 'A', teamIds: ['A'], seedScore: 10 },
@@ -308,7 +341,10 @@ describe('solvePlacement', () => {
   it('validates pool/empty-slot count mismatch', () => {
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map([[0, { id: 'A', teamIds: ['A'], seedScore: 10 }]]),
       pool: [
         { id: 'B', teamIds: ['B'], seedScore: 9 },
@@ -325,7 +361,10 @@ describe('solvePlacement', () => {
 
     const problem: PlacementProblem = {
       slotCount: 4,
-      units: [[0, 1], [2, 3]],
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
       fixed: new Map([[0, dup]]),
       pool: [
         dup, // Same entry in pool
@@ -336,5 +375,175 @@ describe('solvePlacement', () => {
 
     const rng = createRng('test');
     expect(() => solvePlacement(problem, rng)).toThrow('DRAW_DUPLICATE_ENTRY');
+  });
+
+  it('keeps unavoidable clashes away from seeds and on the lowest scores', () => {
+    // SEED-PROTECTED: slotCount 4, units [[0,1],[2,3]], fixed {0: A1 (team A, seedScore 9)},
+    // pool A2 (A, 8), A3 (A, 7), B1 (B, 6)
+    // -> slots ['A1','B1', A2/A3 in slots 2-3 in either order];
+    //    conflicts = [{unitIndex 1, entryIds ['A2','A3'], teamIds ['A']}];
+    //    minimumPossibleConflicts 1; provenMinimal true.
+    const seedProtectedA1: DrawEntry = { id: 'A1', teamIds: ['A'], seedScore: 9 };
+    const seedProtectedPool: DrawEntry[] = [
+      { id: 'A2', teamIds: ['A'], seedScore: 8 },
+      { id: 'A3', teamIds: ['A'], seedScore: 7 },
+      { id: 'B1', teamIds: ['B'], seedScore: 6 },
+    ];
+    const seedProtectedProblem: PlacementProblem = {
+      slotCount: 4,
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
+      fixed: new Map([[0, seedProtectedA1]]),
+      pool: seedProtectedPool,
+    };
+
+    // LOWEST-SCORES-CLASH: slotCount 6, units [[0,1],[2,3],[4,5]], no fixed,
+    // pool A1 (A,9), A2 (A,8), A3 (A,7), A4 (A,6), B1 (B,5), C1 (C,4)
+    // -> exactly 1 conflict and its entryIds are ['A3','A4'] (sum 13 is the smallest possible); provenMinimal true.
+    const lowestScoresPool: DrawEntry[] = [
+      { id: 'A1', teamIds: ['A'], seedScore: 9 },
+      { id: 'A2', teamIds: ['A'], seedScore: 8 },
+      { id: 'A3', teamIds: ['A'], seedScore: 7 },
+      { id: 'A4', teamIds: ['A'], seedScore: 6 },
+      { id: 'B1', teamIds: ['B'], seedScore: 5 },
+      { id: 'C1', teamIds: ['C'], seedScore: 4 },
+    ];
+    const lowestScoresProblem: PlacementProblem = {
+      slotCount: 6,
+      units: [
+        [0, 1],
+        [2, 3],
+        [4, 5],
+      ],
+      fixed: new Map(),
+      pool: lowestScoresPool,
+    };
+
+    for (let i = 0; i < 50; i++) {
+      const seed = `f${i}`;
+
+      // Check SEED-PROTECTED
+      const resSP = solvePlacement(seedProtectedProblem, createRng(seed));
+      expect(resSP.slots[0]).toBe('A1');
+      expect(resSP.slots[1]).toBe('B1');
+      expect(['A2', 'A3']).toContain(resSP.slots[2]);
+      expect(['A2', 'A3']).toContain(resSP.slots[3]);
+      expect(resSP.slots[2]).not.toBe(resSP.slots[3]);
+      expect(resSP.conflicts).toEqual([{ unitIndex: 1, entryIds: ['A2', 'A3'], teamIds: ['A'] }]);
+      expect(resSP.minimumPossibleConflicts).toBe(1);
+      expect(resSP.provenMinimal).toBe(true);
+
+      // Check LOWEST-SCORES-CLASH
+      const resLS = solvePlacement(lowestScoresProblem, createRng(seed));
+      expect(resLS.conflicts).toHaveLength(1);
+      expect(resLS.conflicts[0]!.entryIds).toEqual(['A3', 'A4']);
+      expect(resLS.conflicts[0]!.teamIds).toEqual(['A']);
+      expect(resLS.minimumPossibleConflicts).toBe(1);
+      expect(resLS.provenMinimal).toBe(true);
+    }
+  });
+
+  it('produces deterministic results for SEED-PROTECTED and LOWEST-SCORES-CLASH over seeds f0..f49', () => {
+    const seedProtectedProblem: PlacementProblem = {
+      slotCount: 4,
+      units: [
+        [0, 1],
+        [2, 3],
+      ],
+      fixed: new Map([[0, { id: 'A1', teamIds: ['A'], seedScore: 9 }]]),
+      pool: [
+        { id: 'A2', teamIds: ['A'], seedScore: 8 },
+        { id: 'A3', teamIds: ['A'], seedScore: 7 },
+        { id: 'B1', teamIds: ['B'], seedScore: 6 },
+      ],
+    };
+
+    const lowestScoresProblem: PlacementProblem = {
+      slotCount: 6,
+      units: [
+        [0, 1],
+        [2, 3],
+        [4, 5],
+      ],
+      fixed: new Map(),
+      pool: [
+        { id: 'A1', teamIds: ['A'], seedScore: 9 },
+        { id: 'A2', teamIds: ['A'], seedScore: 8 },
+        { id: 'A3', teamIds: ['A'], seedScore: 7 },
+        { id: 'A4', teamIds: ['A'], seedScore: 6 },
+        { id: 'B1', teamIds: ['B'], seedScore: 5 },
+        { id: 'C1', teamIds: ['C'], seedScore: 4 },
+      ],
+    };
+
+    for (let i = 0; i < 50; i++) {
+      const seed = `f${i}`;
+      const sp1 = solvePlacement(seedProtectedProblem, createRng(seed));
+      const sp2 = solvePlacement(seedProtectedProblem, createRng(seed));
+      expect(sp1).toEqual(sp2);
+
+      const ls1 = solvePlacement(lowestScoresProblem, createRng(seed));
+      const ls2 = solvePlacement(lowestScoresProblem, createRng(seed));
+      expect(ls1).toEqual(ls2);
+    }
+  });
+
+  it('returns complete placement with no duplicate ids under tight budget for LOWEST-SCORES-CLASH', () => {
+    const lowestScoresProblem: PlacementProblem = {
+      slotCount: 6,
+      units: [
+        [0, 1],
+        [2, 3],
+        [4, 5],
+      ],
+      fixed: new Map(),
+      pool: [
+        { id: 'A1', teamIds: ['A'], seedScore: 9 },
+        { id: 'A2', teamIds: ['A'], seedScore: 8 },
+        { id: 'A3', teamIds: ['A'], seedScore: 7 },
+        { id: 'A4', teamIds: ['A'], seedScore: 6 },
+        { id: 'B1', teamIds: ['B'], seedScore: 5 },
+        { id: 'C1', teamIds: ['C'], seedScore: 4 },
+      ],
+      maxSteps: 3,
+    };
+
+    const result = solvePlacement(lowestScoresProblem, createRng('f0'));
+    expect(result.slots).toHaveLength(6);
+    expect(result.slots.filter((s) => s !== null)).toHaveLength(6);
+    expect(new Set(result.slots).size).toBe(6);
+  });
+
+  it('fixes provenMinimal bug when search exhausts and first-fit yields non-minimal clashes', () => {
+    const problem: PlacementProblem = {
+      slotCount: 6,
+      units: [
+        [0, 1],
+        [2, 3],
+        [4, 5],
+      ],
+      fixed: new Map(),
+      pool: [
+        { id: 'A1', teamIds: ['A'], seedScore: 9 },
+        { id: 'A2', teamIds: ['A'], seedScore: 8 },
+        { id: 'A3', teamIds: ['A'], seedScore: 7 },
+        { id: 'A4', teamIds: ['A'], seedScore: 6 },
+        { id: 'B1', teamIds: ['B'], seedScore: 5 },
+        { id: 'C1', teamIds: ['C'], seedScore: 4 },
+      ],
+      maxSteps: 1000,
+    };
+
+    const result = solvePlacement(problem, createRng('seed0'));
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.minimumPossibleConflicts).toBe(1);
+    expect(result.provenMinimal).toBe(true);
+
+    const tightResult = solvePlacement({ ...problem, maxSteps: 3 }, createRng('seed0'));
+    if (tightResult.conflicts.length > tightResult.minimumPossibleConflicts) {
+      expect(tightResult.provenMinimal).toBe(false);
+    }
   });
 });
