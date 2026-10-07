@@ -46,6 +46,15 @@ export class ReviewsController {
   }
 
   @Roles('Reviewer')
+  @Get('reviews/assignments/:assignmentId')
+  assignmentDetail(
+    @Param('assignmentId', uuid) assignmentId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.reviewsService.getAssignmentDetail(assignmentId, user);
+  }
+
+  @Roles('Reviewer')
   @Put('reviews/assignments/:assignmentId')
   submit(
     @Param('assignmentId', uuid) assignmentId: string,
