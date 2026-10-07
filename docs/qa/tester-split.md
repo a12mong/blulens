@@ -5,7 +5,7 @@
 | Tester | Model | ขอบเขต | เคส |
 |---|---|---|---|
 | Toby (`toby-muxsx85u`) | Claude | ระบบจัดเกรด: simulation, สูตร kappa, golden fixtures, outlier, สถานะ pending/insufficient, สิทธิ์ของการส่งคะแนน | GR-01..GR-20 |
-| Kelly (`kelly-muxtbxnh`) | Gemini 3.8 Flash | ระบบจับสาย (ล่าการชนกันของทีม, property test หลาย seed, re-draw, concurrent) + ชื่อทีม + อัปโหลดคลิป | DR-01..DR-15, RG-01..RG-12 |
+| Kelly (`kelly-muxtbxnh`) | Gemini 3.8 Flash | ระบบจับสาย (ล่าการชนกันของทีม, property test หลาย seed, re-draw, concurrent) + ชื่อทีม + อัปโหลดคลิป | DR-01..DR-19, RG-01..RG-12 |
 | ร่วมกัน | — | X-01..X-03 (e2e): Toby เขียน X-01, Kelly เขียน X-02/X-03 | X-* |
 
 ## เหตุผล
@@ -24,7 +24,7 @@
 | ลำดับ | Toby | Kelly |
 |---|---|---|
 | 1 | fixture กลาง + GR-12 (shape invariant) | RG-01, RG-02, RG-04 (`normalizeTeam` table) |
-| 2 | GR-08, GR-06, GR-07 (undefined/ขั้นต่ำ) | DR-01, DR-02, DR-03 (ไม่ชน / infeasible / ขอบ) |
-| 3 | GR-01..03 (outlier), GR-11 (golden kappa) | DR-05, DR-06, DR-11, DR-12 |
-| 4 | GR-04, GR-15..20 (I) | DR-08..10, DR-13..15, RG-03, RG-06..12 (I) |
+| 2 | GR-08, GR-06, GR-07 (undefined/ขั้นต่ำ) | DR-06, DR-07, DR-08 (ตารางสาย/ลำดับช่อง/ฟิกซ์เจอร์) แล้ว DR-01..03 |
+| 3 | GR-01..03 (outlier), GR-11 (golden kappa) | DR-04, DR-05, DR-09, DR-10, DR-11, DR-12, DR-13, DR-14 |
+| 4 | GR-04, GR-15..20 (I) | DR-15..19, RG-03, RG-06..12 (I) |
 | 5 | X-01 | X-02, X-03 |
