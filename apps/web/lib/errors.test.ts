@@ -43,6 +43,8 @@ describe('thaiError', () => {
       'VALIDATION_FAILED',
       'FORBIDDEN',
       'NOT_FOUND',
+      'REVIEW_ALREADY_SUBMITTED',
+      'ASSIGNMENT_EXPIRED',
     ];
 
     codes.forEach((code) => {

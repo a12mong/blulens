@@ -18,6 +18,8 @@ const MESSAGES: Record<string, string> = {
   VALIDATION_FAILED: 'ข้อมูลไม่ถูกต้อง',
   FORBIDDEN: 'คุณไม่มีสิทธิ์ทำรายการนี้',
   NOT_FOUND: 'ไม่พบรายการที่ขอ',
+  REVIEW_ALREADY_SUBMITTED: 'ส่งผลประเมินไปแล้ว แก้ไขไม่ได้',
+  ASSIGNMENT_EXPIRED: 'งานนี้หมดเวลาแล้ว',
 };
 
 function hasThai(text: string): boolean {
