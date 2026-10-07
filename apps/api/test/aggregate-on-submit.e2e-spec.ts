@@ -234,7 +234,7 @@ describe('Aggregation on Submit (bl-10-3e)', () => {
     expect(inputs.suggestThirdReviewer).toBe(false);
     expect(inputs.excludedIndexes).toEqual([]);
     expect(inputs.scores).toEqual([7.5, 7.5]);
-    expect((inputs.reviewIds as string[])).toHaveLength(2);
+    expect(inputs.reviewIds as string[]).toHaveLength(2);
 
     // Assessment.status equals the result status
     const assessAfterR2 = await prisma.assessment.findUnique({
@@ -389,4 +389,81 @@ describe('Aggregation on Submit (bl-10-3e)', () => {
     });
     expect(calResults).toHaveLength(0);
   });
+
+  it.each([1, 2, 3])(
+    'round %i: concurrent submits for the last reviews serialize and aggregate exactly once',
+    async (round) => {
+      // Create fresh subject and assessment for this round
+      const roundTag = `${tag}-conc-${round}-${randomUUID().slice(0, 6)}`;
+      const sub = await prisma.user.create({
+        data: {
+          email: `${roundTag}-subject@test.local`,
+          passwordHash: 'x',
+          displayName: `${roundTag} Subject`,
+        },
+      });
+      userIds.push(sub.id);
+
+      const assess = await prisma.assessment.create({
+        data: {
+          subjectUserId: sub.id,
+          eventId,
+          rubricId,
+          status: 'in_review',
+        },
+      });
+
+      const dueAt = new Date(Date.now() + 24 * 3600 * 1000);
+      const asg1 = await prisma.reviewAssignment.create({
+        data: {
+          kind: 'assessment',
+          assessmentId: assess.id,
+          reviewerId: reviewer1Id,
+          state: 'open',
+          dueAt,
+        },
+      });
+
+      const asg2 = await prisma.reviewAssignment.create({
+        data: {
+          kind: 'assessment',
+          assessmentId: assess.id,
+          reviewerId: reviewer2Id,
+          state: 'open',
+          dueAt,
+        },
+      });
+
+      // Submit both reviews concurrently with Promise.all
+      const [res1, res2] = await Promise.all([
+        http()
+          .put(`/api/v1/reviews/assignments/${asg1.id}`)
+          .set('Cookie', r1Cookie)
+          .send(payloadAllS),
+        http()
+          .put(`/api/v1/reviews/assignments/${asg2.id}`)
+          .set('Cookie', r2Cookie)
+          .send(payloadAllS),
+      ]);
+
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+      expect(res1.body.data.state).toBe('submitted');
+      expect(res2.body.data.state).toBe('submitted');
+
+      // Exactly 1 AssessmentResult (version 1)
+      const results = await prisma.assessmentResult.findMany({
+        where: { assessmentId: assess.id },
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]!.version).toBe(1);
+      expect(results[0]!.source).toBe('computed');
+
+      // Assessment is no longer 'in_review'
+      const updatedAssess = await prisma.assessment.findUnique({
+        where: { id: assess.id },
+      });
+      expect(updatedAssess?.status).not.toBe('in_review');
+    },
+  );
 });
