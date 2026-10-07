@@ -5,6 +5,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/common/crypto/password';
+import { normalizeTeamName } from '@blulens/shared';
 
 const prisma = new PrismaClient();
 
@@ -68,6 +69,10 @@ const DEMO_TEAMS = [
   { name: 'Blue Wing', nameKey: 'blue wing', alias: { alias: 'บลูวิง', aliasKey: 'บลูวิง' } },
   { name: 'Red Phoenix', nameKey: 'red phoenix', alias: null },
   { name: 'Green Valley', nameKey: 'green valley', alias: null },
+  // Thai clubs for bl-21-8 demo realism
+  { name: 'ชมรมแบดมินตันบางเขน', nameKey: normalizeTeamName('ชมรมแบดมินตันบางเขน'), alias: null },
+  { name: 'สโมสรลูกขนไก่นนทบุรี', nameKey: normalizeTeamName('สโมสรลูกขนไก่นนทบุรี'), alias: null },
+  { name: 'บ้านแบด สุขุมวิท', nameKey: normalizeTeamName('บ้านแบด สุขุมวิท'), alias: null },
 ];
 
 /** member6 is in two teams on purpose, to show the MULTI_TEAM warning (A11). */
@@ -78,6 +83,15 @@ const DEMO_MEMBERS = [
   { n: 4, name: 'มาลี สายสมร', grade: 9, teams: ['red phoenix'] },
   { n: 5, name: 'กิตติ พานทอง', grade: 10, teams: ['green valley'] },
   { n: 6, name: 'นภา ทองดี', grade: 7, teams: ['blue wing', 'green valley'] },
+  // Members 7..14 for bl-21-8 demo tournament (grades for MD S-..S+: 6,6,7,7,8,8,7,6)
+  { n: 7, name: 'ประสิทธิ์ เนตรดี', grade: 6, teams: ['ชมรมแบดมินตันบางเขน'] },
+  { n: 8, name: 'ชิดชนัย วิชัยศรม', grade: 6, teams: ['สโมสรลูกขนไก่นนทบุรี'] },
+  { n: 9, name: 'ธัญญา ครุธนนต์', grade: 7, teams: ['บ้านแบด สุขุมวิท'] },
+  { n: 10, name: 'เสกสรร ศรีสวัสดิ์', grade: 7, teams: ['ชมรมแบดมินตันบางเขน'] },
+  { n: 11, name: 'ปัญญา พิบูลย์พจน์', grade: 8, teams: ['สโมสรลูกขนไก่นนทบุรี'] },
+  { n: 12, name: 'จตุรนต์ ดำรงค์', grade: 8, teams: ['บ้านแบด สุขุมวิท'] },
+  { n: 13, name: 'สุทธิดา วงศ์วิทยา', grade: 7, teams: ['ชมรมแบดมินตันบางเขน'] },
+  { n: 14, name: 'ปิยะพัฒน์ เกิดสถาน', grade: 6, teams: ['สโมสรลูกขนไก่นนทบุรี'] },
 ];
 
 async function upsertUser(email: string, displayName: string, password: string, roles: Array<'Committee' | 'Member'>) {
@@ -92,6 +106,242 @@ async function upsertUser(email: string, displayName: string, password: string, 
     });
   }
   return user;
+}
+
+async function seedDemoTournament(adminId: string | null): Promise<{ created: number; draftCreated: boolean }> {
+  const tournamentName = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3';
+  const draftTournamentName = 'แบดมินตันสัมพันธ์ประจำเดือน';
+
+  // Check if tournament already exists (idempotent)
+  const existing = await prisma.tournament.findFirst({
+    where: { name: tournamentName },
+  });
+  if (existing) return { created: 0, draftCreated: false };
+
+  // Calculate Bangkok date (UTC + 7)
+  const bangkokDate = new Date(Date.now() + 7 * 3600e3);
+  const today = bangkokDate.toISOString().slice(0, 10);
+  const startsOn = new Date(`${today}T00:00:00Z`);
+  startsOn.setUTCDate(startsOn.getUTCDate() + 21);
+
+  // entriesCloseAt = startsOn - 5 days at 17:00 Bangkok (= 10:00 UTC)
+  const entriesCloseAt = new Date(startsOn);
+  entriesCloseAt.setUTCDate(entriesCloseAt.getUTCDate() - 5);
+  entriesCloseAt.setUTCHours(10, 0, 0, 0);
+
+  // Build map of user ID to grade info by finding assessments for each demo member
+  const userGradeMap = new Map<string, { grade: number; resultId: string; teamKey: string }>();
+
+  // Query member users and their assessment results (via assessment)
+  for (const memberDef of DEMO_MEMBERS) {
+    const memberEmail = `member${memberDef.n}@blulens.local`;
+    const user = await prisma.user.findUnique({ where: { email: memberEmail } });
+    if (!user) continue;
+
+    // Find assessment with result for this user
+    const assessmentWithResult = await prisma.assessment.findFirst({
+      where: { subjectUserId: user.id },
+      include: { results: { where: { status: 'overridden' } } },
+    });
+
+    if (assessmentWithResult && assessmentWithResult.results.length > 0) {
+      const result = assessmentWithResult.results[0];
+      if (result.lowerIndex !== null) {
+        const teamKey = memberDef.teams[0];
+        userGradeMap.set(user.id, {
+          grade: result.lowerIndex,
+          resultId: result.id,
+          teamKey,
+        });
+      }
+    }
+  }
+
+  // Get team IDs by key
+  const teams = await prisma.team.findMany({});
+  const teamByKey = new Map<string, string>();
+  for (const team of teams) {
+    teamByKey.set(team.nameKey, team.id);
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Create main tournament (open)
+    const tournament = await tx.tournament.create({
+      data: {
+        name: tournamentName,
+        venue: 'ศูนย์กีฬาแบดมินตัน ซอยลาดพร้าว 71',
+        status: 'open',
+        startsOn,
+        entriesCloseAt,
+      },
+    });
+
+    const now = new Date();
+
+    // Create events
+    const mdEvent = await tx.event.create({
+      data: {
+        tournamentId: tournament.id,
+        discipline: 'MD',
+        gradeMinIndex: 6, // S-
+        gradeMaxIndex: 8, // S+
+        maxEntries: 16,
+        minReviewers: 2,
+      },
+    });
+
+    const xdEvent = await tx.event.create({
+      data: {
+        tournamentId: tournament.id,
+        discipline: 'XD',
+        gradeMinIndex: 5, // BG3
+        gradeMaxIndex: 7, // S
+        maxEntries: 12,
+        minReviewers: 2,
+      },
+    });
+
+    const msEvent = await tx.event.create({
+      data: {
+        tournamentId: tournament.id,
+        discipline: 'MS',
+        gradeMinIndex: 7, // S
+        gradeMaxIndex: 11, // N+
+        maxEntries: 16,
+        minReviewers: 2,
+      },
+    });
+
+    // MD: 3 approved + 2 pending from members 7..14 (and 1..2 if needed)
+    const mdCandidates = Array.from(userGradeMap.entries())
+      .filter(([_, info]) => info.grade >= 6 && info.grade <= 8)
+      .map(([userId, info]) => ({ userId, ...info }));
+
+    const mdApprovedCount = 3;
+    const mdPendingCount = 2;
+    for (let i = 0; i < mdApprovedCount && i < mdCandidates.length; i++) {
+      const candidate = mdCandidates[i];
+      const teamId = teamByKey.get(candidate.teamKey) || '';
+      if (teamId) {
+        const entry = await tx.entry.create({
+          data: {
+            eventId: mdEvent.id,
+            status: 'approved',
+            forwardedAt: now,
+            decidedAt: now,
+            decidedBy: adminId ?? null,
+          },
+        });
+        await tx.entryPlayer.create({
+          data: {
+            entryId: entry.id,
+            userId: candidate.userId,
+            eventId: mdEvent.id,
+            gradeResultId: candidate.resultId,
+            teamId,
+            gradeConsent: false,
+          },
+        });
+      }
+    }
+
+    for (let i = mdApprovedCount; i < mdApprovedCount + mdPendingCount && i < mdCandidates.length; i++) {
+      const candidate = mdCandidates[i];
+      const teamId = teamByKey.get(candidate.teamKey) || '';
+      if (teamId) {
+        const entry = await tx.entry.create({
+          data: {
+            eventId: mdEvent.id,
+            status: 'pending_committee',
+            forwardedAt: now,
+          },
+        });
+        await tx.entryPlayer.create({
+          data: {
+            entryId: entry.id,
+            userId: candidate.userId,
+            eventId: mdEvent.id,
+            gradeResultId: candidate.resultId,
+            teamId,
+            gradeConsent: false,
+          },
+        });
+      }
+    }
+
+    // MS: 2 approved entries from members with grade S..N (7-11)
+    const msCandidates = Array.from(userGradeMap.entries())
+      .filter(([_, info]) => info.grade >= 7 && info.grade <= 11)
+      .map(([userId, info]) => ({ userId, ...info }));
+
+    for (let i = 0; i < 2 && i < msCandidates.length; i++) {
+      const candidate = msCandidates[i];
+      const teamId = teamByKey.get(candidate.teamKey) || '';
+      if (teamId) {
+        const entry = await tx.entry.create({
+          data: {
+            eventId: msEvent.id,
+            status: 'approved',
+            forwardedAt: now,
+            decidedAt: now,
+            decidedBy: adminId ?? null,
+          },
+        });
+        await tx.entryPlayer.create({
+          data: {
+            entryId: entry.id,
+            userId: candidate.userId,
+            eventId: msEvent.id,
+            gradeResultId: candidate.resultId,
+            teamId,
+            gradeConsent: false,
+          },
+        });
+      }
+    }
+
+    // XD: no entries (shows empty event)
+
+    return 1; // tournament created
+  });
+
+  // Check for draft tournament (idempotent)
+  const existingDraft = await prisma.tournament.findFirst({
+    where: { name: draftTournamentName },
+  });
+
+  let draftCreated = false;
+  if (!existingDraft) {
+    const draftStartsOn = new Date(`${today}T00:00:00Z`);
+    draftStartsOn.setUTCDate(draftStartsOn.getUTCDate() + 60);
+
+    await prisma.$transaction(async (tx) => {
+      const draftTournament = await tx.tournament.create({
+        data: {
+          name: draftTournamentName,
+          venue: '',
+          status: 'draft',
+          startsOn: draftStartsOn,
+          entriesCloseAt: draftStartsOn,
+        },
+      });
+
+      await tx.event.create({
+        data: {
+          tournamentId: draftTournament.id,
+          discipline: 'MD',
+          gradeMinIndex: 0,
+          gradeMaxIndex: 14,
+          maxEntries: 16,
+          minReviewers: 2,
+        },
+      });
+    });
+
+    draftCreated = true;
+  }
+
+  return { created: result, draftCreated };
 }
 
 async function seedDemo(): Promise<string> {
@@ -168,7 +418,15 @@ async function seedDemo(): Promise<string> {
       });
     }
   }
-  return `demo: ok (committee + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''})`;
+
+  // Create demo tournament (open and draft)
+  const tourResult = await seedDemoTournament(admin?.id ?? null);
+  const tournamentsMsg =
+    tourResult.created > 0 || tourResult.draftCreated
+      ? `tournaments: ${tourResult.created + (tourResult.draftCreated ? 1 : 0)} created`
+      : 'tournaments: exists';
+
+  return `demo: ok (committee + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg})`;
 }
 
 async function main() {
