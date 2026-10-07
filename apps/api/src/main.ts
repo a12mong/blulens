@@ -10,6 +10,10 @@ async function bootstrap() {
   // openapi servers: /api/v1
   app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
+  // Jim D-S1: Docker/Caddy probes keep using /api/health; the contract path is /api/v1/health
+  app.getHttpAdapter().get('/api/health', (_req: unknown, res: { json: (b: unknown) => void }) =>
+    res.json({ success: true, data: { status: 'ok' } }),
+  );
   app.enableCors({
     origin: process.env.WEB_URL ?? 'http://localhost:3100',
     credentials: true,
