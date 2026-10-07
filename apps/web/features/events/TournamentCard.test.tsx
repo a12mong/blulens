@@ -148,6 +148,27 @@ describe('TournamentCard', () => {
     const closeDate = screen.getByTestId('tournament-close-date');
     expect(closeDate).toHaveTextContent(/^ปิดรับ /);
   });
+
+  it('publish button has secondary classes without bg-primary while open link keeps bg-primary', () => {
+    render(
+      <TournamentCard
+        tournament={mockDraftTournament}
+        canManage={true}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    const publishBtn = screen.getByTestId('tournament-publish');
+    expect(publishBtn.className).toContain('border-border');
+    expect(publishBtn.className).toContain('bg-card');
+    expect(publishBtn.className).toContain('text-foreground');
+    expect(publishBtn.className).toContain('hover:bg-muted');
+    expect(publishBtn.className).not.toContain('bg-primary');
+
+    const openLink = screen.getByTestId('tournament-open');
+    expect(openLink.className).toContain('bg-primary');
+    expect(openLink.className).toContain('text-primary-foreground');
+  });
 });
 
 describe('TournamentStatusBadge', () => {

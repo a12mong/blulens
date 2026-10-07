@@ -7,7 +7,7 @@ export type TournamentStatusBadgeProps = {
   status: TournamentStatus;
 };
 
-const STATUS_CONFIG: Record<
+export const STATUS_CONFIG: Record<
   TournamentStatus,
   { label: string; symbol: string; className: string }
 > = {
@@ -36,6 +36,14 @@ const STATUS_CONFIG: Record<
     symbol: '✓',
     className: 'bg-muted text-muted-foreground border-border',
   },
+};
+
+export const STATUS_LABELS: Record<TournamentStatus, string> = {
+  draft: 'ร่าง',
+  open: 'เปิดรับสมัคร',
+  closed: 'ปิดรับสมัคร',
+  running: 'กำลังแข่งขัน',
+  finished: 'จบแล้ว',
 };
 
 export function TournamentStatusBadge({ status }: TournamentStatusBadgeProps) {
