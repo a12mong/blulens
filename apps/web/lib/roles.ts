@@ -24,11 +24,12 @@ export function canAccess(roles: readonly Role[], area: Area): boolean {
   return roles.some((r) => ROLE_AREAS[r].includes(area));
 }
 
+const HOME_AREA: Record<Role, Area> = { Admin: 'admin', Committee: 'committee', Reviewer: 'reviewer', Member: 'member' };
 const HOME_ORDER: Role[] = ['Admin', 'Committee', 'Reviewer', 'Member'];
 
 /** where to send a logged-in user: highest role's home area */
 export function homePathFor(roles: readonly Role[]): string {
   const top = HOME_ORDER.find((r) => roles.includes(r));
   if (!top) return AREA_PATH.public;
-  return AREA_PATH[ROLE_AREAS[top][0]];
+  return AREA_PATH[HOME_AREA[top]];
 }
