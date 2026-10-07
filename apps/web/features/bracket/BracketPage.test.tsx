@@ -1,0 +1,162 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BracketPage } from './BracketPage';
+import { BRACKET_REFETCH_INTERVAL, useBracket, useStandings } from './api';
+
+vi.mock('./api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api')>();
+  return {
+    ...actual,
+    useBracket: vi.fn(),
+    useStandings: vi.fn(),
+  };
+});
+
+describe('BracketPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useBracket).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: false,
+      error: null,
+      dataUpdatedAt: 0,
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: false,
+      error: null,
+      dataUpdatedAt: 0,
+    } as any);
+  });
+
+  it('fixture mode shows the groups tab by default and switches to the knockout bracket', () => {
+    render(<BracketPage eventId="evt-1" fixture={true} />);
+
+    // By default, groups tab is active and shows 2 group-standings tables
+    const groupTables = screen.getAllByTestId('group-standings');
+    expect(groupTables).toHaveLength(2);
+    expect(screen.queryByTestId('bracket-tree')).toBeNull();
+
+    // Verify last-updated text format
+    expect(screen.getByTestId('bracket-last-updated')).toHaveTextContent(
+      /อัปเดต \d{2}:\d{2} \(รีเฟรชอัตโนมัติ 30 วิ\)/,
+    );
+
+    // Click 'สายน็อคเอาท์' tab
+    const knockoutTab = screen.getByRole('tab', { name: 'สายน็อคเอาท์' });
+    fireEvent.click(knockoutTab);
+
+    // Now bracket-tree is present, groups tables are unmounted
+    expect(screen.getByTestId('bracket-tree')).toBeInTheDocument();
+    expect(screen.queryByTestId('group-standings')).toBeNull();
+
+    // Switch back to 'รอบกลุ่ม'
+    const groupsTab = screen.getByRole('tab', { name: 'รอบกลุ่ม' });
+    fireEvent.click(groupsTab);
+    expect(screen.getAllByTestId('group-standings')).toHaveLength(2);
+  });
+
+  it('shows bracket-unpublished and back link on 404', () => {
+    vi.mocked(useBracket).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { status: 404, message: 'Not found' },
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { status: 404, message: 'Not found' },
+    } as any);
+
+    render(<BracketPage eventId="evt-1" fixture={false} />);
+
+    const unpublished = screen.getByTestId('bracket-unpublished');
+    expect(unpublished).toBeInTheDocument();
+    expect(unpublished).toHaveTextContent('สายแข่งยังไม่ประกาศ');
+
+    const backLink = screen.getByRole('link', { name: /กลับไปหน้ารายการ/ });
+    expect(backLink).toHaveAttribute('href', '/events');
+  });
+
+  it('shows loading status while fetching', () => {
+    vi.mocked(useBracket).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      error: null,
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+
+    render(<BracketPage eventId="evt-1" fixture={false} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('กำลังโหลด…');
+  });
+
+  it('displays role=alert for other errors via thaiError', () => {
+    vi.mocked(useBracket).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new TypeError('Failed to fetch'),
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+
+    render(<BracketPage eventId="evt-1" fixture={false} />);
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toBeInTheDocument();
+    expect(alert).toHaveTextContent('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+  });
+
+  it('defaults to knockout tab when standings is empty', () => {
+    vi.mocked(useBracket).mockReturnValue({
+      data: {
+        rounds: [
+          {
+            round: 1,
+            matches: [
+              {
+                matchNo: 1,
+                status: 'scheduled',
+                topEntry: { displayName: 'A' },
+                bottomEntry: { displayName: 'B' },
+              },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+
+    render(<BracketPage eventId="evt-1" fixture={false} />);
+
+    // Default tab should be knockout since standings is empty
+    expect(screen.getByTestId('bracket-tree')).toBeInTheDocument();
+  });
+
+  it('exports BRACKET_REFETCH_INTERVAL as 30000', () => {
+    expect(BRACKET_REFETCH_INTERVAL).toBe(30_000);
+  });
+});

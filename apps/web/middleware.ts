@@ -14,9 +14,13 @@ export function middleware(req: NextRequest) {
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
   // Check if path is protected (match segment boundary to avoid /membership being treated as /me)
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/'),
-  );
+  // Public exception: /events/:id/bracket is a public page (demo-slice-3 B1)
+  const isBracketPath = /^\/events\/[^/]+\/bracket(?:\/.*)?$/.test(pathname);
+  const isProtected =
+    !isBracketPath &&
+    PROTECTED_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix + '/'),
+    );
 
   // Rule 1: Protected path without session → redirect to /login with next parameter
   if (isProtected && !hasSession) {
