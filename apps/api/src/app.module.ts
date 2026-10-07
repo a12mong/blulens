@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor';
 import { ZodValidationPipe } from './common/zod/zod';
 import { AuthModule } from './modules/auth/auth.module';
+import { EntriesModule } from './modules/entries/entries.module';
 import { HealthModule } from './modules/health/health.module';
 import { TournamentsModule } from './modules/tournaments/tournaments.module';
 
@@ -30,6 +31,7 @@ import { TournamentsModule } from './modules/tournaments/tournaments.module';
     HealthModule,
     AuthModule,
     TournamentsModule,
+    EntriesModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
