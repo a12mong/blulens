@@ -1,0 +1,163 @@
+'use client';
+
+import React, { useState } from 'react';
+import { ReasonDialog } from '@/components/ui/ReasonDialog';
+import { EntryTable } from './EntryTable';
+import {
+  useApproveEntry,
+  useCommitteeQueue,
+  useRejectEntry,
+  type Entry,
+} from './api';
+
+export type CommitteeQueueProps = {
+  eventId?: string;
+};
+
+type ActiveDialog =
+  | { type: 'approve_out_of_band'; entry: Entry }
+  | { type: 'reject'; entry: Entry };
+
+export function CommitteeQueue({ eventId }: CommitteeQueueProps) {
+  const { data, isPending, isError, error: queryError } = useCommitteeQueue(eventId);
+  const approveMutation = useApproveEntry();
+  const rejectMutation = useRejectEntry();
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<ActiveDialog | null>(null);
+  const [dialogError, setDialogError] = useState<string | undefined>(undefined);
+
+  if (isPending) {
+    return (
+      <div role="status" className="text-sm text-muted-foreground">
+        กำลังโหลด…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div
+        role="alert"
+        data-testid="queue-error"
+        className="text-sm text-destructive"
+      >
+        {queryError?.message || 'เกิดข้อผิดพลาดในการโหลดคิว'}
+      </div>
+    );
+  }
+
+  const items: Entry[] = Array.isArray(data)
+    ? data
+    : ((data as unknown as { items?: Entry[] })?.items ?? []);
+
+  const handleApprove = (entry: Entry) => {
+    const isOutOfBand = entry.warnings?.includes('GRADE_OUT_OF_BAND');
+    if (isOutOfBand) {
+      setActionError(null);
+      setDialogError(undefined);
+      setDialog({ type: 'approve_out_of_band', entry });
+    } else {
+      setActionError(null);
+      approveMutation.mutate(
+        { entryId: entry.id },
+        {
+          onError: (err) => {
+            setActionError(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
+          },
+        },
+      );
+    }
+  };
+
+  const handleReject = (entry: Entry) => {
+    setActionError(null);
+    setDialogError(undefined);
+    setDialog({ type: 'reject', entry });
+  };
+
+  const handleApproveWithReason = (entry: Entry, reason: string) => {
+    approveMutation.mutate(
+      { entryId: entry.id, reason },
+      {
+        onSuccess: () => {
+          setDialog(null);
+          setDialogError(undefined);
+        },
+        onError: (err) => {
+          setDialogError(err.message || 'เกิดข้อผิดพลาดในการอนุมัติ');
+        },
+      },
+    );
+  };
+
+  const handleRejectWithReason = (entry: Entry, reason: string) => {
+    rejectMutation.mutate(
+      { entryId: entry.id, reason },
+      {
+        onSuccess: () => {
+          setDialog(null);
+          setDialogError(undefined);
+        },
+        onError: (err) => {
+          setDialogError(err.message || 'เกิดข้อผิดพลาดในการปฏิเสธ');
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {actionError ? (
+        <p
+          role="alert"
+          data-testid="queue-action-error"
+          className="text-sm text-destructive"
+        >
+          {actionError}
+        </p>
+      ) : null}
+
+      <EntryTable
+        entries={items}
+        mode="committee"
+        onApprove={handleApprove}
+        onReject={handleReject}
+      />
+
+      {dialog ? (
+        <ReasonDialog
+          open={true}
+          title={
+            dialog.type === 'approve_out_of_band'
+              ? 'อนุมัติเกรดนอกช่วง'
+              : 'ปฏิเสธผู้สมัคร'
+          }
+          confirmLabel={
+            dialog.type === 'approve_out_of_band' ? 'อนุมัติ' : 'ปฏิเสธ'
+          }
+          minLength={dialog.type === 'approve_out_of_band' ? 20 : 5}
+          onSubmit={(reason) => {
+            if (dialog.type === 'approve_out_of_band') {
+              handleApproveWithReason(dialog.entry, reason);
+            } else {
+              handleRejectWithReason(dialog.entry, reason);
+            }
+          }}
+          onCancel={() => {
+            setDialog(null);
+            setDialogError(undefined);
+          }}
+          error={dialogError}
+          pending={
+            dialog.type === 'approve_out_of_band'
+              ? approveMutation.isPending
+              : rejectMutation.isPending
+          }
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export default CommitteeQueue;
