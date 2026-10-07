@@ -21,15 +21,18 @@ export class UsersService {
 
   async listUsers(params: ListUsersParams): Promise<ListUsersResult> {
     const now = new Date();
+    const q = params.q?.trim().replace(/\s+/g, ' ');
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
       status: 'active',
       ...(params.role ? { roles: { some: { role: params.role } } } : {}),
-      ...(params.q
+      // Pam N3: the start of ANY word of the display name (first name, surname, Thai included), or an email prefix
+      ...(q
         ? {
             OR: [
-              { displayName: { startsWith: params.q, mode: 'insensitive' } },
-              { email: { startsWith: params.q.toLowerCase() } },
+              { displayName: { startsWith: q, mode: 'insensitive' } },
+              { displayName: { contains: ` ${q}`, mode: 'insensitive' } },
+              { email: { startsWith: q.toLowerCase() } },
             ],
           }
         : {}),

@@ -200,6 +200,28 @@ describe('GET /api/v1/users (bl-21-2)', () => {
     expect(resEmail.body.data.items[0].displayName).toBe(`${PREFIX}Bob`);
   });
 
+  it('matches the start of any word of the display name: surname and Thai names (Pam N3)', async () => {
+    const committeeCookie = cookieFor(randomUUID(), ['Committee']);
+    const tag = randomUUID().slice(0, 6);
+    const thai = await prisma.user.create({
+      data: { email: `${PREFIX}thai@test.local`, passwordHash: 'dummy', displayName: `${PREFIX}สมศักดิ์ ใจดี${tag}`, roles: { create: [{ role: 'Member' }] } },
+    });
+    const latin = await prisma.user.create({
+      data: { email: `${PREFIX}latin@test.local`, passwordHash: 'dummy', displayName: `${PREFIX}Somsak Jaidee${tag}`, roles: { create: [{ role: 'Member' }] } },
+    });
+    const search = async (q: string) =>
+      (await http().get(`/api/v1/users?role=Member&q=${encodeURIComponent(q)}`).set('Cookie', committeeCookie).expect(200)).body.data.items
+        .map((u: { id: string }) => u.id);
+    try {
+      expect(await search(`ใจดี${tag}`)).toEqual([thai.id]);
+      expect(await search(`  JAIDEE${tag} `)).toEqual([latin.id]);
+      // mid-word text is not a word start
+      expect(await search(`aidee${tag}`)).toEqual([]);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: { in: [thai.id, latin.id] } } });
+    }
+  });
+
   it('rejects unauthenticated requests with 401 UNAUTHENTICATED', async () => {
     const res = await http().get('/api/v1/users').expect(401);
     expect(res.body.success).toBe(false);
