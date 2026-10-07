@@ -18,7 +18,8 @@ async function bootstrap() {
   const allowed = allowedOrigins(process.env);
   const nodeEnv = process.env.NODE_ENV;
   app.enableCors({
-    origin: (origin, cb) => cb(null, !origin || isAllowedOrigin(origin, allowed, nodeEnv)),
+    origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) =>
+      cb(null, !origin || isAllowedOrigin(origin, allowed, nodeEnv)),
     credentials: true,
   });
   // ให้ req.ip ถูกต้องเมื่ออยู่หลัง proxy (Next.js rewrite / Caddy)
