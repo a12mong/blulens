@@ -153,4 +153,35 @@ describe('auth hooks', () => {
 
     expect(result.current.error).toEqual(error);
   });
+
+  it('useLogin with caller onSuccess: cache is set AND caller callback is called', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    const callerOnSuccess = vi.fn();
+    vi.mocked(apiFetch).mockResolvedValueOnce(mockMe);
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useLogin({ onSuccess: callerOnSuccess }), { wrapper });
+
+    result.current.mutate({ identifier: 'test', password: 'pass' });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    // Verify cache was set by the hook
+    const cachedData = queryClient.getQueryData(meKey);
+    expect(cachedData).toEqual(mockMe);
+
+    // Verify caller's onSuccess was also called
+    expect(callerOnSuccess).toHaveBeenCalledWith(mockMe, { identifier: 'test', password: 'pass' }, undefined);
+  });
 });

@@ -48,10 +48,11 @@ export function useLogin(
         method: 'POST',
         body: { identifier, password },
       }),
-    onSuccess: (data) => {
-      queryClient.setQueryData(meKey, data);
-    },
     ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.setQueryData(meKey, data);
+      options?.onSuccess?.(data, variables, context);
+    },
   });
 }
 
@@ -68,9 +69,10 @@ export function useLogout(options?: Omit<UseMutationOptions<void, ApiRequestErro
         method: 'POST',
       });
     },
-    onSuccess: () => {
-      queryClient.clear();
-    },
     ...options,
+    onSuccess: (data, variables, context) => {
+      queryClient.clear();
+      options?.onSuccess?.(data, variables, context);
+    },
   });
 }
