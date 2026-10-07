@@ -14,3 +14,13 @@ Each row becomes one packet when picked up. Slice 2 (bl-24) has priority. Branch
 | 11 | Reject reason min 10 (spec D4) with x/10 counter; API accepts 5 so FE-only | CommitteeQueue.tsx constants | Phyllis | with #3 |
 | 12-13 | Demo seed with realistic dates, no QA clutter | BE/QA | Dwight | ask |
 | 14-17 | Wizard placeholder, ghost buttons, skeletons, ErrorBanner with retry | various | later | todo |
+
+## Second pass (Pam, docs/design/review-slice-2nd-pass.md)
+
+| Item | What | Owner | Status |
+|---|---|---|---|
+| N1 | Stale session shows half-logged-in shell | Andy | DONE (AuthedShell logs out and goes to /login) |
+| N2 | PlayerPicker: show grade/club count, exclude already-picked player | Ryan | todo |
+| N3 | User search misses surnames | Kevin (BE) | ask |
+| N4 | Multi-club warning must name the player and clubs | FE after BE gives details | todo |
+| N5 | Committee queue grade cell: visible label/range text next to the ladder | Phyllis | todo |
