@@ -59,6 +59,11 @@ describe('ClipPlayer', () => {
     expect(onRefreshMock).toHaveBeenCalled();
   });
 
+  it('plays a clip the API marks as uploaded', () => {
+    render(<ClipPlayer clips={[{ id: 'c1', status: 'uploaded', viewUrl: 'url1', durationSec: 60 }]} />);
+    expect(screen.getByTestId('clip-rewind')).toBeInTheDocument();
+  });
+
   it('rewind button exists and is clickable', () => {
     render(
       <ClipPlayer clips={[{ id: 'c1', status: 'ready', viewUrl: 'url1', durationSec: 60 }]} />

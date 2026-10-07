@@ -25,7 +25,7 @@ export function ClipPlayer({ clips, onRefreshNeeded, onTimeUpdate }: ClipPlayerP
   const containerRef = useRef<HTMLDivElement>(null);
 
   const clip = clips[selectedIdx];
-  const isReady = clip?.status === 'ready' && clip?.viewUrl;
+  const isReady = (clip?.status === 'uploaded' || clip?.status === 'ready') && clip?.viewUrl;
 
   const handleError = () => {
     if (!onRefreshNeeded) return;
