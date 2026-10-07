@@ -109,7 +109,8 @@ describe('entries (bl-21 demo slice)', () => {
 
     // Admin alone may not decide; the Committee may
     await http().post(`/api/v1/entries/${entry.id}/approve`).set('Cookie', admin).send({}).expect(403);
-    const ok = await http().post(`/api/v1/entries/${entry.id}/approve`).set('Cookie', committee).send({}).expect(200);
+    // no body at all is accepted (Dwight N1)
+    const ok = await http().post(`/api/v1/entries/${entry.id}/approve`).set('Cookie', committee).expect(200);
     expect(ok.body.data).toMatchObject({ status: 'approved', decisionReason: null });
 
     const guest = await http().get(`/api/v1/events/${eventId}/entries`).expect(200);

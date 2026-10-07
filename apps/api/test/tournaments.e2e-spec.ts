@@ -113,4 +113,27 @@ describe('tournaments + events (bl-21 slice)', () => {
       .expect(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
+
+  it('stores the event format (Committee), validates it, and refuses it once locked', async () => {
+    const t = await newTournament();
+    const ev = await http().post(`/api/v1/tournaments/${t.id}/events`).set('Cookie', committee)
+      .send({ discipline: 'MD', gradeMin: 'S-', gradeMax: 'N' }).expect(201);
+    const id = ev.body.data.id;
+    const format = {
+      type: 'groups_knockout', groupSize: 4, advancePerGroup: 2,
+      groupMatchFormat: { preset: 'group_2x15', mode: 'fixed_games', games: 2, pointsPerGame: 15, deuce: false, drawAllowed: true },
+      knockoutMatchFormat: { preset: 'bo3_21', mode: 'best_of', games: 3, pointsPerGame: 21, deuce: true, cap: 30 },
+    };
+    const ok = await http().put(`/api/v1/events/${id}/format`).set('Cookie', committee).send(format).expect(200);
+    expect(ok.body.data).toMatchObject({ type: 'groups_knockout', bestThirds: 0, thirdPlacePlayoff: true, lockedAt: null });
+
+    const bad = await http().put(`/api/v1/events/${id}/format`).set('Cookie', committee)
+      .send({ ...format, knockoutMatchFormat: { mode: 'fixed_games', games: 2, pointsPerGame: 15, deuce: false, drawAllowed: true } }).expect(400);
+    expect(bad.body.error.code).toBe('VALIDATION_FAILED');
+    await http().put(`/api/v1/events/${id}/format`).set('Cookie', committee).send({ type: 'knockout', groupSize: 3, advancePerGroup: 3 }).expect(400);
+
+    await prisma.event.update({ where: { id }, data: { formatLockedAt: new Date() } });
+    expect((await http().put(`/api/v1/events/${id}/format`).set('Cookie', committee).send(format).expect(409)).body.error.code).toBe('FORMAT_LOCKED');
+    await http().put(`/api/v1/events/${id}/format`).set('Cookie', member).send(format).expect(403);
+  });
 });
