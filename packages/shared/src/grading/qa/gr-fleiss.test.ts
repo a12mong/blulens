@@ -6,10 +6,10 @@ describe('GR-08/11 Fleiss: fleissKappa on 5 Tiers (0=Rookie, 1=Beginner, 2=Stand
     it('multiple cases, all raters agree per case, different tiers across cases → kappa 1', () => {
       const cases = [
         [0, 0, 0], // Tier 0
-        [2, 2, 2], // Tier 0
-        [3, 3, 3], // Tier 1
-        [6, 6, 6], // Tier 2
-        [9, 9, 9], // Tier 3
+        [1, 1, 1], // Tier 1
+        [2, 2, 2], // Tier 2
+        [3, 3, 3], // Tier 3
+        [4, 4, 4], // Tier 4
       ];
       const { kappa } = fleissKappa(cases, 5);
       expect(kappa).toBe(1);

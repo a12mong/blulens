@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calibrationStats } from '../calibration-stats';
+import { calibrationStats } from '../calibration';
 
 describe('GR-33: calibrationStats (bias, meanAbsError with reference centre = referenceIndex + 0.5)', () => {
   describe('Structure and basic', () => {

@@ -45,13 +45,23 @@ describe('GR-12/13/14/21/23/24/25/30: projectGrade', () => {
   });
 
   describe('GR-14: formula exact (a=floor(score-margin), b=ceil(score+margin)-1, center=floor(score), kind by diff)', () => {
-    it('7.0 margin 0: a=7, b=7, center=7 → exact S', () => {
-      const r = projectGrade(7.0, 0);
+    it('spec-reachable: 7.5 margin 0.25: a=floor(7.25)=7, b=ceil(7.75)-1=7, center=7 → exact S', () => {
+      const r = projectGrade(7.5, 0.25);
       expect(r.lower).toBe('S');
       expect(r.upper).toBe('S');
       expect(r.center).toBe('S');
       expect(r.kind).toBe('exact');
       expect(r.label).toBe('S');
+    });
+
+    it('edge: integer score with zero margin (7,0) has inverted range, expected red until projectGrade guards b>=a', () => {
+      // margin 0 with integer score is unreachable in spec (min margin 0.25)
+      // This test tracks a code quirk: upper=ceil(7+0)-1=6 < lower=floor(7-0)=7
+      const r = projectGrade(7, 0);
+      // Expected: RED today because lower > upper (code does not guard this yet)
+      // This is expected failure until Kevin fixes projectGrade
+      expect(r.lower).toBe('S');
+      expect(r.upper).toBe('S');
     });
 
     it('7.5 margin 0.5: a=floor(7.0)=7, b=ceil(8.0)-1=7, center=7 → exact S', () => {
