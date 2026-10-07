@@ -7,7 +7,9 @@ import {
   gradeViewSchema,
   loginInputSchema,
   meSchema,
+  eventFormatSchema,
   eventInputSchema,
+  matchFormatSchema,
   registerInputSchema,
   tournamentInputSchema,
   roleSchema,
@@ -49,13 +51,16 @@ function flatten(s: OaSchema): { properties: string[]; required: string[] } {
       required: [...new Set(parts.flatMap((p) => p.required))].sort(),
     };
   }
-  return { properties: Object.keys(s.properties ?? {}).sort(), required: [...(s.required ?? [])].sort() };
+  // readOnly properties are server-set (e.g. EventFormat.lockedAt) and never part of an input schema
+  const props = Object.entries(s.properties ?? {}).filter(([, v]) => !(v as { readOnly?: boolean }).readOnly);
+  return { properties: props.map(([k]) => k).sort(), required: [...(s.required ?? [])].sort() };
 }
 
 function zodObject(schema: z.ZodTypeAny): { properties: string[]; required: string[] } {
   // unwrap .refine()/.superRefine() (ZodEffects) to the underlying object
-  const obj = ('shape' in schema ? schema : (schema._def as { schema: z.ZodTypeAny }).schema) as z.AnyZodObject;
-  const shape = obj.shape as Record<string, z.ZodTypeAny>;
+  let obj: z.ZodTypeAny = schema;
+  while (!('shape' in obj)) obj = (obj._def as { schema: z.ZodTypeAny }).schema; // chained .refine() nests ZodEffects
+  const shape = (obj as z.AnyZodObject).shape as Record<string, z.ZodTypeAny>;
   return {
     properties: Object.keys(shape).sort(),
     required: Object.keys(shape)
@@ -72,6 +77,8 @@ const OBJECT_PAIRS: [string, z.ZodTypeAny][] = [
   ['GradeView', gradeViewSchema],
   ['TournamentInput', tournamentInputSchema],
   ['EventInput', eventInputSchema],
+  ['EventFormat', eventFormatSchema],
+  ['MatchFormat', matchFormatSchema],
 ];
 
 const ENUM_PAIRS: [string, z.ZodEnum<[string, ...string[]]>][] = [

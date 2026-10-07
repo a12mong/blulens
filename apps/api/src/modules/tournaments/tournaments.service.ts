@@ -3,6 +3,7 @@ import { Prisma, type Event as EventRow, type Tournament as TournamentRow } from
 import {
   GRADE_KEYS,
   TOURNAMENT_TRANSITIONS,
+  type EventFormat,
   type EventInput,
   type TournamentInput,
   type TournamentStatus,
@@ -145,6 +146,24 @@ export class TournamentsService {
       }
       throw err;
     }
+  }
+
+  async setFormat(eventId: string, format: EventFormat, actor: AuthUser, ip?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const e = await tx.event.findUnique({ where: { id: eventId } });
+      if (!e) throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+      // conditional update: a draw that locks the format concurrently wins
+      const { count } = await tx.event.updateMany({
+        where: { id: eventId, formatLockedAt: null },
+        data: { format: format as Prisma.InputJsonValue },
+      });
+      if (count === 0) throw ApiException.conflict('FORMAT_LOCKED', 'รูปแบบการแข่งถูกล็อกแล้วหลังจับกลุ่ม/จับสาย');
+      await this.audit.record(
+        { actorId: actor.id, action: 'event.format', entityType: 'event', entityId: eventId, before: (e.format ?? null) as Prisma.InputJsonValue, after: format as Prisma.InputJsonValue, ip },
+        tx,
+      );
+      return { ...format, lockedAt: null };
+    });
   }
 
   async eventDetail(eventId: string, user?: AuthUser) {

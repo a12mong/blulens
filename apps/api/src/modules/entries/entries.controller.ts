@@ -8,7 +8,8 @@ import { createZodDto } from '../../common/zod/zod';
 import { EntriesService } from './entries.service';
 
 class EntryInputDto extends createZodDto(entryInputSchema) {}
-class ApproveDto extends createZodDto(entryApproveInputSchema) {}
+// body is optional (Dwight N1): no body = approve without a reason
+class ApproveDto extends createZodDto(entryApproveInputSchema.default({})) {}
 class ReasonDto extends createZodDto(reasonInputSchema) {}
 class EventEntriesQueryDto extends createZodDto(z.object({ status: entryStatusSchema.optional() })) {}
 class QueueQueryDto extends createZodDto(

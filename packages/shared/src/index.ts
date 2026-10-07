@@ -6,5 +6,6 @@ export * from './grading';
 export * from './schemas/auth';
 export * from './schemas/tournaments';
 export * from './schemas/entries';
+export * from './schemas/format';
 export * from './constants/permissions';
 export * from './teams';

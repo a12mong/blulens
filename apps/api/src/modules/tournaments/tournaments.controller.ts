@@ -1,6 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
-import { eventInputSchema, tournamentInputSchema, tournamentStatusInputSchema } from '@blulens/shared';
+import { eventFormatSchema, eventInputSchema, tournamentInputSchema, tournamentStatusInputSchema } from '@blulens/shared';
 import type { AuthUser, AuthedRequest } from '../../common/auth/auth.types';
 import { CurrentUser, Roles } from '../../common/auth/decorators';
 import { Public } from '../../common/decorators/public.decorator';
@@ -10,6 +10,7 @@ import { TournamentsService } from './tournaments.service';
 class TournamentInputDto extends createZodDto(tournamentInputSchema) {}
 class EventInputDto extends createZodDto(eventInputSchema) {}
 class StatusInputDto extends createZodDto(tournamentStatusInputSchema) {}
+class EventFormatDto extends createZodDto(eventFormatSchema) {}
 class PageQueryDto extends createZodDto(
   z.object({
     cursor: z.string().uuid().optional(),
@@ -69,6 +70,13 @@ export class TournamentsController {
     @Req() req: AuthedRequest,
   ) {
     return this.tournaments.createEvent(id, body, user, req.ip);
+  }
+
+  /** tournament-format §2: settings JSON, editable until the first group/knockout draw locks it. */
+  @Roles('Committee')
+  @Put('events/:eventId/format')
+  setFormat(@Param('eventId', uuid) id: string, @Body() body: EventFormatDto, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
+    return this.tournaments.setFormat(id, body, user, req.ip);
   }
 
   @Public()
