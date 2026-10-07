@@ -49,9 +49,9 @@ export function useLogin(
         body: { identifier, password },
       }),
     ...options,
-    onSuccess: (data, variables, context) => {
-      queryClient.setQueryData(meKey, data);
-      options?.onSuccess?.(data, variables, context);
+    onSuccess: (...args) => {
+      queryClient.setQueryData(meKey, args[0]);
+      options?.onSuccess?.(...args);
     },
   });
 }
@@ -70,9 +70,9 @@ export function useLogout(options?: Omit<UseMutationOptions<void, ApiRequestErro
       });
     },
     ...options,
-    onSuccess: (data, variables, context) => {
+    onSuccess: (...args) => {
       queryClient.clear();
-      options?.onSuccess?.(data, variables, context);
+      options?.onSuccess?.(...args);
     },
   });
 }
