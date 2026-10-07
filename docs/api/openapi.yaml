@@ -110,7 +110,7 @@ paths:
                 type: object
                 required: [items]
                 properties:
-                  items: { type: array, items: { $ref: '#/components/schemas/UserSummary' } }
+                  items: { type: array, items: { $ref: '#/components/schemas/UserPickerItem' } }
                   nextCursor: { type: [string, 'null'] }
   /users/{userId}/roles:
     put:
@@ -1280,6 +1280,17 @@ components:
         displayName: { type: string }
         roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
         teamIds: { type: array, items: { type: string, format: uuid }, description: 'current teams (several allowed, A11)' }
+    UserPickerItem:
+      type: object
+      description: 'GET /users result (Admin/Committee pickers only): adds club names and the current grade label, which these roles may see'
+      required: [id, displayName]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        teamIds: { type: array, items: { type: string, format: uuid } }
+        teamNames: { type: array, items: { type: string } }
+        gradeLabel: { type: [string, 'null'], description: 'label of the current official grade (approved/overridden), null if none' }
+        gradeProvisional: { type: boolean, description: 'true when only a provisional (unconfirmed) result exists' }
     Me:
       allOf:
         - { $ref: '#/components/schemas/UserSummary' }
@@ -1616,6 +1627,18 @@ components:
         seedScore: { type: [number, 'null'], description: 'singles = player score; doubles = mean of both (draw.md §3); null when hidden to the caller' }
         gradeVisibility: { type: string, enum: [hidden, public, disclosed], description: 'A14: public = all players consented; disclosed = event transparency disclosure' }
         warnings: { type: array, items: { type: string, enum: [MULTI_TEAM, NO_APPROVED_GRADE, GRADE_OUT_OF_BAND, FRESH_ASSESSMENT_REQUIRED] }, description: 'computed live; shown to Admin/Committee' }
+        warningDetails:
+          type: array
+          description: 'one row per (warning, player); Admin/Committee only'
+          items:
+            type: object
+            required: [code]
+            properties:
+              code: { type: string, enum: [MULTI_TEAM, NO_APPROVED_GRADE, GRADE_OUT_OF_BAND, FRESH_ASSESSMENT_REQUIRED] }
+              userId: { type: [string, 'null'], format: uuid }
+              displayName: { type: [string, 'null'] }
+              teamNames: { type: array, items: { type: string }, description: 'MULTI_TEAM: all current clubs of the player' }
+              gradeLabel: { type: [string, 'null'], description: 'GRADE_OUT_OF_BAND: the player label, e.g. N-' }
 
     # ---- draws ----
     DrawSummary:
