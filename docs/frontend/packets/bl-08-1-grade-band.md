@@ -3,6 +3,7 @@
 GOAL: A component that shows the 15-step grade ladder with the lower..upper range highlighted and a score marker. Web never computes grades; it only renders what the API sends.
 
 STATE:
+- WORKTREE RULE: never switch branches in the shared checkout D:/_work/SourceDev/_code/blulens. Create your own worktree: `git worktree add D:/_work/SourceDev/_code/blulens-<yourname> -b <branch> origin/andy/bl-08-tooling`, run `pnpm install` there, and work only there.
 - BASE: create your branch `dev/bl-08-grade-band` from `origin/andy/bl-08-tooling` (has vitest, testing-library, @tanstack/react-query, lib/roles.ts, lib/api/schema.d.ts). Work in your own worktree. Never commit to main/develop.
 - Run commands via `pnpm --filter @blulens/web <script>`.
 - Depends on: none.

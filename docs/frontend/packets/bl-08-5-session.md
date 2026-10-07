@@ -3,6 +3,7 @@
 GOAL: React hooks for the current user: useMe, useLogin, useLogout, using apiFetch and TanStack Query.
 
 STATE:
+- WORKTREE RULE: never switch branches in the shared checkout D:/_work/SourceDev/_code/blulens. Create your own worktree: `git worktree add D:/_work/SourceDev/_code/blulens-<yourname> -b <branch> origin/andy/bl-08-tooling`, run `pnpm install` there, and work only there.
 - BASE: branch `dev/bl-08-session` from develop once bl-08-2 and bl-08-3 are merged. Never commit to main/develop.
 - Depends on: bl-08-2 (apiFetch), bl-08-3 (Providers).
 

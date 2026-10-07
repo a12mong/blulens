@@ -3,6 +3,7 @@
 GOAL: Redirect visitors without a session marker cookie to /login, and logged-in visitors away from /login. API stays authoritative; this is UX only.
 
 STATE:
+- WORKTREE RULE: never switch branches in the shared checkout D:/_work/SourceDev/_code/blulens. Create your own worktree: `git worktree add D:/_work/SourceDev/_code/blulens-<yourname> -b <branch> origin/andy/bl-08-tooling`, run `pnpm install` there, and work only there.
 - BASE: branch `dev/bl-08-middleware` from `origin/andy/bl-08-tooling`. Own worktree. Never commit to main/develop.
 - Depends on: none.
 

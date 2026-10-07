@@ -3,6 +3,7 @@
 GOAL: One TanStack QueryClient provider with the app-wide defaults, wired into the root layout.
 
 STATE:
+- WORKTREE RULE: never switch branches in the shared checkout D:/_work/SourceDev/_code/blulens. Create your own worktree: `git worktree add D:/_work/SourceDev/_code/blulens-<yourname> -b <branch> origin/andy/bl-08-tooling`, run `pnpm install` there, and work only there.
 - BASE: branch `dev/bl-08-query-provider` from `origin/andy/bl-08-tooling` after bl-08-2 is merged to develop (rebase on develop then). Never commit to main/develop.
 - Depends on: bl-08-2 (uses ApiRequestError from `apps/web/lib/api/client.ts`).
 

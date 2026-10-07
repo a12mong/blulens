@@ -3,6 +3,7 @@
 GOAL: One typed fetch wrapper all features use to call the API: same-origin /api/v1, cookies, envelope unwrap, typed errors, one automatic refresh-and-retry on 401.
 
 STATE:
+- WORKTREE RULE: never switch branches in the shared checkout D:/_work/SourceDev/_code/blulens. Create your own worktree: `git worktree add D:/_work/SourceDev/_code/blulens-<yourname> -b <branch> origin/andy/bl-08-tooling`, run `pnpm install` there, and work only there.
 - BASE: create branch `dev/bl-08-api-client` from `origin/andy/bl-08-tooling`. Work in your own worktree. Never commit to main/develop.
 - Run commands via `pnpm --filter @blulens/web <script>`.
 - Depends on: none.
