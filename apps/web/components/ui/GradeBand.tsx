@@ -45,9 +45,20 @@ export type GradeBandProps = {
   upper: GradeKey;
   score: number;
   label?: string;
+  provisional?: boolean;
+  disputed?: boolean;
+  reviewerCount?: number;
 };
 
-export function GradeBand({ lower, upper, score, label }: GradeBandProps) {
+export function GradeBand({
+  lower,
+  upper,
+  score,
+  label,
+  provisional,
+  disputed,
+  reviewerCount,
+}: GradeBandProps) {
   const lowerIndex = GRADE_KEYS.indexOf(lower);
   const upperIndex = GRADE_KEYS.indexOf(upper);
 
@@ -64,10 +75,17 @@ export function GradeBand({ lower, upper, score, label }: GradeBandProps) {
     return null;
   }
 
-  const ariaLabel =
+  let ariaLabel =
     lower === upper
       ? `เกรด ${lower} คะแนน ${score}`
       : `เกรด ${lower} ถึง ${upper} คะแนน ${score}`;
+
+  if (provisional) {
+    ariaLabel += ' (ผลชั่วคราว)';
+  }
+  if (disputed) {
+    ariaLabel += ' (ผลไม่ตรงกัน)';
+  }
 
   const markerIndex = Math.floor(score);
   const displayLabel =
@@ -78,7 +96,13 @@ export function GradeBand({ lower, upper, score, label }: GradeBandProps) {
         : `${lower}\u2013${upper}`;
 
   return (
-    <div role="img" aria-label={ariaLabel} className="inline-flex flex-col gap-1">
+    <div
+      role="img"
+      aria-label={ariaLabel}
+      data-provisional={provisional ? 'true' : undefined}
+      data-disputed={disputed ? 'true' : undefined}
+      className="inline-flex flex-col gap-1"
+    >
       <div className="flex flex-wrap gap-0.5">
         {GRADE_KEYS.map((key, i) => {
           const isActive = i >= lowerIndex && i <= upperIndex;
@@ -105,6 +129,26 @@ export function GradeBand({ lower, upper, score, label }: GradeBandProps) {
       <div data-testid="grade-band-label" className="text-sm text-center">
         {displayLabel}
       </div>
+      {(provisional || disputed) && (
+        <div className="flex flex-wrap justify-center gap-1 mt-0.5">
+          {provisional && (
+            <span
+              data-testid="grade-badge-provisional"
+              className="text-xs border px-1 bg-muted"
+            >
+              {`ชั่วคราว · กรรมการ ${reviewerCount ?? 1} คน`}
+            </span>
+          )}
+          {disputed && (
+            <span
+              data-testid="grade-badge-disputed"
+              className="text-xs border px-1 bg-muted"
+            >
+              ผลไม่ตรงกัน รอคณะกรรมการ
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

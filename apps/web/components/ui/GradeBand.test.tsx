@@ -66,4 +66,78 @@ describe('GradeBand', () => {
     rerender(<GradeBand lower="BG1" upper="BG3" score={4.2} label="BG1/BG2" />);
     expect(labelContainer).toHaveTextContent('BG1/BG2');
   });
+
+  it('shows the provisional badge with reviewer count and marks the root', () => {
+    render(
+      <GradeBand
+        lower="S-"
+        upper="S+"
+        score={7.8}
+        provisional
+        reviewerCount={1}
+      />,
+    );
+
+    const root = screen.getByRole('img');
+    expect(root).toHaveAttribute('data-provisional', 'true');
+    expect(root.getAttribute('aria-label')).toMatch(/\(ผลชั่วคราว\)$/);
+    expect(screen.getByText('ชั่วคราว · กรรมการ 1 คน')).toBeInTheDocument();
+    expect(screen.getByTestId('grade-badge-provisional')).toHaveTextContent(
+      'ชั่วคราว · กรรมการ 1 คน',
+    );
+  });
+
+  it('shows the disputed badge and marks the root', () => {
+    render(
+      <GradeBand
+        lower="S-"
+        upper="S+"
+        score={7.8}
+        disputed
+      />,
+    );
+
+    const root = screen.getByRole('img');
+    expect(root).toHaveAttribute('data-disputed', 'true');
+    expect(root.getAttribute('aria-label')).toMatch(/\(ผลไม่ตรงกัน\)$/);
+    expect(screen.getByText('ผลไม่ตรงกัน รอคณะกรรมการ')).toBeInTheDocument();
+    expect(screen.getByTestId('grade-badge-disputed')).toBeInTheDocument();
+    expect(screen.queryByTestId('grade-badge-provisional')).not.toBeInTheDocument();
+  });
+
+  it('shows both provisional and disputed badges together', () => {
+    render(
+      <GradeBand
+        lower="S-"
+        upper="S+"
+        score={7.8}
+        provisional
+        disputed
+        reviewerCount={2}
+      />,
+    );
+
+    const root = screen.getByRole('img');
+    expect(root).toHaveAttribute('data-provisional', 'true');
+    expect(root).toHaveAttribute('data-disputed', 'true');
+    expect(root.getAttribute('aria-label')).toBe(
+      'เกรด S- ถึง S+ คะแนน 7.8 (ผลชั่วคราว) (ผลไม่ตรงกัน)',
+    );
+    expect(screen.getByTestId('grade-badge-provisional')).toHaveTextContent(
+      'ชั่วคราว · กรรมการ 2 คน',
+    );
+    expect(screen.getByTestId('grade-badge-disputed')).toHaveTextContent(
+      'ผลไม่ตรงกัน รอคณะกรรมการ',
+    );
+  });
+
+  it('renders neither badge when flags are not set', () => {
+    render(<GradeBand lower="S-" upper="S+" score={7.4} />);
+
+    const root = screen.getByRole('img');
+    expect(root).not.toHaveAttribute('data-provisional');
+    expect(root).not.toHaveAttribute('data-disputed');
+    expect(screen.queryByTestId('grade-badge-provisional')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('grade-badge-disputed')).not.toBeInTheDocument();
+  });
 });
