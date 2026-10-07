@@ -12,6 +12,7 @@
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "db:purge-qa": "dotenv -e ../../.env -- tsx prisma/purge-qa.ts",
     "db:setup": "dotenv -e ../../.env -- prisma migrate deploy && pnpm db:seed"
   },
   "prisma": {

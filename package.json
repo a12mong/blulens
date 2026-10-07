@@ -15,6 +15,7 @@
     "db:deploy": "pnpm --filter @blulens/api db:deploy",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "db:seed": "pnpm --filter @blulens/api db:seed",
+    "db:purge-qa": "pnpm --filter @blulens/api db:purge-qa",
     "db:setup": "pnpm --filter @blulens/api db:setup"
   },
   "devDependencies": {
