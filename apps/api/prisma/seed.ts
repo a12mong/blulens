@@ -59,9 +59,122 @@ async function seedRubric(): Promise<string> {
   return `rubric grading-v1: created (active=${!anyActive})`;
 }
 
+// ---------------------------------------------------------------- demo data (dev only: SEED_DEMO=1)
+
+const GRADE_KEYS = ['RK1', 'RK2', 'RK3', 'BG1', 'BG2', 'BG3', 'S-', 'S', 'S+', 'N-', 'N', 'N+', 'P-', 'P', 'P+'];
+
+/** name_key / alias_key are already normalised (lower-case, single spaces). */
+const DEMO_TEAMS = [
+  { name: 'Blue Wing', nameKey: 'blue wing', alias: { alias: 'บลูวิง', aliasKey: 'บลูวิง' } },
+  { name: 'Red Phoenix', nameKey: 'red phoenix', alias: null },
+  { name: 'Green Valley', nameKey: 'green valley', alias: null },
+];
+
+/** member6 is in two teams on purpose, to show the MULTI_TEAM warning (A11). */
+const DEMO_MEMBERS = [
+  { n: 1, name: 'สมชาย ใจดี', grade: 6, teams: ['blue wing'] },
+  { n: 2, name: 'วิภา ศรีสุข', grade: 7, teams: ['blue wing'] },
+  { n: 3, name: 'ธนา รุ่งเรือง', grade: 8, teams: ['red phoenix'] },
+  { n: 4, name: 'มาลี สายสมร', grade: 9, teams: ['red phoenix'] },
+  { n: 5, name: 'กิตติ พานทอง', grade: 10, teams: ['green valley'] },
+  { n: 6, name: 'นภา ทองดี', grade: 7, teams: ['blue wing', 'green valley'] },
+];
+
+async function upsertUser(email: string, displayName: string, password: string, roles: Array<'Committee' | 'Member'>) {
+  const existing = await prisma.user.findUnique({ where: { email } });
+  const user =
+    existing ?? (await prisma.user.create({ data: { email, displayName, passwordHash: await hashPassword(password) } }));
+  for (const role of roles) {
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: user.id, role } },
+      create: { userId: user.id, role },
+      update: {},
+    });
+  }
+  return user;
+}
+
+async function seedDemo(): Promise<string> {
+  if (process.env.SEED_DEMO !== '1') return 'demo: skipped (SEED_DEMO != 1)';
+  const password = process.env.SEED_DEMO_PASSWORD;
+  if (!password) return 'demo: skipped (SEED_DEMO_PASSWORD not set)';
+
+  // D-S2: in dev the bootstrap admin also holds Committee, so it can create events and entries
+  const adminEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const admin = adminEmail ? await prisma.user.findUnique({ where: { email: adminEmail } }) : null;
+  if (admin) {
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: admin.id, role: 'Committee' } },
+      create: { userId: admin.id, role: 'Committee' },
+      update: {},
+    });
+  }
+
+  await upsertUser('committee@blulens.local', 'คณะกรรมการ (เดโม)', password, ['Committee']);
+
+  const teamIdByKey = new Map<string, string>();
+  for (const t of DEMO_TEAMS) {
+    const team = await prisma.team.upsert({
+      where: { nameKey: t.nameKey },
+      create: { name: t.name, nameKey: t.nameKey },
+      update: {},
+    });
+    teamIdByKey.set(t.nameKey, team.id);
+    if (t.alias) {
+      await prisma.teamAlias.upsert({
+        where: { aliasKey: t.alias.aliasKey },
+        create: { teamId: team.id, ...t.alias },
+        update: {},
+      });
+    }
+  }
+
+  const rubric = await prisma.rubric.findUnique({ where: { methodVersion: 'grading-v1' } });
+  for (const m of DEMO_MEMBERS) {
+    const user = await upsertUser(`member${m.n}@blulens.local`, m.name, password, ['Member']);
+    for (const key of m.teams) {
+      const teamId = teamIdByKey.get(key)!;
+      const open = await prisma.teamMembership.findFirst({ where: { userId: user.id, teamId, validTo: null } });
+      if (!open) await prisma.teamMembership.create({ data: { userId: user.id, teamId } });
+    }
+    // D-S3: an official grade so entries pass the grade checks (an override result: margin 0, exact)
+    const graded = await prisma.assessmentResult.findFirst({
+      where: { status: { in: ['approved', 'overridden'] }, assessment: { subjectUserId: user.id } },
+    });
+    if (!graded) {
+      const assessment = await prisma.assessment.create({
+        data: { subjectUserId: user.id, rubricId: rubric?.id, status: 'overridden', submittedAt: new Date() },
+      });
+      await prisma.assessmentResult.create({
+        data: {
+          assessmentId: assessment.id,
+          version: 1,
+          source: 'override',
+          status: 'overridden',
+          score: m.grade + 0.5,
+          margin: 0,
+          lowerIndex: m.grade,
+          centerIndex: m.grade,
+          upperIndex: m.grade,
+          kind: 'exact',
+          label: GRADE_KEYS[m.grade]!,
+          nRaters: 0,
+          flags: ['OVERRIDE'],
+          methodVersion: 'grading-v1',
+          inputs: { demoSeed: true },
+          reason: 'demo seed: slice 1 sample grade',
+          computedBy: admin?.id ?? null,
+        },
+      });
+    }
+  }
+  return `demo: ok (committee + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''})`;
+}
+
 async function main() {
   console.log(await seedAdmin());
   console.log(await seedRubric());
+  console.log(await seedDemo());
 }
 
 main()

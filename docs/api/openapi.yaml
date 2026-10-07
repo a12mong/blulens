@@ -245,7 +245,7 @@ paths:
                 properties:
                   teams: { type: array, items: { $ref: '#/components/schemas/Team' } }
                   teamCount: { type: integer }
-                  warnings: { type: array, items: { type: string, enum: [MULTI_TEAM, NO_APPROVED_GRADE, GRADE_OUT_OF_BAND, FRESH_ASSESSMENT_REQUIRED] }, description: 'computed live; shown to Admin/Committee' }
+                  warnings: { type: array, items: { type: string, enum: [MULTI_TEAM] } }
   /teams/{teamId}/members:
     post:
       tags: [teams]
@@ -804,7 +804,7 @@ paths:
                 reason: { type: string, minLength: 20, maxLength: 2000, description: required when warnings include GRADE_OUT_OF_BAND }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Entry' } } } }
-        '409': { description: 'ENTRY_NOT_PENDING | ENTRY_PLAYER_UNGRADED | ENTRY_OUT_OF_BAND_REASON_REQUIRED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '409': { description: 'ENTRY_NOT_PENDING | ENTRY_PLAYER_UNGRADED | ENTRY_FRESH_ASSESSMENT_MISSING (event requiresFreshAssessment and a player has no approved assessment bound to it, A13) | ENTRY_OUT_OF_BAND_REASON_REQUIRED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /entries/{entryId}/reject:
     post:
       tags: [tournaments]
@@ -1536,12 +1536,13 @@ components:
               userId: { type: string, format: uuid }
               displayName: { type: string }
               teamIds: { type: array, items: { type: string, format: uuid } }
+              teamId: { type: [string, 'null'], format: uuid, description: 'club picked for THIS entry (EntryInput.players[].teamId)' }
               teamCount: { type: integer, description: 'teams the player currently belongs to (A11 warning when > 1)' }
               gradeConsent: { type: boolean, description: 'A14 consent of this player' }
               grade: { oneOf: [{ $ref: '#/components/schemas/GradeView' }, { type: 'null' }], description: 'null when hidden to the caller' }
         seedScore: { type: [number, 'null'], description: 'singles = player score; doubles = mean of both (draw.md §3); null when hidden to the caller' }
         gradeVisibility: { type: string, enum: [hidden, public, disclosed], description: 'A14: public = all players consented; disclosed = event transparency disclosure' }
-        warnings: { type: array, items: { type: string, enum: [MULTI_TEAM] } }
+        warnings: { type: array, items: { type: string, enum: [MULTI_TEAM, NO_APPROVED_GRADE, GRADE_OUT_OF_BAND, FRESH_ASSESSMENT_REQUIRED] }, description: 'computed live; shown to Admin/Committee' }
 
     # ---- draws ----
     DrawSummary:

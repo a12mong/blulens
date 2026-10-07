@@ -7,7 +7,9 @@ import {
   gradeViewSchema,
   loginInputSchema,
   meSchema,
+  eventInputSchema,
   registerInputSchema,
+  tournamentInputSchema,
   roleSchema,
   userSummarySchema,
 } from '@blulens/shared';
@@ -51,7 +53,9 @@ function flatten(s: OaSchema): { properties: string[]; required: string[] } {
 }
 
 function zodObject(schema: z.ZodTypeAny): { properties: string[]; required: string[] } {
-  const shape = (schema as z.AnyZodObject).shape as Record<string, z.ZodTypeAny>;
+  // unwrap .refine()/.superRefine() (ZodEffects) to the underlying object
+  const obj = ('shape' in schema ? schema : (schema._def as { schema: z.ZodTypeAny }).schema) as z.AnyZodObject;
+  const shape = obj.shape as Record<string, z.ZodTypeAny>;
   return {
     properties: Object.keys(shape).sort(),
     required: Object.keys(shape)
@@ -66,6 +70,8 @@ const OBJECT_PAIRS: [string, z.ZodTypeAny][] = [
   ['UserSummary', userSummarySchema],
   ['Me', meSchema],
   ['GradeView', gradeViewSchema],
+  ['TournamentInput', tournamentInputSchema],
+  ['EventInput', eventInputSchema],
 ];
 
 const ENUM_PAIRS: [string, z.ZodEnum<[string, ...string[]]>][] = [
