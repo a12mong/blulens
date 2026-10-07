@@ -187,14 +187,14 @@ export function EntryTable({
                       <button
                         data-testid="entry-approve"
                         onClick={() => onApprove?.(entry)}
-                        className="px-3 py-1 text-sm rounded bg-green-600 text-white hover:bg-green-700"
+                        className="px-3 py-1 text-sm rounded bg-success text-success-foreground hover:opacity-90"
                       >
                         อนุมัติ
                       </button>
                       <button
                         data-testid="entry-reject"
                         onClick={() => onReject?.(entry)}
-                        className="px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700"
+                        className="px-3 py-1 text-sm rounded bg-destructive text-destructive-foreground hover:opacity-90"
                       >
                         ปฏิเสธ
                       </button>
