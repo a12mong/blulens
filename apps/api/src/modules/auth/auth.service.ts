@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
-  GRADE_KEYS,
   permissionsFor,
   roleSchema,
   type LoginInput,
@@ -14,6 +13,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { signJwt } from '../../common/auth/jwt';
 import { hashPassword, verifyPassword } from '../../common/crypto/password';
 import { ApiException } from '../../common/errors/api.exception';
+import { officialResults, toGradeView } from '../../common/grades';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 export interface SessionTokens {
@@ -119,23 +119,8 @@ export class AuthService {
     const roles = user.roles.map((r) => r.role).filter((r): r is Role => roleSchema.safeParse(r).success);
 
     // official grade = latest approved/overridden result of the player (grading §8)
-    const official = await this.prisma.assessmentResult.findFirst({
-      where: { status: { in: ['approved', 'overridden'] }, assessment: { subjectUserId: userId } },
-      orderBy: { computedAt: 'desc' },
-    });
-    const key = (i: number | null) => GRADE_KEYS[i ?? 0]!;
-    const currentGrade =
-      official && official.score !== null && official.kind && official.label
-        ? {
-            score: Number(official.score),
-            margin: Number(official.margin),
-            lower: key(official.lowerIndex),
-            upper: key(official.upperIndex),
-            center: key(official.centerIndex),
-            kind: official.kind,
-            label: official.label,
-          }
-        : null;
+    const official = (await officialResults(this.prisma, [userId])).get(userId);
+    const currentGrade = official ? toGradeView(official) : null;
 
     return {
       id: user.id,
