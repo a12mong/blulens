@@ -27,6 +27,8 @@ tags:
   - name: tournaments
   - name: draws
   - name: audit
+  - name: format
+    description: bl-17 DRAFT (docs/specs/tournament-format.md), waiting for owner approval
 
 paths:
   /health:
@@ -547,6 +549,113 @@ paths:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Bracket' } } } }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # ---------------- format: groups + knockout (bl-17 DRAFT, tournament-format.md) ----------------
+  /events/{eventId}/format:
+    put:
+      tags: [format]
+      summary: Set the event format (before it is locked by the first group/knockout draw)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventFormat' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/EventFormat' } } } }
+        '409': { description: 'FORMAT_LOCKED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /events/{eventId}/groups/preview:
+    post:
+      tags: [format]
+      summary: Group draw preview (Draw kind=group); publish/verify via the existing /draws endpoints
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seed: { type: string, pattern: '^[0-9a-f]{32}$' }
+                groupCount: { type: integer, minimum: 1, description: override when the default sizing rule fails }
+      responses:
+        '201': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+  /events/{eventId}/groups:
+    get:
+      tags: [format]
+      summary: Groups with members and the round-robin schedule
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Group' } }
+  /events/{eventId}/groups/confirm:
+    post:
+      tags: [format]
+      summary: Confirm group-stage results -> snapshot group_standings, unlock knockout generation
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GroupStanding' } }
+        '409': { description: 'GROUP_MATCHES_INCOMPLETE', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /events/{eventId}/standings:
+    get:
+      tags: [format]
+      summary: Live group standings (or the confirmed snapshot)
+      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GroupStanding' } }
+  /events/{eventId}/knockout/preview:
+    post:
+      tags: [format]
+      summary: Knockout draw preview seeded from the confirmed standings (Draw kind=knockout)
+      x-roles: [Committee]
+      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seed: { type: string, pattern: '^[0-9a-f]{32}$' }
+      responses:
+        '201': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+        '409': { description: 'GROUP_STAGE_NOT_CONFIRMED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /matches/{matchId}/result:
+    put:
+      tags: [format]
+      summary: Enter/edit a match result (validated against the stage MatchFormat; audited)
+      x-roles: [Committee]
+      parameters: [{ name: matchId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [played, walkover_a, walkover_b] }
+                games:
+                  type: array
+                  items: { type: object, required: [a, b], properties: { a: { type: integer, minimum: 0 }, b: { type: integer, minimum: 0 } } }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Match' } } } }
+        '422': { description: 'MATCH_SCORE_INVALID', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '409': { description: 'STAGE_CONFIRMED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+
   # ---------------- audit ----------------
   /audit-logs:
     get:
@@ -884,6 +993,7 @@ components:
           properties:
             seed: { type: string }
             inputHash: { type: string }
+            kind: { type: string, enum: [knockout, group], default: knockout, description: 'group = bl-17 group draw' }
             rulesetVersion: { type: string, example: draw-v1 }
             size: { type: integer, description: bracket size (power of two) }
             slots:
@@ -924,6 +1034,81 @@ components:
                     bottom: { type: [string, 'null'], format: uuid }
                     winner: { type: [string, 'null'], format: uuid }
                     status: { type: string, enum: [scheduled, bye, walkover, finished] }
+
+    # ---- format (bl-17 DRAFT) ----
+    MatchFormat:
+      type: object
+      required: [mode, games, pointsPerGame, deuce]
+      properties:
+        preset: { type: string, enum: [group_2x15, single_30, bo3_21, single_21, custom] }
+        mode: { type: string, enum: [fixed_games, best_of] }
+        games: { type: integer, minimum: 1, maximum: 5 }
+        pointsPerGame: { type: integer, minimum: 5, maximum: 31 }
+        deuce: { type: boolean }
+        cap: { type: [integer, 'null'] }
+        drawAllowed: { type: boolean, default: false }
+    EventFormat:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [knockout, groups_knockout] }
+        groupSize: { type: integer, minimum: 3, maximum: 5, default: 4 }
+        advancePerGroup: { type: integer, minimum: 1, maximum: 2, default: 2 }
+        bestThirds: { type: integer, minimum: 0, default: 0 }
+        groupMatchFormat: { $ref: '#/components/schemas/MatchFormat' }
+        knockoutMatchFormat: { $ref: '#/components/schemas/MatchFormat' }
+        points:
+          type: object
+          properties:
+            win: { type: integer, default: 3 }
+            draw: { type: integer, default: 1 }
+            loss: { type: integer, default: 0 }
+        tiebreakers: { type: array, items: { type: string, enum: [points, point_diff, head_to_head, points_for, game_diff, lot] } }
+        thirdPlacePlayoff: { type: boolean, default: true }
+        lockedAt: { type: [string, 'null'], format: date-time, readOnly: true }
+    Match:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        stage: { type: string, enum: [group, knockout, third_place] }
+        groupId: { type: [string, 'null'], format: uuid }
+        round: { type: integer }
+        a: { type: [string, 'null'], format: uuid, description: entryId }
+        b: { type: [string, 'null'], format: uuid }
+        games: { type: array, items: { type: object, properties: { a: { type: integer }, b: { type: integer } } } }
+        result: { type: [string, 'null'], enum: [a_win, b_win, draw, walkover_a, walkover_b, void, null] }
+        status: { type: string, enum: [scheduled, bye, walkover, finished, void] }
+    Group:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string, example: A }
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              entryId: { type: string, format: uuid }
+              seedInGroup: { type: integer }
+              pot: { type: integer }
+        matches: { type: array, items: { $ref: '#/components/schemas/Match' } }
+    GroupStanding:
+      type: object
+      properties:
+        groupId: { type: string, format: uuid }
+        entryId: { type: string, format: uuid }
+        rank: { type: integer }
+        played: { type: integer }
+        won: { type: integer }
+        drawn: { type: integer }
+        lost: { type: integer }
+        points: { type: integer }
+        pointsFor: { type: integer }
+        pointsAgainst: { type: integer }
+        diff: { type: integer }
+        tiebreakNote: { type: [string, 'null'] }
+        qualification: { type: string, enum: [qualified, best_third, best_third_contender, out] }
+        confirmed: { type: boolean, description: true when served from the confirmed snapshot }
 
     # ---- audit ----
     AuditPage:
