@@ -12,6 +12,16 @@ const CreateAssessmentSchema = z.object({
 
 class CreateAssessmentDto extends createZodDto(CreateAssessmentSchema) {}
 
+const AssignReviewersSchema = z.object({
+  reviewerIds: z.array(z.string().uuid()).min(1).max(10).refine(
+    (ids) => new Set(ids).size === ids.length,
+    { message: 'Duplicate reviewer IDs' }
+  ),
+  dueAt: z.string().datetime({ offset: true }).optional(),
+});
+
+class AssignReviewersDto extends createZodDto(AssignReviewersSchema) {}
+
 @Controller('assessments')
 export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
@@ -27,5 +37,16 @@ export class AssessmentsController {
   @Roles('Member')
   async submit(@Param('assessmentId') assessmentId: string, @CurrentUser() user: AuthUser) {
     return this.assessmentsService.submit(assessmentId, user);
+  }
+
+  @Post(':assessmentId/assign')
+  @HttpCode(200)
+  @Roles('Committee')
+  async assign(
+    @Param('assessmentId') assessmentId: string,
+    @Body() body: AssignReviewersDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.assign(assessmentId, user, body);
   }
 }
