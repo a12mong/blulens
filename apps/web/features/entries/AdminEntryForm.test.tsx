@@ -12,7 +12,18 @@ vi.mock('@/features/users/PlayerPicker', () => ({
     const index = playerPickerCallCount++;
     return (
       <div data-testid={`player-picker-${index}`}>
-        <button onClick={() => onChange({ userId: forcePlayerDuplicate ? 'u1' : (index === 0 ? 'u1' : 'u2'), displayName: `Player ${index + 1}` })}>
+        <button
+          onClick={() =>
+            onChange({
+              userId: forcePlayerDuplicate
+                ? 'u1'
+                : index === 0
+                  ? 'u1'
+                  : 'u2',
+              displayName: `Player ${index + 1}`,
+            })
+          }
+        >
           Select Player
         </button>
       </div>
@@ -25,7 +36,14 @@ vi.mock('@/features/teams/TeamCombobox', () => ({
     const index = teamComboboxCallCount++;
     return (
       <div data-testid={`team-combobox-${index}`}>
-        <button onClick={() => onChange({ teamId: index === 0 ? 't1' : 't2', name: `Team ${index + 1}` })}>
+        <button
+          onClick={() =>
+            onChange({
+              teamId: index === 0 ? 't1' : 't2',
+              name: `Team ${index + 1}`,
+            })
+          }
+        >
           Select Team
         </button>
       </div>
@@ -74,7 +92,7 @@ describe('AdminEntryForm', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <AdminEntryForm eventId="EV1" />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
     // Select both players (u1, u2)
@@ -92,8 +110,6 @@ describe('AdminEntryForm', () => {
     fireEvent.click(saveDraftBtn);
 
     // Verify payload structure:
-    // - Two players with userId and optional teamId
-    // - NO 'name' key when input is empty string
     expect(capturedPayload).toBeDefined();
     expect(capturedPayload.players).toHaveLength(2);
     expect(capturedPayload.players[0]).toHaveProperty('userId');
@@ -118,7 +134,7 @@ describe('AdminEntryForm', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <AdminEntryForm eventId="EV1" />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
     const saveDraftBtn = screen.getByTestId('entry-save-draft') as HTMLButtonElement;
@@ -145,7 +161,6 @@ describe('AdminEntryForm', () => {
       isPending: false,
     });
 
-    // Force both pickers to emit 'u1'
     forcePlayerDuplicate = true;
     playerPickerCallCount = 0;
     teamComboboxCallCount = 0;
@@ -153,7 +168,7 @@ describe('AdminEntryForm', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <AdminEntryForm eventId="EV1" />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
     const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
@@ -184,7 +199,6 @@ describe('AdminEntryForm', () => {
     fireEvent.click(forwardBtn);
     expect(forwardMuteMock).not.toHaveBeenCalled();
 
-    // Reset flag for next tests
     forcePlayerDuplicate = false;
   });
 
@@ -194,10 +208,10 @@ describe('AdminEntryForm', () => {
 
     let createOnSuccess: ((entry: any) => void) | undefined;
 
-    mockCreateEntry.mockImplementation((eventId: string, opts?: any) => {
+    mockCreateEntry.mockImplementation((_eventId: string, opts?: any) => {
       createOnSuccess = opts?.onSuccess;
       return {
-        mutate: vi.fn((body: any) => {
+        mutate: vi.fn((_body: any) => {
           createOnSuccess?.(mockEntry);
         }),
         mutateAsync: vi.fn(),
@@ -213,10 +227,9 @@ describe('AdminEntryForm', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <AdminEntryForm eventId="EV1" />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
-    // Select players - mocks track call order to differentiate
     const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
     const player2Btn = screen.getByTestId('player-picker-1').querySelector('button');
 
@@ -229,7 +242,7 @@ describe('AdminEntryForm', () => {
     await waitFor(() => {
       const warnings = screen.getByTestId('entry-warnings');
       expect(warnings).toBeInTheDocument();
-      expect(warnings.textContent).toContain('ผู้เล่นสังกัดหลายทีม');
+      expect(warnings.textContent).toContain('ผู้เล่นสังกัดหลายสโมสร');
     });
   });
 
@@ -250,12 +263,150 @@ describe('AdminEntryForm', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <AdminEntryForm eventId="EV1" />
-      </QueryClientProvider>
+      </QueryClientProvider>,
     );
 
     const nameInput = screen.getByTestId('entry-name') as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Test Pair' } });
 
     expect(nameInput.value).toBe('Test Pair');
+  });
+
+  it('after forward the panel and warnings stay until the admin chooses', async () => {
+    const queryClient = createQueryClient();
+    const onDone = vi.fn();
+
+    const createdDraft = {
+      id: 'entry-123',
+      eventId: 'EV1',
+      status: 'draft',
+      name: 'กิตติ / สุรชัย',
+      warnings: ['GRADE_OUT_OF_BAND'],
+    };
+
+    const forwardedResult = {
+      ...createdDraft,
+      status: 'pending_committee',
+      warnings: ['GRADE_OUT_OF_BAND'],
+    };
+
+    let forwardOnSuccess: ((entry: any) => void) | undefined;
+
+    mockCreateEntry.mockReturnValue({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn().mockResolvedValue(createdDraft),
+      isPending: false,
+    });
+
+    mockForwardEntry.mockImplementation((opts?: any) => {
+      forwardOnSuccess = opts?.onSuccess;
+      return {
+        mutate: vi.fn((_body: any) => {
+          forwardOnSuccess?.(forwardedResult);
+        }),
+        isPending: false,
+      };
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AdminEntryForm eventId="EV1" onDone={onDone} />
+      </QueryClientProvider>,
+    );
+
+    // Pick two players
+    const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
+    const player2Btn = screen.getByTestId('player-picker-1').querySelector('button');
+    fireEvent.click(player1Btn!);
+    fireEvent.click(player2Btn!);
+
+    // Click forward
+    const forwardBtn = screen.getByTestId('entry-forward');
+    fireEvent.click(forwardBtn);
+
+    // entry-forwarded visible with Thai out-of-band text
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-forwarded')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('ส่งให้คณะกรรมการแล้ว')).toBeInTheDocument();
+    expect(screen.getByText('กิตติ / สุรชัย')).toBeInTheDocument();
+    expect(screen.getByTestId('entry-warnings')).toHaveTextContent(
+      'เกรดอยู่นอกช่วงของประเภทนี้',
+    );
+
+    // onDone NOT called yet
+    expect(onDone).not.toHaveBeenCalled();
+
+    // Click entry-add-another -> form is back and empty
+    const addAnotherBtn = screen.getByTestId('entry-add-another');
+    fireEvent.click(addAnotherBtn);
+
+    expect(screen.queryByTestId('entry-forwarded')).toBeNull();
+    expect(screen.getByTestId('entry-forward')).toBeInTheDocument();
+    expect(screen.queryByTestId('entry-warnings')).toBeNull();
+  });
+
+  it('clicking entry-done calls onDone with the forwarded entry', async () => {
+    const queryClient = createQueryClient();
+    const onDone = vi.fn();
+
+    const createdDraft = {
+      id: 'entry-456',
+      eventId: 'EV1',
+      status: 'draft',
+      name: 'สมชาย / วิภา',
+      warnings: ['NO_APPROVED_GRADE'],
+    };
+
+    const forwardedResult = {
+      ...createdDraft,
+      status: 'pending_committee',
+      warnings: ['NO_APPROVED_GRADE'],
+    };
+
+    let forwardOnSuccess: ((entry: any) => void) | undefined;
+
+    mockCreateEntry.mockReturnValue({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn().mockResolvedValue(createdDraft),
+      isPending: false,
+    });
+
+    mockForwardEntry.mockImplementation((opts?: any) => {
+      forwardOnSuccess = opts?.onSuccess;
+      return {
+        mutate: vi.fn((_body: any) => {
+          forwardOnSuccess?.(forwardedResult);
+        }),
+        isPending: false,
+      };
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AdminEntryForm eventId="EV1" onDone={onDone} />
+      </QueryClientProvider>,
+    );
+
+    const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
+    const player2Btn = screen.getByTestId('player-picker-1').querySelector('button');
+    fireEvent.click(player1Btn!);
+    fireEvent.click(player2Btn!);
+
+    const forwardBtn = screen.getByTestId('entry-forward');
+    fireEvent.click(forwardBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-forwarded')).toBeInTheDocument();
+    });
+
+    expect(onDone).not.toHaveBeenCalled();
+
+    const doneBtn = screen.getByTestId('entry-done');
+    fireEvent.click(doneBtn);
+
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledWith(forwardedResult);
   });
 });
