@@ -5,9 +5,6 @@ const SESSION_COOKIE = 'bl_session';
 // Protected routes require a valid session
 const PROTECTED_PREFIXES = ['/me', '/review', '/committee', '/admin'];
 
-// Public routes that don't require authentication
-const PUBLIC_PATHS = ['/', '/login', '/register', '/tournaments', '/403'];
-
 /**
  * Middleware for session-based routing: redirect unauthenticated users away from protected paths,
  * and authenticated users away from auth pages.
@@ -16,11 +13,10 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
-  // Check if path is protected
-  const isProtected = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-
-  // Check if path is public
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p);
+  // Check if path is protected (match segment boundary to avoid /membership being treated as /me)
+  const isProtected = PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/'),
+  );
 
   // Rule 1: Protected path without session → redirect to /login with next parameter
   if (isProtected && !hasSession) {

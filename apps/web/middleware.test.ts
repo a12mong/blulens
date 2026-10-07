@@ -95,4 +95,11 @@ describe('middleware', () => {
 
     expect(response.status).toBe(200);
   });
+
+  it('allows /membership without bl_session (segment boundary check)', () => {
+    const request = new NextRequest('http://localhost:3100/membership');
+    const response = middleware(request);
+
+    expect(response.status).toBe(200);
+  });
 });
