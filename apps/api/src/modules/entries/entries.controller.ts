@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
-import { entryApproveInputSchema, entryInputSchema, entryStatusSchema, reasonInputSchema } from '@blulens/shared';
+import { entryApproveInputSchema, entryInputSchema, entryRejectInputSchema, entryStatusSchema } from '@blulens/shared';
 import type { AuthUser, AuthedRequest } from '../../common/auth/auth.types';
 import { CurrentUser, Roles } from '../../common/auth/decorators';
 import { Public } from '../../common/decorators/public.decorator';
@@ -10,7 +10,7 @@ import { EntriesService } from './entries.service';
 class EntryInputDto extends createZodDto(entryInputSchema) {}
 // body is optional (Dwight N1): no body = approve without a reason
 class ApproveDto extends createZodDto(entryApproveInputSchema.default({})) {}
-class ReasonDto extends createZodDto(reasonInputSchema) {}
+class RejectDto extends createZodDto(entryRejectInputSchema) {}
 class EventEntriesQueryDto extends createZodDto(z.object({ status: entryStatusSchema.optional() })) {}
 class QueueQueryDto extends createZodDto(
   z.object({
@@ -63,7 +63,7 @@ export class EntriesController {
   @Roles('Committee')
   @Post('entries/:entryId/reject')
   @HttpCode(200)
-  reject(@Param('entryId', uuid) id: string, @Body() body: ReasonDto, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
+  reject(@Param('entryId', uuid) id: string, @Body() body: RejectDto, @CurrentUser() user: AuthUser, @Req() req: AuthedRequest) {
     return this.entries.reject(id, body.reason, user, req.ip);
   }
 }

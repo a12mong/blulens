@@ -7,9 +7,11 @@ import {
   gradeViewSchema,
   loginInputSchema,
   meSchema,
+  entryRejectInputSchema,
   eventFormatSchema,
   eventInputSchema,
   matchFormatSchema,
+  reasonInputSchema,
   registerInputSchema,
   tournamentInputSchema,
   roleSchema,
@@ -79,6 +81,8 @@ const OBJECT_PAIRS: [string, z.ZodTypeAny][] = [
   ['EventInput', eventInputSchema],
   ['EventFormat', eventFormatSchema],
   ['MatchFormat', matchFormatSchema],
+  ['ReasonInput', reasonInputSchema],
+  ['EntryRejectInput', entryRejectInputSchema],
 ];
 
 const ENUM_PAIRS: [string, z.ZodEnum<[string, ...string[]]>][] = [

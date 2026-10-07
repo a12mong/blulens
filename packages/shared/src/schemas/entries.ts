@@ -32,3 +32,8 @@ export const entryApproveInputSchema = z.object({
 export const reasonInputSchema = z.object({
   reason: z.string().trim().min(5).max(2000),
 });
+
+/** openapi EntryRejectInput: entry reject reason is at least 10 chars (decision 2026-10-07; other reasons stay at 5). */
+export const entryRejectInputSchema = z.object({
+  reason: z.string().trim().min(10).max(2000),
+});
