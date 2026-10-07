@@ -14,7 +14,7 @@ export class ApiException extends HttpException {
     super({ code, message, details }, status);
   }
 
-  static unauthorized(message = 'กรุณาเข้าสู่ระบบก่อนใช้งาน', code = 'AUTH_REQUIRED') {
+  static unauthorized(message = 'กรุณาเข้าสู่ระบบก่อนใช้งาน', code = 'UNAUTHENTICATED') {
     return new ApiException(HttpStatus.UNAUTHORIZED, code, message);
   }
 

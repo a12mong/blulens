@@ -21,3 +21,5 @@
 - สาเหตุ: เครื่องตั้ง `NODE_ENV` เป็นค่าไม่มาตรฐาน — รันแบบ `NODE_ENV=production pnpm --filter @blulens/web build`
 - `pnpm --filter @blulens/web typecheck` ต้อง `pnpm --filter @blulens/shared build` ก่อน (ไม่งั้นหา `@blulens/shared` ไม่เจอ)
 - พอร์ต 3100 อาจถูกใช้อยู่ (เจ้าของรัน `pnpm dev`) — Dev ควรรัน dev server ของตัวเองที่พอร์ต 3190 (`next dev --port 3190`) แล้วปิดด้วย PID ของตัวเองเท่านั้น (บันทึกโดย Andy, bl-08)
+## Windows: pnpm scripts run in cmd.exe
+- No `>/dev/null`. In cmd `a || b && c` means `a || (b && c)`, so write `(a || b) && c` explicitly (same meaning in sh).

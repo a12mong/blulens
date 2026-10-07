@@ -7,7 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "prisma generate --no-hints && jest --config test/jest-e2e.json --runInBand",
+    "test": "(prisma generate --no-hints || echo prisma-generate-skipped) && jest --config test/jest-e2e.json --runInBand",
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:generate": "prisma generate",
@@ -46,6 +46,7 @@
     "supertest": "^7.1.0",
     "ts-jest": "^29.3.0",
     "tsx": "^4.23.15",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "yaml": "^2.9.1"
   }
 }
