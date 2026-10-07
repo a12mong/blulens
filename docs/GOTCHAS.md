@@ -24,3 +24,5 @@
 ## Windows: pnpm scripts run in cmd.exe
 - No `>/dev/null`. In cmd `a || b && c` means `a || (b && c)`, so write `(a || b) && c` explicitly (same meaning in sh).
 - **provenMinimal false claim (draw solver, merged bl-18-4):** when the search exhausts its node limit and falls back to first-fit, the result still says provenMinimal=true; draw.md §4 step 4 requires 'best found, not proven'. Owner of the fix: Kevin via bl-18-4b. Do not show 'minimum possible' in the UI until it is fixed.
+
+- **Green jest does NOT mean the API boots (P0, 2026-10-07):** ts-jest transpiles per file, so a type error (an untyped CORS origin callback) passed 100+ tests while `nest build` failed and the API could not start. The merge gate for apps/api MUST run `pnpm --filter @blulens/api build` (nest build) and smoke `GET /api/v1/health` on the built output; add `tsc --noEmit` for api and web once the seed.ts types are clean. Fixed in 865b6ba.
