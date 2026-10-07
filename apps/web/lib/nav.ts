@@ -13,7 +13,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 
 export const PUBLIC_NAV: readonly NavItem[] = [
   { area: 'public', href: '/', label: 'หน้าแรก' },
-  { area: 'public', href: '/tournaments', label: 'รายการแข่ง' },
+  { area: 'public', href: '/events', label: 'อีเวนต์' },
 ];
 
 /** nav for a user: public links + one entry per area the held roles can access (doubles as the role switcher) */

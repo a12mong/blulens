@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { homePathFor, type Role } from '@/lib/roles';
 import { useLogin } from './api';
 
 /** only same-site relative paths are allowed as ?next= (no open redirect) */
@@ -16,7 +15,7 @@ export function LoginForm() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const login = useLogin({
-    onSuccess: (me) => router.replace(safeNext(params.get('next')) ?? homePathFor(me.roles as Role[])),
+    onSuccess: (me) => router.replace(safeNext(params.get('next')) ?? '/events'),
   });
 
   function submit(e: FormEvent) {

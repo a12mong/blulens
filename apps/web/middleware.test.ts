@@ -28,7 +28,7 @@ describe('middleware', () => {
 
     expect(response.status).toBe(307);
     const location = response.headers.get('location');
-    expect(location).toContain('/me');
+    expect(location).toContain('/events');
   });
 
   it('allows /tournaments without bl_session cookie', () => {
@@ -79,7 +79,7 @@ describe('middleware', () => {
 
     expect(response.status).toBe(307);
     const location = response.headers.get('location');
-    expect(location).toContain('/me');
+    expect(location).toContain('/events');
   });
 
   it('allows / (home) without bl_session', () => {
