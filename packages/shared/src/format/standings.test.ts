@@ -88,6 +88,32 @@ describe('computeGroupStandings', () => {
     expect(result[0].points).toBeGreaterThan(result[1].points);
   });
 
+  it('two entries level on points and diff: direct match winner ranks higher with decidedBy h2h despite lower pointsFor', () => {
+    const entryIds = ['A', 'B', 'C', 'D'];
+    const matches: GroupMatch[] = [
+      { a: 'A', b: 'B', status: 'confirmed', games: [[15, 10]] },
+      { a: 'A', b: 'C', status: 'confirmed', games: [[15, 10]] },
+      { a: 'A', b: 'D', status: 'confirmed', games: [[10, 20]] },
+      { a: 'B', b: 'C', status: 'confirmed', games: [[25, 23]] },
+      { a: 'B', b: 'D', status: 'confirmed', games: [[25, 22]] },
+      { a: 'C', b: 'D', status: 'confirmed', games: [[15, 10]] },
+    ];
+
+    const result = computeGroupStandings(entryIds, matches, { win: 3, draw: 1, loss: 0 }, 'seed');
+
+    expect(result[0].entryId).toBe('A');
+    expect(result[0].rank).toBe(1);
+    expect(result[0].points).toBe(6);
+    expect(result[0].diff).toBe(0);
+    expect(result[0].pointsFor).toBe(40);
+    expect(result[0].decidedBy).toBe('h2h');
+
+    expect(result[1].entryId).toBe('B');
+    expect(result[1].rank).toBe(2);
+    expect(result[1].points).toBe(6);
+    expect(result[1].diff).toBe(0);
+    expect(result[1].pointsFor).toBe(60);
+  });
 
   it('3-way loss cycle, different pointsFor breaks tie', () => {
     const entryIds = ['A', 'B', 'C'];

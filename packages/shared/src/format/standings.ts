@@ -152,6 +152,29 @@ function compareEntries(
   const bDiff = b.pointsFor - b.pointsAgainst;
   if (aDiff !== bDiff) return 'diff';
 
+  const countedStatuses = new Set(['confirmed', 'walkover']);
+  const h2hMatch = Array.from(matches).find(
+    (m) =>
+      countedStatuses.has(m.status) &&
+      ((m.a === a.entryId && m.b === b.entryId) || (m.a === b.entryId && m.b === a.entryId)),
+  );
+
+  if (h2hMatch) {
+    let aGamesWon = 0;
+    let bGamesWon = 0;
+    for (const [gameA, gameB] of h2hMatch.games) {
+      if (h2hMatch.a === a.entryId) {
+        if (gameA > gameB) aGamesWon += 1;
+        else if (gameB > gameA) bGamesWon += 1;
+      } else {
+        if (gameB > gameA) aGamesWon += 1;
+        else if (gameA > gameB) bGamesWon += 1;
+      }
+    }
+
+    if (aGamesWon !== bGamesWon) return 'h2h';
+  }
+
   if (a.pointsFor !== b.pointsFor) return 'pointsFor';
 
   return 'lot';
