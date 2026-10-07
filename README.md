@@ -24,7 +24,7 @@
 | บริการ | พอร์ต |
 |---|---|
 | Web | http://localhost:3100 |
-| API | http://localhost:3101/api (Swagger: `/api/docs`) |
+| API | http://localhost:3101/api/v1 (Swagger: `/api/docs`) |
 | PostgreSQL | 5442 |
 | Redis | 6389 |
 | MinIO | 9100 (API) · 9101 (console) |
@@ -36,7 +36,7 @@ cp .env.example .env          # ครั้งแรกครั้งเดี
 pnpm install
 docker compose up -d          # postgres / redis / minio (รอจน healthy)
 pnpm dev                      # build shared + prisma generate แล้วรัน web + api แบบ watch
-curl http://localhost:3100/api/health   # → {"success":true,"data":{"status":"ok"}}
+curl http://localhost:3100/api/v1/health   # → {"success":true,"data":{"status":"ok"}}
 ```
 
 คำสั่งอื่น:

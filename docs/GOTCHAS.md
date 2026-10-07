@@ -16,3 +16,6 @@
 ## API e2e: env in Jest
 - `process.loadEnvFile` inside a Jest setup file does not reach the test (Jest gives each test file its own copy of `process.env`). `apps/api/test/setup-env.ts` parses the root `.env` with `util.parseEnv` and assigns into `process.env` instead.
 - e2e tests need the shared package built once in a fresh worktree: `pnpm --filter @blulens/shared build`.
+
+## Windows: pnpm scripts run in cmd.exe
+- No `>/dev/null`. In cmd `a || b && c` means `a || (b && c)`, so write `(a || b) && c` explicitly (same meaning in sh).

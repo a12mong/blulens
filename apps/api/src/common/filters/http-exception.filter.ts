@@ -11,7 +11,7 @@ import { ApiError } from '@blulens/shared';
 
 const DEFAULT_CODES: Record<number, string> = {
   400: 'BAD_REQUEST',
-  401: 'AUTH_REQUIRED',
+  401: 'UNAUTHENTICATED',
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   409: 'CONFLICT',
@@ -48,9 +48,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const body = exception.getResponse();
       if (typeof body === 'object' && body !== null) {
         const b = body as { code?: string; message?: string | string[]; details?: unknown };
-        if (b.code) code = b.code;
-        if (typeof b.message === 'string') message = b.message;
-        if (b.details !== undefined) details = b.details;
+        // only ApiException carries a code + Thai message; Nest built-ins (e.g. unknown route) keep the Thai default
+        if (b.code) {
+          code = b.code;
+          if (typeof b.message === 'string') message = b.message;
+          if (b.details !== undefined) details = b.details;
+        }
       }
     } else {
       this.logger.error(exception instanceof Error ? exception.stack : String(exception));

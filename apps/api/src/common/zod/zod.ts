@@ -45,7 +45,7 @@ export class ZodValidationPipe implements PipeTransform {
         (fieldErrors[path] ??= []).push(issue.message);
       }
       const firstMessage = result.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง';
-      throw ApiException.badRequest('VALIDATION_ERROR', firstMessage, { fieldErrors });
+      throw ApiException.badRequest('VALIDATION_FAILED', firstMessage, { fieldErrors });
     }
     return result.data;
   }

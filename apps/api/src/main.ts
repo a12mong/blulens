@@ -7,7 +7,8 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.setGlobalPrefix('api');
+  // openapi servers: /api/v1
+  app.setGlobalPrefix('api/v1');
   app.use(cookieParser());
   app.enableCors({
     origin: process.env.WEB_URL ?? 'http://localhost:3100',
@@ -25,7 +26,7 @@ async function bootstrap() {
 
   const port = Number(process.env.API_PORT ?? 3101);
   await app.listen(port);
-  new Logger('Bootstrap').log(`API พร้อมใช้งานที่ http://localhost:${port}/api (docs: /api/docs)`);
+  new Logger('Bootstrap').log(`API พร้อมใช้งานที่ http://localhost:${port}/api/v1 (docs: /api/docs)`);
 }
 
 void bootstrap();
