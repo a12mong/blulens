@@ -573,8 +573,7 @@ export interface paths {
                         "application/json": {
                             teams?: components["schemas"]["Team"][];
                             teamCount?: number;
-                            /** @description computed live; shown to Admin/Committee */
-                            warnings?: ("MULTI_TEAM" | "NO_APPROVED_GRADE" | "GRADE_OUT_OF_BAND" | "FRESH_ASSESSMENT_REQUIRED")[];
+                            warnings?: "MULTI_TEAM"[];
                         };
                     };
                 };
@@ -2189,7 +2188,7 @@ export interface paths {
                         "application/json": components["schemas"]["Entry"];
                     };
                 };
-                /** @description ENTRY_NOT_PENDING | ENTRY_PLAYER_UNGRADED | ENTRY_OUT_OF_BAND_REASON_REQUIRED */
+                /** @description ENTRY_NOT_PENDING | ENTRY_PLAYER_UNGRADED | ENTRY_FRESH_ASSESSMENT_MISSING (event requiresFreshAssessment and a player has no approved assessment bound to it, A13) | ENTRY_OUT_OF_BAND_REASON_REQUIRED */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3683,6 +3682,11 @@ export interface components {
                 userId?: string;
                 displayName?: string;
                 teamIds?: string[];
+                /**
+                 * Format: uuid
+                 * @description club picked for THIS entry (EntryInput.players[].teamId)
+                 */
+                teamId?: string | null;
                 /** @description teams the player currently belongs to (A11 warning when > 1) */
                 teamCount?: number;
                 /** @description A14 consent of this player */
@@ -3697,7 +3701,8 @@ export interface components {
              * @enum {string}
              */
             gradeVisibility?: "hidden" | "public" | "disclosed";
-            warnings?: "MULTI_TEAM"[];
+            /** @description computed live; shown to Admin/Committee */
+            warnings?: ("MULTI_TEAM" | "NO_APPROVED_GRADE" | "GRADE_OUT_OF_BAND" | "FRESH_ASSESSMENT_REQUIRED")[];
         };
         DrawSummary: {
             /** Format: uuid */
