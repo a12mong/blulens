@@ -28,14 +28,14 @@ export function LoginForm() {
     <form onSubmit={submit} className="flex max-w-sm flex-col gap-3">
       <label className="flex flex-col gap-1">
         อีเมลหรือชื่อผู้ใช้
-        <input className="rounded border p-2" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" required />
+        <input data-testid="login-identifier" className="rounded border p-2" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" required />
       </label>
       <label className="flex flex-col gap-1">
         รหัสผ่าน
-        <input className="rounded border p-2" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+        <input data-testid="login-password" className="rounded border p-2" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
       </label>
-      {login.error ? <p role="alert">{login.error.message}</p> : null}
-      <button type="submit" disabled={login.isPending} className="rounded bg-primary p-2 text-primary-foreground">
+      {login.error ? <p role="alert" data-testid="login-error">{login.error.message}</p> : null}
+      <button type="submit" data-testid="login-submit" disabled={login.isPending} className="rounded bg-primary p-2 text-primary-foreground">
         เข้าสู่ระบบ
       </button>
     </form>
