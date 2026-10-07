@@ -21,7 +21,7 @@
 - INV-3: deterministic — input เดียวกัน (สลับลำดับกรรมการ) ได้ผลเดียวกัน
 - INV-4: ไม่มี exception หลุดจากการหารศูนย์/ช่วงว่าง — กรณี undefined คืนค่าสถานะที่นิยามไว้
 
-## 1. ระบบจัดเกรด (Grading) — 20 เคส
+## 1. ระบบจัดเกรด (Grading) — 28 เคส (20 + 8 โหมดกรรมการน้อย)
 
 | ID | เคส | Setup | พฤติกรรมที่คาดหวัง | Automated check |
 |---|---|---|---|---|
@@ -45,6 +45,20 @@
 | GR-18 | **ผลประโยชน์ทับซ้อน** | กรรมการทีมเดียวกับผู้ถูกประเมิน | ห้ามมอบหมาย/ส่งตามสเปก (§5 Q2) | I |
 | GR-19 | **สิทธิ์ (Role)** | Member/Guest ส่งคะแนนหรืออ่านคะแนนรายคนก่อน finalize | 403; Reviewer เห็นเฉพาะของตัวเอง (blind) | I: role × endpoint |
 | GR-20 | **กรรมการถูกถอดหลังส่ง** | 1 ใน `N_min` ถูกถอด | คำนวณใหม่; ต่ำกว่า `N_min` → insufficient + audit | I |
+
+### 1.1 โหมดกรรมการน้อย (few-reviewer mode) — เจ้าของแจ้ง: จริง ๆ มี 1–2 คนต่อแมตช์/คู่ ไม่ใช่ `N_min = 3`
+> ตัวเลขที่เป็น `<TBD v2>` รอ `grading.md` v2 ของ Jim · เคส GR-04/05/06/07/20 ข้างบนต้องอ่านใหม่ว่า "ต่ำกว่า N_min" = เข้าโหมดน้อย ไม่ใช่ insufficient เสมอไป (จะ reconcile เมื่อ v2 ออก)
+
+| ID | เคส | Setup | พฤติกรรมที่คาดหวัง | Automated check |
+|---|---|---|---|---|
+| GR-21 | **n=1 provisional** | กรรมการ 1 คนส่งครบ | ผล `provisional`; `score/lower/upper` ครบ (INV-1/2) โดย lower–upper กว้างกว่าโหมดปกติด้วย margin `<TBD v2>`; ไม่คำนวณ kappa/outlier (สถานะ undefined ไม่ใช่ NaN); ต้อง Committee confirm จึง finalize | U: assert margin กว้างกว่า n=2 ที่คะแนนเท่ากัน; assert ไม่มี NaN; I: finalize ไม่ได้ถ้าไม่มี Committee confirm |
+| GR-22 | **n=1 + Committee confirm** | จาก GR-21 Committee ยืนยัน | สถานะ finalized-with-confirm; audit บันทึกผู้ยืนยัน/เวลา; Reviewer/Member ยืนยันเองไม่ได้ (403) | I: role table |
+| GR-23 | **n=2 เห็นพ้อง** | 2 คน คะแนนใกล้กัน (ภายใน `<TBD v2>`) | Cohen's kappa คู่คำนวณถูกตาม golden; ไม่ flag ขัดแย้ง; finalize ได้ตามสเปก | U: golden fixture appendix C |
+| GR-24 | **n=2 ขัดแย้ง** | 2 คน ห่างกันเกินเกณฑ์ | flag disagreement; **ห้ามระบุ outlier** (ไม่มีเสียงข้างมาก — ตัดสินว่าใครผิดไม่ได้); ส่ง Committee ตัดสิน/มอบหมายคนที่ 3 ตามสเปก; ผลชั่วคราวแสดงช่วงครอบคลุมทั้งสอง | U: assert outlier = ว่าง; assert flag |
+| GR-25 | **n=2 เหมือนกันทั้งหมด** | 2 คน ชุดเดียวกัน (P_e=1) | เหมือน GR-08 ในกรณีคู่: ไม่ NaN; ตามคำตอบ Q1 | U |
+| GR-26 | **n=2 → n=3 (เพิ่มคนที่ 3)** | เพิ่มกรรมการหลัง flag | สลับเข้าโหมดปกติ Fleiss; outlier detector ทำงาน; ผลเดิมถูก supersede ไม่ลบ | I |
+| GR-27 | **ขอบการสลับโหมด** | n = 0,1,2,3,4 ต่อเนื่อง | โหมดตรงตาราง (none / provisional / pair / normal / normal) ไม่มีช่องว่างหรือซ้อน | U: table-driven |
+| GR-28 | **n=1 ที่ไม่เสร็จ** | กรรมการ 1 คนไม่ส่งจน `T_wait` | ไม่มีผล; pending/แจ้งเตือน ไม่ใช่ provisional เปล่า | I: fake clock |
 
 ## 2. ระบบจับสาย (Draw) — 19 เคส (อ้างอิง `docs/specs/draw.md` v1 · เจ้าของอนุมัติ D1–D8 ตามข้อเสนอ)
 
@@ -121,7 +135,7 @@
 
 | ระบบ | จำนวน |
 |---|---|
-| Grading (GR) | 20 |
+| Grading (GR) | 28 |
 | Draw (DR) | 19 |
 | Registration (RG: ชื่อทีม 7 + อัปโหลด 5) | 12 |
 | Cross-system (X) | 3 |
