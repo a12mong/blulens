@@ -17,6 +17,7 @@
 | (S17 S18 เพิ่มใน v3) | `screens/S17-team-requests.md`, `S18-group-draw-standings.md` |
 | `demo-slice-1.md` | **bl-21: login / สร้างอีเวนต์ / สมัคร+ทีม type-ahead / รายชื่อผู้สมัคร (พร้อมสร้างทันที)** |
 | `demo-slice-2.md` | bl-22: Reviewer คิว+ให้คะแนน+ClipPlayer, Committee dashboard/ผลประเมิน (พร้อมสร้าง) |
+| `demo-slice-3.md` | bl-24: bracket+standings (pixel), umpire, คิวยืนยันผล, มอบหมายสนาม, calibration (พร้อมสร้าง; แทน S10/S13-S16/S18 ในส่วนซ้ำ) |
 | `fe-questions.md` | คำตอบ P1–P5 ของ Andy |
 | `components.md` | ชื่อ component · props · variants · state (หน่วยงานของ Andy → 1 component = 1 packet) |
 
