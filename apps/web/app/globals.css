@@ -8,6 +8,15 @@
 @theme {
   --font-sans: var(--font-thai), 'IBM Plex Sans Thai', 'Sarabun', ui-sans-serif, system-ui,
     sans-serif;
+  --font-pixel: 'Press Start 2P', ui-monospace, monospace;
+
+  /* night theme: public bracket/standings page only (demo-slice-3 B1) */
+  --color-night: #1c1926;
+  --color-night-panel: #262234;
+  --color-night-panel-2: #2f2a40;
+  --color-night-line: #7d7292;
+  --color-night-foreground: #f1edf8;
+  --color-night-muted: #b9b0cc;
 
   --color-background: oklch(0.985 0.002 240);
   --color-foreground: oklch(0.25 0.02 255);
