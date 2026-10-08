@@ -41,3 +41,22 @@ cd apps/web && pnpm exec playwright test --project=setup --project=chromium slic
 
 ## 5. เส้นทางคลิปสำหรับ docs/STATUS.md (ให้ Jim)
 เข้าสู่ระบบด้วย reviewer1@blulens.local → เมนู **รีวิว** (`/review`) → กด **เริ่ม** ที่งานในคิว → ดูคลิป → เลือกเกรดทุกเกณฑ์ → กด **ส่งและล็อก** → ยืนยัน → งานหายจากคิว
+
+## 6. Slice 2b — เส้นทางคณะกรรมการตัดสิน (`apps/web/e2e/slice2-committee.spec.ts`)
+เตรียมข้อมูลผ่าน API จริง (Member ส่ง → Committee มอบหมาย → reviewer1/2 ส่ง → aggregate-on-submit) แล้ว Committee ตัดสินใน UI. ผลที่คาดหวัง: **C1–C7 ผ่าน** (รันรวม `slice2` = setup 4 + 7 + 7 = 18 passed)
+
+| Step | สิ่งที่ตรวจ |
+|---|---|
+| C1 | สร้าง 4 งาน: A `pending_approval` (S,S) · B `disputed` (RK1,S) · C `pending_approval` (S,S) · D `provisional` (event minReviewers=1, reviewer 1 คน) |
+| C2 | `/committee/assessments` แสดงแถวทั้ง 4 พร้อมสถานะ (`assessment-status[data-status]`) |
+| C3 | detail A: มีผลคะแนน + แถว reviewer 2 แถว; อนุมัติ (ไม่ต้องมีหมายเหตุ) → `approved`, result version 2 |
+| C4 | B (disputed): API approve ไม่มี note → 422 `ASSESSMENT_APPROVE_NOTE_REQUIRED`; resultVersion เก่า → 409 `RESULT_VERSION_STALE`; return เหตุผลสั้น → 422 `REASON_REQUIRED`; UI: note 4 ตัว = ปิด, 5 = เปิด; ยกเลิกไม่เปลี่ยนสถานะ; return (4 ปิด / 5 เปิด) → `in_review` |
+| C5 | C: override เหตุผล 19 ตัว → 422 `REASON_TOO_SHORT`; UI เลือกเกรด P + เหตุผล ≥ 20 → `overridden`, result `override/overridden`, มีแถว `audit_logs` (`assessment.override`, reason ตรง) |
+| C6 | D (provisional): ยืนยันผล → `approved` |
+| C7 | รายการและ API แสดงสถานะใหม่ครบ; A อนุมัติซ้ำ → 409 `ASSESSMENT_INVALID_TRANSITION` |
+
+ต้องมี `SEED_ADMIN_*` และ `SEED_DEMO_PASSWORD`; API ต้องตั้ง `WEB_URL=<origin ของ web>` (ไม่งั้น `ORIGIN_FORBIDDEN`). SQL ไปที่ `blulens_e2e` เท่านั้น.
+
+Mutation ที่พิสูจน์แล้ว (ทำมือ ไม่ commit): ถอดเงื่อนไขหมายเหตุ ≥ 5 ของปุ่ม approve-submit → C4 แดง; เปลี่ยน testid `confirm-submit` → C6 แดง.
+
+**เส้นทางสำหรับ docs/STATUS.md (Jim):** เข้าสู่ระบบ committee@blulens.local → `/committee/assessments` → เปิดงานที่รออนุมัติ → ดูผลคะแนน/กรรมการ → **อนุมัติ** (หรือ **ส่งกลับ** ใส่เหตุผล ≥ 5 ตัว, **แก้ไขผล** เลือกเกรด + เหตุผล ≥ 20 ตัว, **ยืนยันผล** สำหรับผลชั่วคราว) → สถานะในรายการเปลี่ยนตามทันที
