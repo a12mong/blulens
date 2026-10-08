@@ -26,6 +26,12 @@ const eventMatchesQuerySchema = z.object({
 
 export class EventMatchesQueryDto extends createZodDto(eventMatchesQuerySchema) {}
 
+const eventGroupsQuerySchema = z.object({
+  draw: z.enum(['published', 'preview']).optional(),
+});
+
+export class EventGroupsQueryDto extends createZodDto(eventGroupsQuerySchema) {}
+
 const putMatchResultSchema = z.object({
   outcome: z.enum(['played', 'walkover_a', 'walkover_b']),
   games: z
@@ -63,6 +69,16 @@ export class MatchesController {
   @Get('events/:eventId/standings')
   getEventStandings(@Param('eventId', uuid) eventId: string, @CurrentUser() user?: AuthUser) {
     return this.matches.getEventStandings(eventId, user);
+  }
+
+  @Public()
+  @Get('events/:eventId/groups')
+  getEventGroups(
+    @Param('eventId', uuid) eventId: string,
+    @Query() query: EventGroupsQueryDto,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return this.matches.getEventGroups(eventId, query, user);
   }
 
   @Roles('Umpire', 'Committee', 'Admin')
