@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { CalibrationSets } from '@/features/calibration/CalibrationSets';
 
 export default function CommitteeCalibrationPage() {
-  if (process.env.NEXT_PUBLIC_CALIBRATION_UI !== '1') {
+  if (process.env.NEXT_PUBLIC_CALIBRATION_UI === '0') {
     notFound();
   }
 

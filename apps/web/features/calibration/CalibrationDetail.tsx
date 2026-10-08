@@ -33,6 +33,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
   const [uploadError, setUploadError] = useState<string>('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [deleteConfirmClipId, setDeleteConfirmClipId] = useState<string>('');
+  const [actionError, setActionError] = useState<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const durationSecRef = useRef(0);
 
@@ -42,11 +43,11 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
 
   if (error) {
     return (
-      <div data-testid="calib-load-error" role="alert" className="p-4 bg-red-50 border border-red-200 rounded">
-        <p className="text-red-800">{thaiError(error)}</p>
+      <div data-testid="calib-load-error" role="alert" className="p-4 bg-destructive/10 border border-destructive rounded">
+        <p className="text-destructive">{thaiError(error)}</p>
         <button
           onClick={() => refetch()}
-          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded min-h-[44px]"
+          className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded min-h-[44px]"
         >
           ลองใหม่
         </button>
@@ -142,17 +143,18 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
 
   function handleGradeChange(clipId: string, newGrade: GradeKey | null | undefined) {
     if (!newGrade) return;
-    void updateMutation.mutateAsync({
-      clipId,
-      referenceKey: newGrade,
-    });
+    setActionError('');
+    updateMutation
+      .mutateAsync({ clipId, referenceKey: newGrade })
+      .catch((e) => setActionError(thaiError(e, 'แก้เกรดอ้างอิงไม่สำเร็จ')));
   }
 
   function handleDeleteConfirm() {
     if (deleteConfirmClipId) {
-      void deleteMutation.mutateAsync({
-        clipId: deleteConfirmClipId,
-      });
+      setActionError('');
+      deleteMutation
+        .mutateAsync({ clipId: deleteConfirmClipId })
+        .catch((e) => setActionError(thaiError(e, 'ลบคลิปไม่สำเร็จ')));
       setDeleteConfirmClipId('');
     }
   }
@@ -162,7 +164,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
       {/* Header */}
       <div>
         <h2 className="text-lg font-semibold">{detail.name}</h2>
-        <div className="flex gap-4 text-sm text-gray-600 mt-1">
+        <div className="flex gap-4 text-sm text-muted-foreground mt-1">
           {detail.period && <span>{detail.period}</span>}
           <span data-testid="calib-state">
             {isAssigned ? 'มอบหมายแล้ว' : 'ฉบับร่าง'}
@@ -172,7 +174,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
 
       {/* Upload Error */}
       {uploadError && (
-        <div data-testid="calib-error" role="alert" className="p-3 bg-red-50 border border-red-200 rounded text-red-800">
+        <div data-testid="calib-error" role="alert" className="p-3 bg-destructive/10 border border-destructive rounded text-destructive">
           {uploadError}
           {uploadState === 'error' && (
             <button
@@ -180,7 +182,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
                 setUploadState('idle');
                 setUploadError('');
               }}
-              className="ml-2 text-red-600 underline"
+              className="ml-2 min-h-[44px] px-2 text-destructive underline"
             >
               ลองใหม่
             </button>
@@ -188,9 +190,15 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
         </div>
       )}
 
+      {actionError && (
+        <div data-testid="calib-action-error" role="alert" className="p-3 bg-destructive/10 border border-destructive rounded text-destructive">
+          {actionError}
+        </div>
+      )}
+
       {/* Add Clip Form */}
       {!isAssigned && (
-        <div data-testid="calib-add" className="p-4 border rounded bg-gray-50 space-y-3">
+        <div data-testid="calib-add" className="p-4 border border-border rounded bg-muted space-y-3">
           <label className="block">
             <span className="text-sm font-medium">เกรดอ้างอิง</span>
             <GradePicker
@@ -198,7 +206,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
               onChange={setAddGrade}
               disabled={uploadState !== 'idle' && uploadState !== 'done'}
             />
-            {!addGrade && <p className="text-xs text-gray-500 mt-1">เลือกเกรดอ้างอิงก่อน</p>}
+            {!addGrade && <p className="text-xs text-muted-foreground mt-1">เลือกเกรดอ้างอิงก่อน</p>}
           </label>
 
           <label className="block">
@@ -216,7 +224,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
                 e.currentTarget.parentElement?.querySelector('input')?.click();
               }}
               disabled={!addGrade || uploadState !== 'idle'}
-              className="px-4 py-2 bg-blue-600 text-white rounded min-h-[44px] disabled:opacity-50"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded min-h-[44px] disabled:opacity-50"
               data-testid="calib-pick"
             >
               เลือกวิดีโอ
@@ -231,10 +239,10 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
                 max={100}
                 className="w-full h-2"
               />
-              <p className="text-sm text-gray-600">{uploadProgress}%</p>
+              <p className="text-sm text-muted-foreground">{uploadProgress}%</p>
               <button
                 onClick={handleCancel}
-                className="px-4 py-2 bg-gray-400 text-white rounded min-h-[44px]"
+                className="px-4 py-2 bg-secondary text-secondary-foreground rounded min-h-[44px]"
               >
                 ยกเลิก
               </button>
@@ -247,7 +255,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
       {detail.clipDetails && detail.clipDetails.length > 0 ? (
         <div className="space-y-4">
           {detail.clipDetails.map((clip) => (
-            <div key={clip.clipId} data-testid="calib-clip" className="p-4 border rounded">
+            <div key={clip.clipId} data-testid="calib-clip" className="p-4 border border-border rounded">
               {/* Player */}
               {clip.viewUrl && clip.status === 'uploaded' && (
                 <div className="mb-3">
@@ -266,26 +274,27 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
               {/* Info */}
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {clip.status === 'pending_upload' && 'รออัปโหลด'}
                     {clip.status === 'uploaded' && 'พร้อมใช้'}
                     {clip.status === 'rejected' && 'ใช้ไม่ได้'}
                   </p>
                   {clip.durationSec && (
-                    <p className="text-sm text-gray-600">{clip.durationSec} วินาที</p>
+                    <p className="text-sm text-muted-foreground">{clip.durationSec} วินาที</p>
                   )}
                 </div>
 
                 {/* Grade Edit */}
                 <div className="flex items-center gap-2">
                   {isAssigned ? (
-                    <span className="text-sm">{clip.referenceKey}</span>
+                    <span className="text-sm">เกรดอ้างอิง {clip.referenceKey}</span>
                   ) : (
-                    <GradePicker
-                      value={clip.referenceKey as GradeKey}
-                      onChange={(newGrade) => handleGradeChange(clip.clipId, newGrade)}
-                      data-testid="calib-ref-edit"
-                    />
+                    <div data-testid="calib-ref-edit">
+                      <GradePicker
+                        value={clip.referenceKey as GradeKey}
+                        onChange={(newGrade) => handleGradeChange(clip.clipId, newGrade)}
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -293,7 +302,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
                 {!isAssigned && (
                   <button
                     onClick={() => setDeleteConfirmClipId(clip.clipId)}
-                    className="px-4 py-2 bg-red-600 text-white rounded min-h-[44px]"
+                    className="px-4 py-2 bg-destructive text-destructive-foreground rounded min-h-[44px]"
                     data-testid="calib-clip-delete"
                   >
                     ลบคลิป
@@ -304,7 +313,7 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
           ))}
         </div>
       ) : (
-        <div className="p-4 bg-gray-50 rounded text-center text-gray-600">
+        <div className="p-4 bg-muted rounded text-center text-muted-foreground">
           ยังไม่มีคลิปในชุด
         </div>
       )}
@@ -315,14 +324,14 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
           <h3 className="text-sm font-semibold mb-3">ผู้ประเมิน</h3>
           <table data-testid="calib-reviewers" className="w-full text-sm">
             <thead>
-              <tr className="border-b">
+              <tr className="border-b border-border">
                 <th className="text-left p-2">ชื่อ</th>
                 <th className="text-left p-2">สถานะ</th>
               </tr>
             </thead>
             <tbody>
               {detail.reviewers.map((reviewer) => (
-                <tr key={reviewer.reviewerId} className="border-b">
+                <tr key={reviewer.reviewerId} className="border-b border-border">
                   <td className="p-2">{reviewer.reviewerName}</td>
                   <td className="p-2">
                     {reviewer.submitted ? 'ส่งแล้ว' : 'รอส่ง'}
@@ -339,23 +348,23 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4"
+          className="fixed inset-0 flex items-center justify-center bg-foreground/50 z-50 p-4"
         >
-          <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 max-w-md w-full flex flex-col gap-4">
+          <div className="bg-card text-card-foreground border border-border rounded-lg shadow-lg p-6 max-w-md w-full flex flex-col gap-4">
             <h2 className="text-lg font-semibold">ลบคลิป</h2>
-            <p className="text-sm text-gray-600">คุณแน่ใจว่าต้องการลบคลิปนี้ใช่ไหม</p>
+            <p className="text-sm text-muted-foreground">คุณแน่ใจว่าต้องการลบคลิปนี้ใช่ไหม</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setDeleteConfirmClipId('')}
                 disabled={deleteMutation.isPending}
-                className="min-h-[44px] px-4 py-2 text-sm rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="min-h-[44px] px-4 py-2 text-sm rounded border border-border bg-card text-foreground hover:bg-muted disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleDeleteConfirm}
                 disabled={deleteMutation.isPending}
-                className="min-h-[44px] px-4 py-2 text-sm font-medium rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                className="min-h-[44px] px-4 py-2 text-sm font-medium rounded bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
               >
                 {deleteMutation.isPending ? 'กำลังลบ…' : 'ลบ'}
               </button>

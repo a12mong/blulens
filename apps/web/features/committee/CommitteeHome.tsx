@@ -43,7 +43,7 @@ const CALIBRATION_ITEM: CommitteeHubItem = {
 
 export function CommitteeHome() {
   const items =
-    process.env.NEXT_PUBLIC_CALIBRATION_UI === '1'
+    process.env.NEXT_PUBLIC_CALIBRATION_UI !== '0'
       ? [...COMMITTEE_HUB_ITEMS, CALIBRATION_ITEM]
       : COMMITTEE_HUB_ITEMS;
   return (
