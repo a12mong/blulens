@@ -24,7 +24,6 @@ import {
   type ResultMatch,
   type StandingRow,
 } from '@blulens/shared';
-import { nextSlot } from '../draws/bracket';
 
 export interface EntryRef {
   entryId: string;

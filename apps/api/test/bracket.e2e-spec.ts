@@ -154,4 +154,128 @@ describe('GET /events/{eventId}/bracket (bl-33-3)', () => {
         .expect(404);
     });
   });
+
+  describe('Published knockout bracket (Q=4)', () => {
+    let koTournament: any;
+    let koEvent: any;
+    let koEntryIds: string[] = [];
+    let koDrawId: string;
+
+    beforeAll(async () => {
+      // Create tournament
+      koTournament = await prisma.tournament.create({
+        data: {
+          name: `${tag}-knockout`,
+          venue: 'Test Venue',
+          status: 'open',
+          startsOn: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          entriesCloseAt: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      // Create event
+      koEvent = await prisma.event.create({
+        data: {
+          tournamentId: koTournament.id,
+          discipline: 'MD',
+          gradeMinIndex: 6,
+          gradeMaxIndex: 8,
+          minReviewers: 2,
+        },
+      });
+
+      // Create 4 entries with players
+      for (let i = 1; i <= 4; i++) {
+        const player = await prisma.user.create({
+          data: {
+            email: `${tag}-ko-p${i}@test.local`,
+            passwordHash: 'x',
+            displayName: `${tag} Ko Player ${i}`,
+          },
+        });
+
+        const entry = await prisma.entry.create({
+          data: {
+            eventId: koEvent.id,
+            status: 'approved',
+            name: `${tag} Pair ${i}`,
+            players: { create: [{ userId: player.id, eventId: koEvent.id }] },
+          },
+        });
+        koEntryIds.push(entry.id);
+      }
+
+      // Create published knockout draw with 4 entries
+      const koDrawRes = await http()
+        .post(`/api/v1/draws?eventId=${koEvent.id}&kind=knockout`)
+        .set('Cookie', committeeCookie)
+        .send({
+          size: 4,
+          seedRank: [1, 2, 3, 4],
+        })
+        .expect(200);
+
+      koDrawId = koDrawRes.body.data.id;
+
+      // Publish the draw
+      await http()
+        .post(`/api/v1/draws/${koDrawId}/publish`)
+        .set('Cookie', committeeCookie)
+        .expect(200);
+    });
+
+    afterAll(async () => {
+      await prisma.event.deleteMany({ where: { tournamentId: koTournament.id } });
+      await prisma.tournament.delete({ where: { id: koTournament.id } });
+    });
+
+    it('Q=4 published knockout -> 200 with bracket structure', async () => {
+      const res = await http()
+        .get(`/api/v1/events/${koEvent.id}/bracket`)
+        .set('Cookie', guestCookie)
+        .expect(200);
+
+      expect(res.body.data).toBeDefined();
+      const bracket = res.body.data;
+
+      // Verify top-level structure
+      expect(bracket.eventId).toBe(koEvent.id);
+      expect(bracket.drawId).toBe(koDrawId);
+      expect(bracket.provisional).toBe(false);
+      expect(bracket.size).toBe(4);
+
+      // Verify rounds exist
+      expect(bracket.rounds).toBeDefined();
+      expect(Array.isArray(bracket.rounds)).toBe(true);
+
+      // For Q=4: 2 rounds (R1: 2 matches, R2: 1 match)
+      expect(bracket.rounds.length).toBe(2);
+
+      // Round 1: 4 entries → 2 matches, should be 'รองชนะเลิศ' (4 left)
+      const round1 = bracket.rounds.find((r: any) => r.round === 1);
+      expect(round1).toBeDefined();
+      expect(round1?.nameTh).toBe('รองชนะเลิศ');
+      expect(round1?.matches).toHaveLength(2);
+
+      // Round 2: Final match, should be 'ชิงชนะเลิศ' (2 left)
+      const round2 = bracket.rounds.find((r: any) => r.round === 2);
+      expect(round2).toBeDefined();
+      expect(round2?.nameTh).toBe('ชิงชนะเลิศ');
+      expect(round2?.matches).toHaveLength(1);
+
+      // Verify match structure
+      const match1 = round1?.matches[0];
+      expect(match1?.matchNo).toBe(1);
+      expect(match1?.round).toBe(1);
+      expect(match1?.top).toBeDefined();
+      expect(match1?.bottom).toBeDefined();
+      expect(match1?.topEntry).toBeDefined();
+      expect(match1?.bottomEntry).toBeDefined();
+      expect(match1?.status).toBe('scheduled');
+
+      // nextMatchNo should point to final
+      expect(match1?.nextMatchNo).toBe(1);
+      expect(match1?.nextSide).toMatch(/^(top|bottom)$/);
+    });
+  });
 });
