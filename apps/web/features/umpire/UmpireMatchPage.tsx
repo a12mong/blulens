@@ -85,8 +85,9 @@ export function UmpireMatchPage({ id }: UmpireMatchPageProps) {
   }
 
   const stage = match.stage ?? 'knockout';
+  // the API resolves the stage format server-side (Match.format); constants are only a fallback for older responses
   const format =
-    DEFAULT_FORMATS[stage as keyof typeof DEFAULT_FORMATS] ?? DEFAULT_FORMATS.knockout;
+    match.format ?? DEFAULT_FORMATS[stage as keyof typeof DEFAULT_FORMATS] ?? DEFAULT_FORMATS.knockout;
 
   return (
     <MatchResultForm
