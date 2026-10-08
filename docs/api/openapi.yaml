@@ -309,6 +309,10 @@ paths:
     post:
       tags: [assessments]
       summary: Get a presigned PUT URL for one clip (draft only; max 3 clips, 500 MB, mp4/mov)
+      description: |
+        Creates the clip row (status pending_upload). Object key = clips/<assessmentId>/<clipId>.<mp4|mov> (extension from contentType).
+        expiresAt = now + 15 min. The PUT must send exactly the Content-Type declared here (it is signed into the URL).
+        After the PUT the web calls POST /clips/{clipId}/complete.
       x-roles: [Member]
       parameters: [{ $ref: '#/components/parameters/AssessmentId' }]
       requestBody:
@@ -356,6 +360,31 @@ paths:
                   url: { type: string, format: uri }
                   expiresAt: { type: string, format: date-time }
         '403': { description: CLIP_FORBIDDEN, content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /clips/{clipId}/complete:
+    post:
+      tags: [assessments]
+      summary: Mark a member clip uploaded after the presigned PUT (owner Member, draft assessment only)
+      description: |
+        Step 3 of the presign flow: upload-url -> PUT bytes to uploadUrl -> complete.
+        Server HEADs clips/<assessmentId>/<clipId>.<mp4|mov>, checks size and Content-Type against what upload-url declared, stores durationSec, sets status uploaded.
+        Idempotent: a clip already uploaded returns 200 with the same clip (no re-check). Non-owner or not a draft -> 404.
+      x-roles: [Member]
+      parameters: [{ name: clipId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [durationSec]
+              properties:
+                durationSec: { type: integer, minimum: 1, description: 'client-measured from the <video> element (v1 has no transcoding/ffprobe). < 1 -> 400 VALIDATION_FAILED; > 300 -> 422 CLIP_TOO_LONG' }
+      responses:
+        '200': { description: 'ok (status uploaded, viewUrl = fresh 15-min presigned GET)', content: { application/json: { schema: { $ref: '#/components/schemas/Clip' } } } }
+        '400': { $ref: '#/components/responses/Validation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'CLIP_NOT_UPLOADED (HEAD finds no object at the key)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '422': { description: 'CLIP_MISMATCH (object size != declared sizeBytes, or object Content-Type != declared contentType) | CLIP_TOO_LONG (durationSec > 300)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /assessments/{assessmentId}/submit:
     post:
       tags: [assessments]
@@ -695,6 +724,9 @@ paths:
     post:
       tags: [rater-stats]
       summary: Presigned PUT for one calibration clip + its Committee reference grade
+      description: |
+        Same rules as the member upload-url. Object key = calibration/<setId>/<clipId>.<mp4|mov>; expiresAt = now + 15 min;
+        the PUT must send the declared Content-Type. Then POST /calibration-sets/{setId}/clips/{clipId}/complete. Set assigned -> 409 CALIBRATION_SET_ASSIGNED.
       x-roles: [Committee]
       parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody:
@@ -716,10 +748,36 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [clipId, uploadUrl, expiresAt]
                 properties:
                   clipId: { type: string, format: uuid }
                   uploadUrl: { type: string, format: uri }
                   expiresAt: { type: string, format: date-time }
+        '409': { description: 'CALIBRATION_SET_ASSIGNED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /calibration-sets/{setId}/clips/{clipId}/complete:
+    post:
+      tags: [rater-stats]
+      summary: Mark a calibration clip uploaded after the presigned PUT (Committee, set not yet assigned)
+      description: |
+        Same flow, body and errors as POST /clips/{clipId}/complete; the key is calibration/<setId>/<clipId>.<mp4|mov>.
+        Idempotent: already uploaded -> 200 with the same set detail.
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }, { name: clipId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [durationSec]
+              properties:
+                durationSec: { type: integer, minimum: 1, description: 'client-measured from the <video> element (v1 has no transcoding/ffprobe). < 1 -> 400 VALIDATION_FAILED; > 300 -> 422 CLIP_TOO_LONG' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/CalibrationSetDetail' } } } }
+        '400': { $ref: '#/components/responses/Validation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'CLIP_NOT_UPLOADED (HEAD finds no object at the key) | CALIBRATION_SET_ASSIGNED (set already assigned)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '422': { description: 'CLIP_MISMATCH (object size != declared sizeBytes, or object Content-Type != declared contentType) | CLIP_TOO_LONG (durationSec > 300)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /calibration-sets/{setId}/assign:
     post:
       tags: [rater-stats]
@@ -1582,7 +1640,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [pending_upload, uploaded, rejected], description: 'uploaded = playable (there is no separate ready state in v1; no transcoding)' }
-        viewUrl: { type: [string, 'null'], format: uri, description: 'presigned GET (15 min); null unless status = uploaded' }
+        viewUrl: { type: [string, 'null'], format: uri, description: 'presigned GET (15 min); null unless status = uploaded. A seeded storage key that starts with / or http(s):// is passed through unchanged (demo sample clip /e2e/sample.mp4).' }
         durationSec: { type: [integer, 'null'] }
 
     # ---- reviews ----
