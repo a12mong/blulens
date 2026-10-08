@@ -29,3 +29,12 @@
 - **Demo seed rules (`SEED_DEMO=1 pnpm db:seed`, 2026-10-08):** the owner re-seeds `blulens_demo`, which already holds their data, so every seed step must be ADDITIVE (create only; no deletes, no migrations that need a fresh DB) and IDEMPOTENT (a marker row makes the second run log `exists` and create nothing). There is ONE approved exception (god, bl-25-13): the demo MD event's `events.format` is filled ONLY when it is NULL, so the groups page works after a re-seed. Never widen this into an overwrite: a non-null format may be the owner's own setting. Check new seed steps on a NEW scratch DB with `prisma migrate deploy` and two seed runs; never `prisma migrate reset`.
 - **API e2e suite needs a FRESH test DB per run (floor rule, 2026-10-08):** `assessment_results`, `assessment_transitions`, `audit_logs` and `group_standings` are append-only (DB triggers), so test fixtures that touch them can never be cleaned up. On a shared `blulens_test` they pile up run after run until `GET /rater-stats` exceeds the 30 s jest timeout and list assertions fall off the first page (bl-30-1). Always run `cd apps/api && TEST_DATABASE_URL=<DATABASE_URL with the db name changed to a new *_test name> pnpm test` (global-setup runs `prisma migrate deploy`, which creates it). The merge gate does this on every run. Tests must also assert only on their own fixture ids, never on global counts or order.
 - **provenMinimal false claim: FIXED** (bl-18-4b, test DR-14, f321fc7); the UI may show 'minimum possible' again.
+
+## API e2e needs MinIO (bl-36-1, 2026-10-08)
+- `test/storage.e2e-spec.ts` and every clip upload suite PUT real bytes to MinIO. Run `docker compose up -d minio`
+  before `pnpm test`. Tests use the bucket `<S3_BUCKET>-test` (set in `test/setup-env.ts`, created on first use),
+  never the dev `clips` bucket.
+- Presigned PUT signs `Content-Type`: the browser must send exactly the type it declared to upload-url, or MinIO
+  answers 403.
+- Clip `objectKey` starting with `/` or `http(s)` is a seeded external file (demo sample clip) and is passed through
+  as the viewUrl; every other key is a bucket key and gets a 15-min presigned GET.
