@@ -1615,6 +1615,10 @@ components:
             tournamentId: { type: string, format: uuid }
             gradesDisclosedAt: { type: [string, 'null'], format: date-time, description: 'A14 transparency disclosure' }
             gradesDisclosedReason: { type: [string, 'null'] }
+            format:
+              oneOf: [{ $ref: '#/components/schemas/EventFormat' }, { type: 'null' }]
+              readOnly: true
+              description: 'the event format as saved by PUT /events/{eventId}/format (type knockout | groups_knockout, groupSize, advancePerGroup, bestThirds, both match formats, lockedAt); null = not configured yet (the web treats it as knockout and offers "ตั้งค่ารูปแบบ" before any draw). Returned on every Event read (list, detail, tournament detail).'
     EntryStatus:
       type: string
       enum: [draft, pending_committee, approved, rejected, withdrawn]
