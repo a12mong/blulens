@@ -50,6 +50,7 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
   let memberCtx: APIRequestContext;
   let committeeCtx: APIRequestContext;
   let reviewerCtx: APIRequestContext[] = [];
+  let reviewer3Ctx: APIRequestContext;
   let reviewerIds: string[] = [];
   let criteria: string[] = [];
   const ids = {} as Record<Kind, string>;
@@ -110,6 +111,8 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
     await login(committeeCtx, 'committee@blulens.local', pw);
     await login(reviewerCtx[0], 'reviewer1@blulens.local', pw);
     await login(reviewerCtx[1], 'reviewer2@blulens.local', pw);
+    reviewer3Ctx = await mk();
+    await login(reviewer3Ctx, 'reviewer3@blulens.local', pw);
     reviewerIds = [
       sqlE2e("select id from users where email='reviewer1@blulens.local'"),
       sqlE2e("select id from users where email='reviewer2@blulens.local'"),
@@ -283,6 +286,38 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
       const again = await committeeCtx.post(`assessments/${ids.A}/approve`, { data: {} });
       expect(again.status()).toBe(409);
       expect(await errCode(again)).toBe('ASSESSMENT_INVALID_TRANSITION');
+    });
+    test('C8 returned B: Committee assigns reviewer3 in the UI, third review -> re-aggregated over 3 raters', async ({ page }) => {
+      expect(status(ids.B)).toBe('in_review'); // from C4 (return)
+      const before = latestVersion(ids.B);
+      await decide(page, ids.B);
+      await page.getByTestId('assign-open').click();
+      await page.getByTestId('assign-search').fill('reviewer3');
+      await page.getByTestId('assign-option').first().click();
+      await expect(page.getByTestId('assign-picked')).toHaveCount(1);
+      const post = page.waitForResponse(
+        (r) => r.url().includes(`/assessments/${ids.B}/assign`) && r.request().method() === 'POST',
+      );
+      await page.getByTestId('assign-submit').click();
+      const res = await post;
+      expect(res.status(), await res.text()).toBe(200);
+
+      const r3 = sqlE2e("select id from users where email='reviewer3@blulens.local'");
+      const assignmentId = sqlE2e(
+        `select id from review_assignments where assessment_id='${ids.B}' and reviewer_id='${r3}' and state='open'`,
+      );
+      expect(assignmentId, 'reviewer3 open assignment').toMatch(/^[0-9a-f-]{36}$/);
+      const put = await reviewer3Ctx.put(`reviews/assignments/${assignmentId}`, {
+        data: { scores: criteria.map((criterion) => ({ criterion, gradeKey: 'BG1' })) },
+      });
+      expect(put.status(), await put.text()).toBe(200);
+
+      expect(latestVersion(ids.B), 'last submit re-aggregates: new result version').toBe(before + 1);
+      expect(status(ids.B)).toMatch(/^(pending_approval|disputed)$/);
+      expect(
+        sqlE2e(`select n_raters from assessment_results where assessment_id='${ids.B}' order by version desc limit 1`),
+        'all 3 valid reviews counted',
+      ).toBe('3');
     });
   });
 });

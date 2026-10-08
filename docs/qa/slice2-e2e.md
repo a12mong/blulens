@@ -60,3 +60,6 @@ cd apps/web && pnpm exec playwright test --project=setup --project=chromium slic
 Mutation ที่พิสูจน์แล้ว (ทำมือ ไม่ commit): ถอดเงื่อนไขหมายเหตุ ≥ 5 ของปุ่ม approve-submit → C4 แดง; เปลี่ยน testid `confirm-submit` → C6 แดง.
 
 **เส้นทางสำหรับ docs/STATUS.md (Jim):** เข้าสู่ระบบ committee@blulens.local → `/committee/assessments` → เปิดงานที่รออนุมัติ → ดูผลคะแนน/กรรมการ → **อนุมัติ** (หรือ **ส่งกลับ** ใส่เหตุผล ≥ 5 ตัว, **แก้ไขผล** เลือกเกรด + เหตุผล ≥ 20 ตัว, **ยืนยันผล** สำหรับผลชั่วคราว) → สถานะในรายการเปลี่ยนตามทันที
+
+### C8 — ส่งกลับแล้วมอบหมายกรรมการเพิ่ม (develop b322b35)
+งาน B (disputed → ส่งกลับ → `in_review`, assignment เดิมยัง `submitted` ตามที่ออกแบบ): Committee เปิดหน้า detail → **มอบหมาย** (`assign-open`) → ค้น `reviewer3` → เลือก → `assign-submit` (`POST /assessments/{id}/assign` = 200) → reviewer3 ส่งผล (API) → ระบบคำนวณใหม่ (result version +1), `n_raters = 3`, สถานะ `pending_approval` หรือ `disputed`. Mutation: เปลี่ยน testid `assign-submit` → C8 แดง. รวม `slice2` = 19 passed (setup 4 + 7 + 8).
