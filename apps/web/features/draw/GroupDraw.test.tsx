@@ -635,4 +635,41 @@ describe('GroupDraw', () => {
       'สมชาย / สมศักดิ์ พบ วิชัย / วีระ (ทีมเดียวกัน: Red Phoenix)',
     );
   });
+
+  it('format undefined -> draw-preview button present and not draw-not-groups', () => {
+    vi.mocked(eventsApi.useEvent).mockReturnValue({
+      data: {
+        id: 'e-undef',
+        tournamentId: 't1',
+        discipline: 'MS',
+        gradeMin: 'RK1',
+        gradeMax: 'P+',
+        requiresFreshAssessment: false,
+        minReviewers: 2,
+      } as unknown as eventsApi.Event,
+      isLoading: false,
+    } as unknown as ReturnType<typeof eventsApi.useEvent>);
+
+    vi.mocked(entriesApi.useEntries).mockReturnValue({
+      data: [
+        { id: 'en1', eventId: 'e-undef', status: 'approved', players: [] },
+        { id: 'en2', eventId: 'e-undef', status: 'approved', players: [] },
+      ] as unknown as entriesApi.Entry[],
+      isLoading: false,
+    } as unknown as ReturnType<typeof entriesApi.useEntries>);
+
+    render(<GroupDraw eventId="e-undef" />);
+
+    expect(screen.getByTestId('draw-precheck')).toHaveTextContent(
+      'ผู้สมัครอนุมัติแล้ว 2 คู่ · รูปแบบ: ไม่ทราบ',
+    );
+    expect(screen.getByTestId('draw-precheck')).not.toHaveTextContent('กลุ่มละ');
+
+    const previewBtn = screen.getByTestId('draw-preview');
+    expect(previewBtn).toBeInTheDocument();
+    expect(previewBtn).not.toBeDisabled();
+
+    expect(screen.queryByTestId('draw-not-groups')).toBeNull();
+  });
 });
+
