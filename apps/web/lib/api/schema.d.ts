@@ -2493,6 +2493,8 @@ export interface paths {
                         seed?: string;
                         /** @description omit to use the ruleset default */
                         seedCount?: number;
+                        /** @description draw.md D5: REQUIRED when a preview already exists for this event (version >= 2), else 400 VALIDATION_FAILED; stored in the draw.preview audit row and shown with that version */
+                        reason?: string;
                     };
                 };
             };
@@ -2506,6 +2508,7 @@ export interface paths {
                         "application/json": components["schemas"]["Draw"];
                     };
                 };
+                400: components["responses"]["Validation"];
                 /** @description ENTRIES_NOT_CLOSED | DRAW_ALREADY_LOCKED */
                 409: {
                     headers: {
@@ -2810,6 +2813,8 @@ export interface paths {
                         seed?: string;
                         /** @description override when the default sizing rule fails */
                         groupCount?: number;
+                        /** @description draw.md D5: REQUIRED when a preview already exists for this event (version >= 2), else 400 VALIDATION_FAILED; stored in the draw.preview audit row and shown with that version */
+                        reason?: string;
                     };
                 };
             };
@@ -2823,6 +2828,7 @@ export interface paths {
                         "application/json": components["schemas"]["Draw"];
                     };
                 };
+                400: components["responses"]["Validation"];
             };
         };
         delete?: never;
