@@ -1,5 +1,17 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { z } from 'zod';
+import { reasonInputSchema } from '@blulens/shared';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { CurrentUser, Roles } from '../../common/auth/decorators';
 import { Public } from '../../common/decorators/public.decorator';
@@ -29,6 +41,8 @@ const putMatchResultSchema = z.object({
 
 export class PutMatchResultDto extends createZodDto(putMatchResultSchema) {}
 
+export class RejectMatchResultDto extends createZodDto(reasonInputSchema) {}
+
 const uuid = new ParseUUIDPipe({ version: '4' });
 
 @Controller()
@@ -53,5 +67,23 @@ export class MatchesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.matches.putMatchResult(matchId, body, user);
+  }
+
+  @Roles('Committee', 'Admin')
+  @HttpCode(HttpStatus.OK)
+  @Post('matches/:matchId/result/approve')
+  approveMatchResult(@Param('matchId', uuid) matchId: string, @CurrentUser() user: AuthUser) {
+    return this.matches.approveMatchResult(matchId, user);
+  }
+
+  @Roles('Committee', 'Admin')
+  @HttpCode(HttpStatus.OK)
+  @Post('matches/:matchId/result/reject')
+  rejectMatchResult(
+    @Param('matchId', uuid) matchId: string,
+    @Body() body: RejectMatchResultDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.matches.rejectMatchResult(matchId, body.reason, user);
   }
 }

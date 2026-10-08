@@ -169,7 +169,85 @@ export class MatchesService {
     return matches.map((m) => this.mapMatch(m, entryMap, formats[m.stage] ?? knockoutFormat));
   }
 
-  async putMatchResult(matchId: string, body: PutMatchResultInput, caller: AuthUser) {
+  private handleTransitionError(
+    transition: { ok: false; code: string; message: string },
+    match: Match,
+    targetGames?: [number, number][],
+    format?: MatchFormat,
+  ): never {
+    if (
+      transition.code === 'GAME_SCORE_INVALID' ||
+      transition.code === 'GAMES_INCOMPLETE' ||
+      transition.code === 'GAMES_EXTRA' ||
+      transition.code === 'DRAW_NOT_ALLOWED'
+    ) {
+      const scoreCheck = targetGames && format ? validateMatchScore(targetGames, format) : null;
+      const details =
+        scoreCheck && !scoreCheck.ok
+          ? {
+              code: scoreCheck.code,
+              ...(scoreCheck.gameIndex !== undefined ? { gameIndex: scoreCheck.gameIndex } : {}),
+            }
+          : { code: transition.code };
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'MATCH_SCORE_INVALID',
+        transition.message,
+        details,
+      );
+    }
+
+    if (transition.code === 'MATCH_LOCKED') {
+      throw ApiException.conflict('STAGE_CONFIRMED', transition.message);
+    }
+
+    if (transition.code === 'MATCH_NOT_REPORTED') {
+      throw ApiException.conflict('MATCH_NOT_REPORTED', transition.message);
+    }
+
+    if (
+      (transition.code === 'MATCH_NOT_REPORTABLE' || transition.code === 'MATCH_NOT_SCHEDULED') &&
+      match.status === 'confirmed'
+    ) {
+      throw ApiException.conflict('MATCH_ALREADY_CONFIRMED', transition.message);
+    }
+
+    if (transition.code === 'UMPIRE_IS_PLAYER') {
+      throw ApiException.forbidden(transition.message, 'UMPIRE_OWN_MATCH');
+    }
+
+    if (transition.code === 'UMPIRE_NOT_ASSIGNED') {
+      throw ApiException.forbidden(transition.message, 'UMPIRE_NOT_ASSIGNED');
+    }
+
+    if (transition.code === 'REASON_REQUIRED') {
+      throw ApiException.badRequest('VALIDATION_FAILED', transition.message);
+    }
+
+    if (transition.code === 'FORBIDDEN') {
+      throw ApiException.forbidden(transition.message, 'FORBIDDEN');
+    }
+
+    throw ApiException.conflict(transition.code, transition.message);
+  }
+
+  private async applyResultAction(
+    matchId: string,
+    caller: AuthUser,
+    executeAction: (ctx: {
+      match: Match & { event: { id: string; format: unknown } };
+      format: MatchFormat;
+      entryIds: string[];
+      isLocked: boolean;
+      actor: ResultActor;
+      resultMatch: ResultMatch;
+      now: Date;
+    }) => {
+      updateData: Prisma.MatchUpdateInput;
+      auditAction: string;
+      reason?: string;
+    },
+  ) {
     return this.prisma.$transaction(async (tx) => {
       // 1. SELECT the match FOR UPDATE (raw query)
       const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
@@ -193,22 +271,7 @@ export class MatchesService {
       // 3. Resolve stage format
       const format = resolveMatchFormat(match.event.format, match.stage);
 
-      // 4. Validate outcome and games
-      let targetGames: [number, number][];
-      if (body.outcome === 'walkover_a') {
-        targetGames = walkoverGames(format, 'a');
-      } else if (body.outcome === 'walkover_b') {
-        targetGames = walkoverGames(format, 'b');
-      } else if (body.outcome === 'played') {
-        if (!body.games || body.games.length === 0) {
-          throw ApiException.badRequest('VALIDATION_FAILED', 'ต้องระบุผลเกม');
-        }
-        targetGames = body.games.map((g) => [g.a, g.b]);
-      } else {
-        throw ApiException.badRequest('VALIDATION_FAILED', 'ประเภทผลการแข่งไม่ถูกต้อง');
-      }
-
-      // 5. Load entries, players, and active team memberships
+      // 4. Load entries, players, and active team memberships
       const entryIds = [match.topEntryId, match.bottomEntryId].filter(
         (id): id is string => typeof id === 'string' && id.length > 0,
       );
@@ -245,7 +308,7 @@ export class MatchesService {
         ]),
       );
 
-      // 6. Check lock state (GroupStanding for match.groupId)
+      // 5. Check lock state (GroupStanding for match.groupId)
       let isLocked = false;
       if (match.groupId) {
         const standingsCount = await tx.groupStanding.count({
@@ -254,7 +317,7 @@ export class MatchesService {
         isLocked = standingsCount > 0;
       }
 
-      // 7. Determine actor
+      // 6. Determine actor
       const isCommittee = caller.roles.some((r) => r === 'Committee' || r === 'Admin');
       let actor: ResultActor;
 
@@ -280,7 +343,6 @@ export class MatchesService {
         });
         const callerTeamIds = Array.from(new Set(callerMemberships.map((m) => m.teamId)));
 
-        // courts: EventUmpire.courts, or [match.court] when courts is empty; no EventUmpire row -> courts []
         let courts: string[] = [];
         if (eventUmpire) {
           if (eventUmpire.courts.length > 0) {
@@ -298,24 +360,7 @@ export class MatchesService {
         };
       }
 
-      // 8. Determine action
-      let action: ResultAction;
-      let actionType: 'report' | 'enter' | 'correct';
-
-      if (!isCommittee) {
-        actionType = 'report';
-        action = { type: 'report', games: targetGames };
-      } else {
-        if (match.status === 'confirmed') {
-          actionType = 'correct';
-          action = { type: 'correct', games: targetGames, reason: body.reason ?? '' };
-        } else {
-          actionType = 'enter';
-          action = { type: 'enter', games: targetGames };
-        }
-      }
-
-      // 9. Build ResultMatch
+      // 7. Build ResultMatch
       const currentGames = Array.isArray(match.games)
         ? (match.games as Array<{ a: number; b: number }>).map(
             (g) => [g.a, g.b] as [number, number],
@@ -340,63 +385,101 @@ export class MatchesService {
         locked: isLocked,
       };
 
-      // 10. Execute matchResultTransition
-      const transition = matchResultTransition(resultMatch, actor, action, format);
+      // 8. Execute action-specific handler
+      const { updateData, auditAction, reason } = executeAction({
+        match,
+        format,
+        entryIds,
+        isLocked,
+        actor,
+        resultMatch,
+        now,
+      });
 
-      if (!transition.ok) {
-        if (
-          transition.code === 'GAME_SCORE_INVALID' ||
-          transition.code === 'GAMES_INCOMPLETE' ||
-          transition.code === 'GAMES_EXTRA' ||
-          transition.code === 'DRAW_NOT_ALLOWED'
-        ) {
-          const scoreCheck = validateMatchScore(targetGames, format);
-          const details = !scoreCheck.ok
-            ? {
-                code: scoreCheck.code,
-                ...(scoreCheck.gameIndex !== undefined ? { gameIndex: scoreCheck.gameIndex } : {}),
-              }
-            : { code: transition.code };
-          throw new ApiException(
-            HttpStatus.UNPROCESSABLE_ENTITY,
-            'MATCH_SCORE_INVALID',
-            transition.message,
-            details,
-          );
+      // 9. Update match in DB
+      const updated = await tx.match.update({
+        where: { id: matchId },
+        data: updateData,
+      });
+
+      // 10. Record audit entry
+      await this.audit.record(
+        {
+          actorId: caller.id,
+          action: auditAction,
+          entityType: 'match',
+          entityId: match.id,
+          before: {
+            games: match.games,
+            result: match.result,
+            status: match.status,
+            flags: match.flags,
+            resultVersion: match.resultVersion,
+            reportedBy: match.reportedBy,
+            reportedAt: match.reportedAt,
+            confirmedBy: match.confirmedBy,
+            confirmedAt: match.confirmedAt,
+          },
+          after: {
+            games: updated.games,
+            result: updated.result,
+            status: updated.status,
+            flags: updated.flags,
+            resultVersion: updated.resultVersion,
+            reportedBy: updated.reportedBy,
+            reportedAt: updated.reportedAt,
+            confirmedBy: updated.confirmedBy,
+            confirmedAt: updated.confirmedAt,
+          },
+          reason,
+        },
+        tx,
+      );
+
+      // 11. Return mapped Match
+      const entryMap = await this.loadEntryMap(tx, entryIds);
+      return this.mapMatch(updated, entryMap, format);
+    });
+  }
+
+  async putMatchResult(matchId: string, body: PutMatchResultInput, caller: AuthUser) {
+    return this.applyResultAction(matchId, caller, ({ match, format, actor, resultMatch, now }) => {
+      let targetGames: [number, number][];
+      if (body.outcome === 'walkover_a') {
+        targetGames = walkoverGames(format, 'a');
+      } else if (body.outcome === 'walkover_b') {
+        targetGames = walkoverGames(format, 'b');
+      } else if (body.outcome === 'played') {
+        if (!body.games || body.games.length === 0) {
+          throw ApiException.badRequest('VALIDATION_FAILED', 'ต้องระบุผลเกม');
         }
-
-        if (transition.code === 'MATCH_LOCKED') {
-          throw ApiException.conflict('STAGE_CONFIRMED', transition.message);
-        }
-
-        if (
-          (transition.code === 'MATCH_NOT_REPORTABLE' ||
-            transition.code === 'MATCH_NOT_SCHEDULED') &&
-          match.status === 'confirmed'
-        ) {
-          throw ApiException.conflict('MATCH_ALREADY_CONFIRMED', transition.message);
-        }
-
-        if (transition.code === 'UMPIRE_IS_PLAYER') {
-          throw ApiException.forbidden(transition.message, 'UMPIRE_OWN_MATCH');
-        }
-
-        if (transition.code === 'UMPIRE_NOT_ASSIGNED') {
-          throw ApiException.forbidden(transition.message, 'UMPIRE_NOT_ASSIGNED');
-        }
-
-        if (transition.code === 'REASON_REQUIRED') {
-          throw ApiException.badRequest('VALIDATION_FAILED', transition.message);
-        }
-
-        if (transition.code === 'FORBIDDEN') {
-          throw ApiException.forbidden(transition.message, 'FORBIDDEN');
-        }
-
-        throw ApiException.conflict(transition.code, transition.message);
+        targetGames = body.games.map((g) => [g.a, g.b]);
+      } else {
+        throw ApiException.badRequest('VALIDATION_FAILED', 'ประเภทผลการแข่งไม่ถูกต้อง');
       }
 
-      // 11. Determine winner and result enum
+      const isCommittee = actor.kind === 'committee';
+      let action: ResultAction;
+      let actionType: 'report' | 'enter' | 'correct';
+
+      if (!isCommittee) {
+        actionType = 'report';
+        action = { type: 'report', games: targetGames };
+      } else {
+        if (match.status === 'confirmed') {
+          actionType = 'correct';
+          action = { type: 'correct', games: targetGames, reason: body.reason ?? '' };
+        } else {
+          actionType = 'enter';
+          action = { type: 'enter', games: targetGames };
+        }
+      }
+
+      const transition = matchResultTransition(resultMatch, actor, action, format);
+      if (!transition.ok) {
+        this.handleTransitionError(transition, match, targetGames, format);
+      }
+
       let result: 'a_win' | 'b_win' | 'draw' | 'walkover_a' | 'walkover_b';
       let winnerEntryId: string | null = null;
 
@@ -428,7 +511,6 @@ export class MatchesService {
         }
       }
 
-      // 12. Write back
       const nextMatch = transition.match;
       const gamesJson = targetGames.map(([a, b]) => ({ a, b }));
 
@@ -443,44 +525,85 @@ export class MatchesService {
         ...(nextMatch.status === 'confirmed' ? { confirmedBy: caller.id, confirmedAt: now } : {}),
       };
 
-      const updated = await tx.match.update({
-        where: { id: matchId },
-        data: updateData,
-      });
-
-      // 13. Audit record
-      await this.audit.record(
-        {
-          actorId: caller.id,
-          action: `match.result.${actionType}`,
-          entityType: 'match',
-          entityId: match.id,
-          before: {
-            games: match.games,
-            result: match.result,
-            status: match.status,
-            flags: match.flags,
-            resultVersion: match.resultVersion,
-            reportedBy: match.reportedBy,
-            confirmedBy: match.confirmedBy,
-          },
-          after: {
-            games: updated.games,
-            result: updated.result,
-            status: updated.status,
-            flags: updated.flags,
-            resultVersion: updated.resultVersion,
-            reportedBy: updated.reportedBy,
-            confirmedBy: updated.confirmedBy,
-          },
-          reason: body.reason,
-        },
-        tx,
-      );
-
-      // 14. Return mapped Match
-      const entryMap = await this.loadEntryMap(tx, entryIds);
-      return this.mapMatch(updated, entryMap, format);
+      return {
+        updateData,
+        auditAction: `match.result.${actionType}`,
+        reason: body.reason,
+      };
     });
+  }
+
+  async approveMatchResult(matchId: string, caller: AuthUser) {
+    return this.applyResultAction(
+      matchId,
+      caller,
+      ({ match, format, isLocked, actor, resultMatch, now }) => {
+        if (isLocked) {
+          throw ApiException.conflict(
+            'STAGE_CONFIRMED',
+            'รอบแบ่งกลุ่มได้รับการยืนยันผลแล้ว ไม่สามารถแก้ไขได้',
+          );
+        }
+
+        const transition = matchResultTransition(resultMatch, actor, { type: 'confirm' }, format);
+        if (!transition.ok) {
+          this.handleTransitionError(transition, match);
+        }
+
+        const nextMatch = transition.match;
+        const updateData: Prisma.MatchUpdateInput = {
+          status: nextMatch.status,
+          confirmedBy: caller.id,
+          confirmedAt: now,
+        };
+
+        return {
+          updateData,
+          auditAction: 'match.result.approve',
+        };
+      },
+    );
+  }
+
+  async rejectMatchResult(matchId: string, reason: string, caller: AuthUser) {
+    return this.applyResultAction(
+      matchId,
+      caller,
+      ({ match, format, isLocked, actor, resultMatch }) => {
+        if (isLocked) {
+          throw ApiException.conflict(
+            'STAGE_CONFIRMED',
+            'รอบแบ่งกลุ่มได้รับการยืนยันผลแล้ว ไม่สามารถแก้ไขได้',
+          );
+        }
+
+        const transition = matchResultTransition(
+          resultMatch,
+          actor,
+          { type: 'reject', reason },
+          format,
+        );
+        if (!transition.ok) {
+          this.handleTransitionError(transition, match);
+        }
+
+        const nextMatch = transition.match;
+        const updateData: Prisma.MatchUpdateInput = {
+          status: nextMatch.status,
+          games: Prisma.DbNull,
+          result: null,
+          winnerEntryId: null,
+          reportedBy: null,
+          reportedAt: null,
+          flags: nextMatch.flags,
+        };
+
+        return {
+          updateData,
+          auditAction: 'match.result.reject',
+          reason,
+        };
+      },
+    );
   }
 }
