@@ -84,6 +84,27 @@ export class AssessmentsService {
       orderBy,
       take: query.limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      include: {
+        subject: {
+          select: {
+            id: true,
+            displayName: true,
+            memberships: {
+              where: { validTo: null },
+              select: {
+                team: { select: { name: true } },
+              },
+            },
+          },
+        },
+        event: {
+          select: {
+            id: true,
+            discipline: true,
+            tournament: { select: { name: true } },
+          },
+        },
+      },
     });
 
     const hasMore = rows.length > query.limit;
@@ -112,7 +133,7 @@ export class AssessmentsService {
 
     return {
       items: items.map((a) =>
-        this.mapAssessment(a, submittedMap.get(a.id) ?? 0, a.reviewsRequired),
+        this.mapAssessment(a, submittedMap.get(a.id) ?? 0, a.reviewsRequired, actor),
       ),
       nextCursor,
     };
@@ -125,6 +146,36 @@ export class AssessmentsService {
       where: { id: assessmentId },
       include: {
         clips: {
+          orderBy: { createdAt: 'asc' },
+        },
+        subject: {
+          select: {
+            id: true,
+            displayName: true,
+            memberships: {
+              where: { validTo: null },
+              select: {
+                team: { select: { name: true } },
+              },
+            },
+          },
+        },
+        event: {
+          select: {
+            id: true,
+            discipline: true,
+            tournament: { select: { name: true } },
+          },
+        },
+        assignments: {
+          include: {
+            review: {
+              select: { submittedAt: true },
+            },
+            reviewer: {
+              select: { id: true, displayName: true },
+            },
+          },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -250,7 +301,7 @@ export class AssessmentsService {
     }
 
     return {
-      ...this.mapAssessment(assessment, reviewsSubmitted, assessment.reviewsRequired),
+      ...this.mapAssessment(assessment, reviewsSubmitted, assessment.reviewsRequired, actor),
       clips,
       latestResult,
       reviewerRows,
@@ -913,15 +964,52 @@ export class AssessmentsService {
     return this.getDetail(assessmentId, actor);
   }
 
-  private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number) {
+  private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number, actor?: AuthUser) {
+    const isStaff = actor ? actor.roles.some((r) => r === 'Committee' || r === 'Admin') : false;
+
+    const clubNames = assessment.subject?.memberships
+      ? Array.from(new Set(assessment.subject.memberships.map((m: any) => m.team.name))).sort()
+      : [];
+
+    const subject = assessment.subject
+      ? {
+          userId: assessment.subject.id,
+          displayName: assessment.subject.displayName,
+          clubNames,
+        }
+      : null;
+
+    const event = assessment.event
+      ? {
+          id: assessment.event.id,
+          discipline: assessment.event.discipline,
+          tournamentName: assessment.event.tournament?.name ?? null,
+        }
+      : null;
+
+    const assignments =
+      isStaff && assessment.assignments
+        ? assessment.assignments.map((a: any) => ({
+            id: a.id,
+            state: a.state,
+            dueAt: a.dueAt,
+            submittedAt: a.review?.submittedAt ?? null,
+            reviewerId: a.reviewer.id,
+            reviewerName: a.reviewer.displayName,
+          }))
+        : [];
+
     return {
       id: assessment.id,
       subjectUserId: assessment.subjectUserId,
       eventId: assessment.eventId,
       status: assessment.status,
       note: assessment.note,
+      subject,
+      event,
       reviewsSubmitted,
       reviewsRequired,
+      ...(assessment.assignments ? { assignments } : {}),
       createdAt: assessment.createdAt,
       updatedAt: assessment.updatedAt,
     };
