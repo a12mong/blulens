@@ -19,6 +19,11 @@ export interface CreateGroupPreviewInput {
   groupCount?: number;
 }
 
+export interface PublishDrawInput {
+  acknowledgeConflicts?: boolean;
+  reason?: string;
+}
+
 @Injectable()
 export class DrawsService {
   constructor(
@@ -112,8 +117,7 @@ export class DrawsService {
       throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, 'GROUP_SIZES_IMPOSSIBLE', plan.error);
     }
 
-    const sortedEntryIds = approvedEntries.map((e) => e.id).sort();
-    const inputHash = createHash('sha256').update(sortedEntryIds.join(',')).digest('hex');
+    const inputHash = this.computeInputHash(approvedEntries.map((e) => e.id));
 
     return this.prisma.$transaction(async (tx) => {
       const lastDraw = await tx.draw.findFirst({
@@ -222,23 +226,175 @@ export class DrawsService {
         tx,
       );
 
-      return {
-        id: draw.id,
-        eventId: draw.eventId,
-        version: draw.version,
-        status: draw.status,
-        sameTeamR1Count: draw.sameTeamR1Count,
-        createdAt: draw.createdAt.toISOString(),
-        createdBy: draw.createdBy,
-        seed: draw.seed,
-        inputHash: draw.inputHash,
-        kind: draw.kind,
-        rulesetVersion: draw.rulesetVersion,
-        size: draw.size,
-        slots: [],
-        conflicts: (draw.conflicts as unknown[]) ?? [],
-        minimumPossibleConflicts: draw.minimumPossibleConflicts,
-      };
+      return this.toDrawResponse(draw);
     });
+  }
+
+  async publishDraw(drawId: string, body: PublishDrawInput, user: AuthUser) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Lock draw row FOR UPDATE
+      const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM draws WHERE id = ${drawId}::uuid FOR UPDATE
+      `;
+      if (lockedRows.length === 0) {
+        throw ApiException.notFound('ไม่พบสายการแข่งขันที่ต้องการ', 'DRAW_NOT_FOUND');
+      }
+
+      // 2. Fetch the draw
+      const draw = await tx.draw.findUnique({
+        where: { id: drawId },
+      });
+      if (!draw) {
+        throw ApiException.notFound('ไม่พบสายการแข่งขันที่ต้องการ', 'DRAW_NOT_FOUND');
+      }
+
+      // 3. Check kind (knockout publish is not supported yet)
+      if (draw.kind !== 'group') {
+        throw ApiException.conflict(
+          'DRAW_KIND_NOT_SUPPORTED',
+          'ระบบยังไม่รองรับการเผยแพร่สายการแข่งขันประเภทนี้',
+        );
+      }
+
+      // 4. Status must be preview
+      if (draw.status !== 'preview') {
+        throw ApiException.conflict(
+          'DRAW_ALREADY_LOCKED',
+          'สายการแข่งขันไม่ได้อยู่ในสถานะพรีวิว หรือถูกล็อค/เผยแพร่แล้ว',
+        );
+      }
+
+      // 5. Another draw of the same event+kind already published or locked
+      const existingPublishedOrLocked = await tx.draw.findFirst({
+        where: {
+          eventId: draw.eventId,
+          kind: draw.kind,
+          status: { in: ['published', 'locked'] },
+          id: { not: draw.id },
+        },
+      });
+      if (existingPublishedOrLocked) {
+        throw ApiException.conflict(
+          'DRAW_ALREADY_LOCKED',
+          'สายการแข่งขันรอบแบ่งกลุ่มได้รับการเผยแพร่หรือล็อคแล้ว',
+        );
+      }
+
+      // 6. Recompute inputHash from the event's current approved entries
+      const currentApprovedEntries = await tx.entry.findMany({
+        where: {
+          eventId: draw.eventId,
+          status: 'approved',
+        },
+        select: { id: true },
+      });
+      const currentInputHash = this.computeInputHash(currentApprovedEntries.map((e) => e.id));
+      if (currentInputHash !== draw.inputHash) {
+        throw ApiException.conflict(
+          'DRAW_INPUT_CHANGED',
+          'ข้อมูลผู้สมัครที่ได้รับอนุมัติมีการเปลี่ยนแปลง โปรดสร้างพรีวิวใหม่ก่อนเผยแพร่',
+        );
+      }
+
+      // 7. Conflicts check
+      const acknowledgeConflicts = body.acknowledgeConflicts === true;
+      if (draw.sameTeamR1Count > 0 && !acknowledgeConflicts) {
+        throw ApiException.conflict(
+          'DRAW_CONFLICTS_NOT_ACKNOWLEDGED',
+          'มีทีมเดียวกันอยู่ในกลุ่มเดียวกัน กรุณายืนยันการรับทราบข้อขัดแย้งก่อนเผยแพร่',
+        );
+      }
+
+      // 8. Update this draw -> published; other previews of same event+kind -> discarded
+      const now = new Date();
+      const updatedDraw = await tx.draw.update({
+        where: { id: draw.id },
+        data: {
+          status: 'published',
+          reason: body.reason ?? draw.reason,
+          ...(acknowledgeConflicts
+            ? {
+                conflictsAcknowledgedBy: user.id,
+                conflictsAcknowledgedAt: now,
+              }
+            : {}),
+        },
+      });
+
+      await tx.draw.updateMany({
+        where: {
+          eventId: draw.eventId,
+          kind: draw.kind,
+          status: 'preview',
+          id: { not: draw.id },
+        },
+        data: {
+          status: 'discarded',
+        },
+      });
+
+      // 9. Audit 'draw.publish'
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'draw.publish',
+          entityType: 'draw',
+          entityId: updatedDraw.id,
+          reason: body.reason,
+          after: {
+            id: updatedDraw.id,
+            eventId: updatedDraw.eventId,
+            version: updatedDraw.version,
+            status: updatedDraw.status,
+            kind: updatedDraw.kind,
+            seed: updatedDraw.seed,
+            size: updatedDraw.size,
+          },
+        },
+        tx,
+      );
+
+      return this.toDrawResponse(updatedDraw);
+    });
+  }
+
+  private computeInputHash(entryIds: string[]): string {
+    const sorted = [...entryIds].sort();
+    return createHash('sha256').update(sorted.join(',')).digest('hex');
+  }
+
+  private toDrawResponse(draw: {
+    id: string;
+    eventId: string;
+    version: number;
+    status: string;
+    sameTeamR1Count: number;
+    createdAt: Date;
+    createdBy: string;
+    seed: string;
+    inputHash: string;
+    kind: string;
+    rulesetVersion: string;
+    size: number;
+    conflicts: Prisma.JsonValue;
+    minimumPossibleConflicts: number;
+  }) {
+    return {
+      id: draw.id,
+      eventId: draw.eventId,
+      version: draw.version,
+      status: draw.status,
+      sameTeamR1Count: draw.sameTeamR1Count,
+      createdAt: draw.createdAt.toISOString(),
+      createdBy: draw.createdBy,
+      seed: draw.seed,
+      inputHash: draw.inputHash,
+      kind: draw.kind,
+      rulesetVersion: draw.rulesetVersion,
+      size: draw.size,
+      slots: [],
+      conflicts: (draw.conflicts as unknown[]) ?? [],
+      minimumPossibleConflicts: draw.minimumPossibleConflicts,
+    };
   }
 }
