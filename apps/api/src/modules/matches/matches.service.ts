@@ -1068,11 +1068,12 @@ export class MatchesService {
       // 6. Determine actor
       const isCommittee = caller.roles.some((r) => r === 'Committee' || r === 'Admin');
       let actor: ResultActor;
+      let eventUmpire: Awaited<ReturnType<typeof tx.eventUmpire.findUnique>> = null;
 
       if (isCommittee) {
         actor = { kind: 'committee', userId: caller.id };
       } else {
-        const eventUmpire = await tx.eventUmpire.findUnique({
+        eventUmpire = await tx.eventUmpire.findUnique({
           where: {
             eventId_userId: {
               eventId: match.eventId,
@@ -1125,7 +1126,7 @@ export class MatchesService {
         games: currentGames,
         playerIds: playerUserIds,
         playerTeamIds,
-        umpireId: match.umpireId,
+        umpireId: eventUmpire && eventUmpire.courts.length === 0 && match.umpireId === null ? caller.id : match.umpireId,
         court: match.court,
         reportedBy: match.reportedBy,
         version: match.resultVersion,

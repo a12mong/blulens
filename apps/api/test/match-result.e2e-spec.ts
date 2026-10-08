@@ -266,6 +266,93 @@ describe('match-result (bl-25-3 API)', () => {
     });
   });
 
+  describe('bl-25-15 umpire all-courts court-null matches', () => {
+    it('umpire with courts [] (all courts) can report court-null match -> 200', async () => {
+      // Set match1's court to null explicitly (published draw matches have court = null)
+      await prisma.match.update({
+        where: { id: match1Id },
+        data: { court: null },
+      });
+
+      const cookie = cookieFor(umpireAssignedId, ['Umpire']);
+      const res = await http()
+        .put(`/api/v1/matches/${match1Id}/result`)
+        .set('Cookie', cookie)
+        .send({
+          outcome: 'played',
+          games: [
+            { a: 15, b: 12 },
+            { a: 15, b: 14 },
+          ],
+        })
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.status).toBe('reported');
+      // Verify umpireId stays null in DB
+      const updated = await prisma.match.findUnique({ where: { id: match1Id } });
+      expect(updated?.umpireId).toBeNull();
+    });
+
+    it('umpire with courts [\'สนาม 2\'] -> 403 UMPIRE_NOT_ASSIGNED on court-null match', async () => {
+      // Set match2's court to null (separate match from the first test)
+      await prisma.match.update({
+        where: { id: match2Id },
+        data: { court: null },
+      });
+
+      // Create another EventUmpire with specific court
+      const umpireWithCourt = await prisma.user.create({
+        data: { email: `${tag}-ump-court@test.local`, passwordHash: 'x', displayName: `${tag} Umpire Court` },
+      });
+      userIds.push(umpireWithCourt.id);
+
+      await prisma.eventUmpire.create({
+        data: { eventId: openEventId, userId: umpireWithCourt.id, courts: ['สนาม 2'] },
+      });
+
+      const cookie = cookieFor(umpireWithCourt.id, ['Umpire']);
+      const res = await http()
+        .put(`/api/v1/matches/${match2Id}/result`)
+        .set('Cookie', cookie)
+        .send({
+          outcome: 'played',
+          games: [
+            { a: 15, b: 12 },
+            { a: 15, b: 14 },
+          ],
+        })
+        .expect(403);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UMPIRE_NOT_ASSIGNED');
+    });
+
+    it('umpire who plays in the match (courts []) -> 403 UMPIRE_OWN_MATCH', async () => {
+      // Set match3's court to null (match where p1 plays)
+      await prisma.match.update({
+        where: { id: match3Id },
+        data: { court: null },
+      });
+
+      const cookie = cookieFor(p1Id, ['Umpire']);
+      const res = await http()
+        .put(`/api/v1/matches/${match3Id}/result`)
+        .set('Cookie', cookie)
+        .send({
+          outcome: 'played',
+          games: [
+            { a: 15, b: 12 },
+            { a: 15, b: 14 },
+          ],
+        })
+        .expect(403);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UMPIRE_OWN_MATCH');
+    });
+  });
+
   afterAll(async () => {
     // Disable test users rather than deleting append-only rows
     if (userIds.length > 0) {
