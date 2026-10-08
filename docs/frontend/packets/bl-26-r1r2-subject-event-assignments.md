@@ -8,14 +8,14 @@ STATE:
 - Backend fills these fields in packet bl-26-6 (Kevin/Creed): until then the API may return them empty. Code defensively; tests use mocks.
 
 SOURCES:
-- `apps/web/lib/api/schema.d.ts`: `Assessment.subject {userId, displayName, clubNames}` (required), `Assessment.event {id, name, tournamentName} | null` (null = standalone), `AssessmentDetail.assignments?: AssignmentProgressRow[] {assignmentId, reviewerId, reviewerName, state 'open'|'submitted'|'expired'|'declined', dueAt, submittedAt|null, abstained}` (Committee/Admin only, ordered by creation). No scores in it.
+- `apps/web/lib/api/schema.d.ts`: `Assessment.subject {userId, displayName, clubNames}` (required), `Assessment.event {id, discipline 'MS'|'WS'|'MD'|'WD'|'XD', tournamentName} | null` (null = standalone; an event has no name of its own), `AssessmentDetail.assignments?: AssignmentProgressRow[] {id, reviewerId, reviewerName, state 'open'|'submitted'|'expired'|'declined', dueAt, submittedAt|null}` (NO abstained field) (Committee/Admin only, ordered by creation). No scores in it.
 - `apps/web/features/assessments/AssessmentTable.tsx`, `AssessmentDetailView.tsx` + tests. Spec: docs/design/review-slice-2.md R1, R2.
 
 SPEC:
 - Files (ONLY): `AssessmentTable.tsx`, `AssessmentDetailView.tsx`, new `ReviewerProgress.tsx` + `ReviewerProgress.test.tsx`, and the existing tests of the two components.
-- List: the subject cell shows `subject.displayName` (fallback 'ไม่ระบุ' only when empty) and, muted, `clubNames.join(', ')` when non-empty; the event cell shows `event.tournamentName` (+ ' · ' + `event.name`) or 'ประเมินทั่วไป' when event is null. Keep existing testids.
+- List: the subject cell shows `subject.displayName` (fallback 'ไม่ระบุ' only when empty) and, muted, `clubNames.join(', ')` when non-empty; the event cell shows `{tournamentName} · {discipline in Thai}` (reuse the existing discipline label helper in features/events; grep for it, do not add a second map) or 'ประเมินทั่วไป' when event is null. Keep existing testids.
 - Detail header: same name and event line.
-- `ReviewerProgress` props `{ assignments: AssignmentProgressRow[] }`, `data-testid="detail-progress"`, one row `data-testid="progress-row"` each: reviewerName, state as text + icon (open 'รอส่ง', submitted 'ส่งแล้ว', expired 'หมดเวลา', declined 'ปฏิเสธ'), due date, submittedAt when present, 'งดออกเสียง' when abstained. Header 'ส่งแล้ว {n}/{total}'. Empty or undefined renders nothing. Rendered in AssessmentDetailView above the existing reviewer rows table, only when assignments has entries.
+- `ReviewerProgress` props `{ assignments: AssignmentProgressRow[] }`, `data-testid="detail-progress"`, one row `data-testid="progress-row"` each: reviewerName, state as text + icon (open 'รอส่ง', submitted 'ส่งแล้ว', expired 'หมดเวลา', declined 'ปฏิเสธ'), due date, submittedAt when present. Header 'ส่งแล้ว {n}/{total}'. Empty or undefined renders nothing. Rendered in AssessmentDetailView above the existing reviewer rows table, only when assignments has entries.
 
 CONSTRAINTS: only the listed files; no new dependencies; no `any`; Thai UI; theme tokens ONLY (grep -E 'bg-(white|blue|gray|red|green|orange|yellow)|text-(gray|blue|red|green|orange|yellow)|border-(gray|red)' must be empty on every line you touch); keep EVERY existing data-testid; status never by colour alone; table scrolls inside its own container at 390px (document.documentElement.scrollWidth == 390).
 
