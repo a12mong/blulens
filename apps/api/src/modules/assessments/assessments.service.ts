@@ -90,7 +90,12 @@ export class AssessmentsService {
             id: true,
             displayName: true,
             memberships: {
-              where: { validTo: null },
+              where: {
+                OR: [
+                  { validTo: null },
+                  { validTo: { gt: new Date() } },
+                ],
+              },
               select: {
                 team: { select: { name: true } },
               },
@@ -153,7 +158,12 @@ export class AssessmentsService {
             id: true,
             displayName: true,
             memberships: {
-              where: { validTo: null },
+              where: {
+                OR: [
+                  { validTo: null },
+                  { validTo: { gt: new Date() } },
+                ],
+              },
               select: {
                 team: { select: { name: true } },
               },

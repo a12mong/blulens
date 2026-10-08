@@ -272,5 +272,45 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
       expect(data.event).toBeDefined();
       expect(data.event.tournamentName).toBe(`${tag} Tournament`);
     });
+
+    it('Subject with future-dated membership (validTo = tomorrow) IS listed', async () => {
+      // Create a future membership that ends tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const team3 = await prisma.team.create({
+        data: { name: `${tag} Team Future`, nameKey: `${tag}-future` },
+      });
+
+      await prisma.teamMembership.create({
+        data: {
+          userId: subjectId,
+          teamId: team3.id,
+          validFrom: today,
+          validTo: tomorrow,
+        },
+      });
+
+      try {
+        const res = await http()
+          .get(`/api/v1/assessments/${assessmentId}`)
+          .set('Cookie', subjectCookie)
+          .expect(200);
+
+        const data = res.body.data;
+        // Should include both the original active membership and the future-dated one
+        expect(data.subject.clubNames).toContain(`${tag} Team A`);
+        expect(data.subject.clubNames).toContain(`${tag} Team Future`);
+        expect(data.subject.clubNames.length).toBe(2);
+      } finally {
+        // Cleanup
+        await prisma.teamMembership.deleteMany({
+          where: { teamId: team3.id, userId: subjectId },
+        });
+        await prisma.team.delete({ where: { id: team3.id } });
+      }
+    });
   });
 });

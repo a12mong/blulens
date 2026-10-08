@@ -100,14 +100,14 @@ export class UsersService {
       }
     }
 
-    const items: UserPickerItem[] = rows.map((u) => {
-      const memberships = u.memberships.sort((a, b) => (a.team.name < b.team.name ? -1 : a.team.name > b.team.name ? 1 : 0));
+    const items: UserPickerItem[] = rows.map((u: any) => {
+      const memberships = u.memberships.sort((a: any, b: any) => (a.team.name < b.team.name ? -1 : a.team.name > b.team.name ? 1 : 0));
       return {
         id: u.id,
         displayName: u.displayName,
-        roles: u.roles.map((r) => r.role as Role),
-        teamIds: memberships.map((m) => m.teamId),
-        teamNames: memberships.map((m) => m.team.name),
+        roles: u.roles.map((r: any) => r.role as Role),
+        teamIds: memberships.map((m: any) => m.teamId),
+        teamNames: memberships.map((m: any) => m.team.name),
         gradeLabel: official.get(u.id)?.label ?? null,
         gradeProvisional: !official.has(u.id) && provisionalSet.has(u.id),
       };
