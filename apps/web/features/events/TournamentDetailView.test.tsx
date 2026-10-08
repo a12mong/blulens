@@ -100,12 +100,17 @@ describe('TournamentDetailView', () => {
     expect(resultsLink).toHaveAttribute('href', '/committee/events/E1/results');
     expect(resultsLink).toHaveTextContent('ผลที่รอยืนยัน');
 
+    const groupsLink = screen.getByTestId('event-groups-committee');
+    expect(groupsLink).toHaveAttribute('href', '/committee/events/E1/groups');
+    expect(groupsLink).toHaveTextContent('จัดกลุ่ม');
+
     // With roles ['Committee'] only committee links
     mockRoles = ['Committee'];
     rerender(<TournamentDetailView tournamentId="T1" />);
     expect(screen.queryByTestId('event-entries-admin')).toBeNull();
     expect(screen.getByTestId('event-entries-committee')).toBeInTheDocument();
     expect(screen.getByTestId('event-results-committee')).toBeInTheDocument();
+    expect(screen.getByTestId('event-groups-committee')).toBeInTheDocument();
 
     // Tournament status draft -> tournament-not-open is visible
     mockTournamentState = {
@@ -127,10 +132,15 @@ describe('TournamentDetailView', () => {
     expect(resultsLink).toBeInTheDocument();
     expect(resultsLink.getAttribute('href')).toMatch(/\/results$/);
 
+    const groupsLink = screen.getByTestId('event-groups-committee');
+    expect(groupsLink).toBeInTheDocument();
+    expect(groupsLink.getAttribute('href')).toMatch(/\/groups$/);
+
     // roles ['Member'] -> absent
     mockRoles = ['Member'];
     rerender(<TournamentDetailView tournamentId="T1" />);
     expect(screen.queryByTestId('event-results-committee')).toBeNull();
+    expect(screen.queryByTestId('event-groups-committee')).toBeNull();
   });
 
   it('shows skeleton while pending', () => {
