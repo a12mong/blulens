@@ -1759,6 +1759,10 @@ components:
         confirmedBy: { type: [string, 'null'], format: uuid }
         confirmedAt: { type: [string, 'null'], format: date-time }
         flags: { type: array, items: { type: string, enum: [UMPIRE_TEAM_CONFLICT, COMMITTEE_DIRECT_ENTRY, CORRECTED] } }
+        format:
+          allOf: [{ $ref: '#/components/schemas/MatchFormat' }]
+          readOnly: true
+          description: 'the scoring rules of this match, resolved server-side from the event format: stage group -> groupMatchFormat, knockout | third_place -> knockoutMatchFormat (missing -> preset group_2x15 / bo3_21). Always present in every Match response, so the umpire form and score validation never guess (Andy 2026-10-08).'
     EventUmpire:
       type: object
       required: [userId]
