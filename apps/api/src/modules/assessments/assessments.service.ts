@@ -13,6 +13,10 @@ import {
 import { ApiException } from '../../common/errors/api.exception';
 import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
+import {
+  NotificationsService,
+  type NotificationItem,
+} from '../../common/notifications/notifications.service';
 import { randomUUID } from 'node:crypto';
 
 export interface DecideOptions {
@@ -68,6 +72,7 @@ export class AssessmentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(actor: AuthUser, query: ListAssessmentsParams) {
@@ -99,10 +104,7 @@ export class AssessmentsService {
             displayName: true,
             memberships: {
               where: {
-                OR: [
-                  { validTo: null },
-                  { validTo: { gt: new Date() } },
-                ],
+                OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
               },
               select: {
                 team: { select: { name: true } },
@@ -167,10 +169,7 @@ export class AssessmentsService {
             displayName: true,
             memberships: {
               where: {
-                OR: [
-                  { validTo: null },
-                  { validTo: { gt: new Date() } },
-                ],
+                OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
               },
               select: {
                 team: { select: { name: true } },
@@ -590,6 +589,18 @@ export class AssessmentsService {
         });
       }
 
+      // N5 review_assigned: blind (no subject, no assessment id), links to the queue
+      await this.notifications.emit(
+        tx,
+        actor.id,
+        body.reviewerIds.map((reviewerId) => ({
+          recipientUserId: reviewerId,
+          type: 'review_assigned' as const,
+          title: 'มีงานประเมินใหม่ 1 งาน',
+          link: '/review',
+        })),
+      );
+
       // Audit
       await this.audit.record(
         {
@@ -966,12 +977,29 @@ export class AssessmentsService {
         },
         tx,
       );
+
+      await this.notifications.emit(
+        tx,
+        actor.id,
+        await this.decisionNotifications(
+          tx,
+          opts.action,
+          assessment.subjectUserId,
+          assessmentId,
+          opts.reason,
+        ),
+      );
     });
 
     return this.getDetail(assessmentId, actor);
   }
 
-  private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number, actor?: AuthUser) {
+  private mapAssessment(
+    assessment: any,
+    reviewsSubmitted: number,
+    reviewsRequired: number,
+    actor?: AuthUser,
+  ) {
     const isStaff = actor ? actor.roles.some((r) => r === 'Committee' || r === 'Admin') : false;
 
     const clubNames = assessment.subject?.memberships
@@ -1053,7 +1081,10 @@ export class AssessmentsService {
 
       // Check status is draft
       if (assessment.status !== 'draft') {
-        throw ApiException.conflict('ASSESSMENT_NOT_DRAFT', 'อัปโหลดคลิปได้เฉพาะคำขอที่ยังเป็นฉบับร่าง');
+        throw ApiException.conflict(
+          'ASSESSMENT_NOT_DRAFT',
+          'อัปโหลดคลิปได้เฉพาะคำขอที่ยังเป็นฉบับร่าง',
+        );
       }
 
       // Check clip limit (max 3 non-rejected clips)
@@ -1091,7 +1122,11 @@ export class AssessmentsService {
   /** Presign flow step 3: the browser's PUT is done; verify the object and mark the clip playable. */
   async completeClip(clipId: string, durationSec: number, user: AuthUser) {
     if (durationSec > CLIP_MAX_DURATION_SEC) {
-      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, 'CLIP_TOO_LONG', 'คลิปยาวได้ไม่เกิน 5 นาที');
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'CLIP_TOO_LONG',
+        'คลิปยาวได้ไม่เกิน 5 นาที',
+      );
     }
     const clip = await this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -1174,5 +1209,72 @@ export class AssessmentsService {
       throw ApiException.conflict('CLIP_NOT_UPLOADED', 'คลิปนี้ยังอัปโหลดไม่เสร็จ');
     }
     return this.storage.presignGet(clip.objectKey);
+  }
+
+  /** notifications.md N1-N4 for a Committee decision (owner defaults D3, D4). */
+  private async decisionNotifications(
+    tx: Prisma.TransactionClient,
+    action: string,
+    subjectUserId: string,
+    assessmentId: string,
+    reason: string | undefined,
+  ): Promise<NotificationItem[]> {
+    const memberLink = `/me/assessments/${assessmentId}`;
+    switch (action) {
+      case 'assessment.approve':
+        return [
+          {
+            recipientUserId: subjectUserId,
+            type: 'assessment_approved',
+            title: 'ผลประเมินฝีมือของคุณได้รับอนุมัติแล้ว',
+            link: memberLink,
+          },
+        ];
+      case 'assessment.return':
+        return [
+          {
+            recipientUserId: subjectUserId,
+            type: 'assessment_returned',
+            title: 'คำขอประเมินของคุณถูกส่งกลับให้กรรมการประเมินใหม่',
+            body: reason,
+            link: memberLink,
+          },
+        ];
+      case 'assessment.confirm':
+        return [
+          {
+            recipientUserId: subjectUserId,
+            type: 'assessment_confirmed',
+            title: 'ผลประเมินฝีมือของคุณได้รับการยืนยันแล้ว',
+            link: memberLink,
+          },
+        ];
+      case 'assessment.override': {
+        // G7 (a): the member and every Committee member (emit drops the acting one)
+        const committee = await tx.user.findMany({
+          where: { status: 'active', roles: { some: { role: 'Committee' } } },
+          select: { id: true },
+        });
+        const title = 'ผลประเมินถูกคณะกรรมการปรับ';
+        return [
+          {
+            recipientUserId: subjectUserId,
+            type: 'assessment_overridden',
+            title,
+            body: reason,
+            link: memberLink,
+          },
+          ...committee.map((c) => ({
+            recipientUserId: c.id,
+            type: 'assessment_overridden' as const,
+            title,
+            body: reason,
+            link: `/committee/assessments/${assessmentId}`,
+          })),
+        ];
+      }
+      default:
+        return [];
+    }
   }
 }
