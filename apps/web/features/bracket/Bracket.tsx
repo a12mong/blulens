@@ -1,5 +1,8 @@
 import React from 'react';
+import { useParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import type { components } from '@/lib/api/schema';
+import { useBracket, useEventMatches } from './api';
 import {
   MatchCard,
   type MatchCardData,
@@ -10,11 +13,17 @@ export type BracketRound = NonNullable<
   components['schemas']['Bracket']['rounds']
 >[number];
 
-export type BracketMatch = NonNullable<BracketRound['matches']>[number];
+export type BracketMatch = NonNullable<BracketRound['matches']>[number] & {
+  isThirdPlace?: boolean;
+};
 
 export interface BracketProps {
-  rounds: BracketRound[];
+  rounds?: BracketRound[];
   highlightEntryId?: string;
+  eventId?: string;
+  scores?:
+    | Record<string, { a: number; b: number }[]>
+    | ((round: number, matchNo: number) => { a: number; b: number }[] | undefined);
 }
 
 const STATUS_THAI: Record<string, string> = {
@@ -46,18 +55,6 @@ export function getRoundLabels(
   };
 }
 
-function toMatchCardData(match: BracketMatch): MatchCardData {
-  return {
-    matchNo: match.matchNo ?? 0,
-    top: match.topEntry ?? null,
-    bottom: match.bottomEntry ?? null,
-    winnerId: match.winner ?? null,
-    status: (match.status as MatchStatus) ?? 'scheduled',
-    games: undefined,
-    withdrawnIds: undefined,
-  };
-}
-
 function getWinnerDisplayName(match: BracketMatch): string {
   if (!match.winner) return '—';
   if (match.status === 'reported' || match.status === 'scheduled') return '—';
@@ -70,11 +67,120 @@ function getWinnerDisplayName(match: BracketMatch): string {
   return match.winner;
 }
 
-export function Bracket({ rounds, highlightEntryId }: BracketProps) {
+export function Bracket({
+  rounds,
+  highlightEntryId,
+  eventId,
+  scores,
+}: BracketProps) {
+  let resolvedEventId = eventId;
+  try {
+    const params = useParams();
+    if (!resolvedEventId && params) {
+      resolvedEventId = (params.id as string) || (params.eventId as string);
+    }
+  } catch {
+    // non-router environment
+  }
+
+  let hasQueryClient = true;
+  try {
+    useQueryClient();
+  } catch {
+    hasQueryClient = false;
+  }
+
+  const bracketQuery =
+    hasQueryClient && resolvedEventId ? useBracket(resolvedEventId) : null;
+  const isProvisional = Boolean(bracketQuery?.data?.provisional);
+
+  const matchesQuery =
+    hasQueryClient && resolvedEventId ? useEventMatches(resolvedEventId) : null;
+  const eventMatches = matchesQuery?.data;
+
+  const getMatchGames = (
+    roundNo: number,
+    match: BracketMatch,
+  ): { a: number; b: number }[] | undefined => {
+    if (match.games && match.games.length > 0) {
+      return match.games.map((g) => ({ a: g.a ?? 0, b: g.b ?? 0 }));
+    }
+    if (scores) {
+      if (typeof scores === 'function') {
+        const s = scores(roundNo, match.matchNo ?? 0);
+        if (s) return s;
+      } else {
+        const k1 = `${roundNo}-${match.matchNo}`;
+        const k2 = `${match.matchNo}`;
+        if (scores[k1]) return scores[k1];
+        if (scores[k2]) return scores[k2];
+      }
+    }
+    if (eventMatches) {
+      const found = eventMatches.find((m) => {
+        const matchNumber = (m as { matchNo?: number }).matchNo;
+        const matchesRound = m.round === roundNo;
+        const matchesNo = matchNumber !== undefined && matchNumber === match.matchNo;
+        const matchesEntries =
+          Boolean(match.top && match.bottom) &&
+          ((m.a === match.top && m.b === match.bottom) ||
+            (m.aEntry?.entryId === match.top && m.bEntry?.entryId === match.bottom));
+        return (
+          (m.stage === 'knockout' || m.stage === 'third_place') &&
+          matchesRound &&
+          (matchesNo || matchesEntries)
+        );
+      });
+      if (found?.games && found.games.length > 0) {
+        return found.games.map((g) => ({ a: g.a ?? 0, b: g.b ?? 0 }));
+      }
+    }
+    return undefined;
+  };
+
+  const getIsThirdPlace = (
+    roundNo: number,
+    match: BracketMatch,
+  ): boolean => {
+    if (match.isThirdPlace) return true;
+    if (eventMatches) {
+      const found = eventMatches.find((m) => {
+        const matchNumber = (m as { matchNo?: number }).matchNo;
+        const matchesRound = m.round === roundNo;
+        const matchesNo = matchNumber !== undefined && matchNumber === match.matchNo;
+        return matchesRound && matchesNo;
+      });
+      if (found?.stage === 'third_place') return true;
+    }
+    return false;
+  };
+
+  const toMatchCardData = (
+    match: BracketMatch,
+    roundNo: number,
+  ): MatchCardData => {
+    return {
+      matchNo: match.matchNo ?? 0,
+      top: isProvisional ? null : (match.topEntry ?? null),
+      bottom: isProvisional ? null : (match.bottomEntry ?? null),
+      topPlaceholder: match.topPlaceholder,
+      bottomPlaceholder: match.bottomPlaceholder,
+      winnerId: match.winner ?? null,
+      status: (match.status as MatchStatus) ?? 'scheduled',
+      games: getMatchGames(roundNo, match),
+      withdrawnIds: undefined,
+      isThirdPlace: getIsThirdPlace(roundNo, match),
+      court: match.court,
+    };
+  };
+
+  const activeRounds =
+    rounds && rounds.length > 0 ? rounds : bracketQuery?.data?.rounds;
+
   if (
-    !rounds ||
-    rounds.length === 0 ||
-    rounds.every((r) => !r.matches || r.matches.length === 0)
+    !activeRounds ||
+    activeRounds.length === 0 ||
+    activeRounds.every((r) => !r.matches || r.matches.length === 0)
   ) {
     return (
       <div
@@ -86,7 +192,7 @@ export function Bracket({ rounds, highlightEntryId }: BracketProps) {
     );
   }
 
-  const sortedRounds = [...rounds].sort(
+  const sortedRounds = [...activeRounds].sort(
     (a, b) => (a.round ?? 0) - (b.round ?? 0),
   );
 
@@ -162,7 +268,7 @@ export function Bracket({ rounds, highlightEntryId }: BracketProps) {
                 {(round.matches ?? []).map((match, mIdx) => (
                   <MatchCard
                     key={match.matchNo ?? mIdx}
-                    match={toMatchCardData(match)}
+                    match={toMatchCardData(match, round.round ?? (rIdx + 1))}
                     highlightEntryId={highlightEntryId}
                   />
                 ))}
@@ -196,7 +302,7 @@ export function Bracket({ rounds, highlightEntryId }: BracketProps) {
                 {(round.matches ?? []).map((match, mIdx) => (
                   <MatchCard
                     key={match.matchNo ?? mIdx}
-                    match={toMatchCardData(match)}
+                    match={toMatchCardData(match, round.round ?? (rIdx + 1))}
                     highlightEntryId={highlightEntryId}
                   />
                 ))}

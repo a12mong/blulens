@@ -166,11 +166,19 @@ describe('GET /api/v1/assessments (bl-26-1 list assessments)', () => {
     await app.close();
   });
 
-  it('Committee sees assessments of 2 members with reviewsSubmitted batched', async () => {
-    const res = await http().get('/api/v1/assessments').set('Cookie', committeeCookie).expect(200);
+  // Other suites share the test DB and leave assessments behind, so every assertion on these
+  // fixtures scopes the list to this suite's members instead of relying on the global order.
+  const listFor = async (query: string) => {
+    const pages = await Promise.all(
+      [memberAId, memberBId].map((id) =>
+        http().get(`/api/v1/assessments?subjectUserId=${id}&limit=100${query}`).set('Cookie', committeeCookie).expect(200),
+      ),
+    );
+    return pages.flatMap((p) => p.body.data.items as Array<any>);
+  };
 
-    expect(res.body.success).toBe(true);
-    const items = res.body.data.items as Array<any>;
+  it('Committee sees assessments of 2 members with reviewsSubmitted batched', async () => {
+    const items = await listFor('');
     const ids = items.map((i) => i.id);
     expect(ids).toContain(a1Id);
     expect(ids).toContain(a2Id);
@@ -185,12 +193,7 @@ describe('GET /api/v1/assessments (bl-26-1 list assessments)', () => {
   });
 
   it('?status=in_review filters correctly', async () => {
-    const res = await http()
-      .get('/api/v1/assessments?status=in_review')
-      .set('Cookie', committeeCookie)
-      .expect(200);
-
-    const items = res.body.data.items as Array<any>;
+    const items = await listFor('&status=in_review');
     const ids = items.map((i) => i.id);
     expect(ids).toContain(a2Id);
     expect(ids).toContain(b1Id);

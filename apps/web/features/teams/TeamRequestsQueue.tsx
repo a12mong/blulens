@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useTeamRequests, useResolveTeamRequest, type TeamRequest, type ResolveTeamRequestPayload } from './requestsApi';
-import { useTeamSuggestions } from './api';
 import { useMe } from '@/features/auth/api';
 import { thaiError } from '@/lib/errors';
 import { ReasonDialog } from '@/components/ui/ReasonDialog';
@@ -34,9 +33,8 @@ function TeamRequestRow({ request, canAct, resolveMutation }: TeamRequestRowProp
   const [rejectOpen, setRejectOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState('');
 
-  const requestName = request.name ?? '';
-  const { data: suggestions = [] } = useTeamSuggestions(requestName);
-  const hasSimilar = suggestions.length > 0;
+  const similarTeams = request.similarTeams ?? [];
+  const hasSimilar = similarTeams.length > 0;
   const isPending = resolveMutation.isPending;
 
   const handleCreateConfirm = () => {
@@ -96,7 +94,7 @@ function TeamRequestRow({ request, canAct, resolveMutation }: TeamRequestRowProp
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-bold text-lg text-foreground">{request.name}</span>
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-            ผู้ขอ
+            {request.requestedByName ? `ผู้ขอ: ${request.requestedByName}` : 'ผู้ขอ'}
           </span>
           <span className="text-xs text-muted-foreground">
             ขอเมื่อ {formatRequestDate(request.createdAt)}
@@ -107,9 +105,9 @@ function TeamRequestRow({ request, canAct, resolveMutation }: TeamRequestRowProp
           <span className="text-muted-foreground">ทีมที่คล้ายกัน:</span>
           <div data-testid="teamreq-similar" className="flex flex-wrap gap-1.5 items-center">
             {hasSimilar ? (
-              suggestions.map((team) => (
+              similarTeams.map((team) => (
                 <span
-                  key={team.teamId}
+                  key={team.id}
                   className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground border border-border"
                 >
                   {team.name}
@@ -243,12 +241,12 @@ function TeamRequestRow({ request, canAct, resolveMutation }: TeamRequestRowProp
             </p>
 
             <div className="space-y-2 max-h-60 overflow-y-auto">
-              {suggestions.length > 0 ? (
-                suggestions.map((team) => (
+              {similarTeams.length > 0 ? (
+                similarTeams.map((team) => (
                   <label
-                    key={team.teamId}
+                    key={team.id}
                     className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors min-h-11 min-h-[44px] ${
-                      selectedTeamId === team.teamId
+                      selectedTeamId === team.id
                         ? 'border-primary bg-primary/10'
                         : 'border-border hover:bg-accent'
                     }`}
@@ -256,9 +254,9 @@ function TeamRequestRow({ request, canAct, resolveMutation }: TeamRequestRowProp
                     <input
                       type="radio"
                       name={`alias-choice-${request.id}`}
-                      value={team.teamId}
-                      checked={selectedTeamId === team.teamId}
-                      onChange={() => setSelectedTeamId(team.teamId)}
+                      value={team.id}
+                      checked={selectedTeamId === team.id}
+                      onChange={() => setSelectedTeamId(team.id)}
                       className="h-4 w-4 text-primary border-border focus:ring-primary"
                     />
                     <span className="text-sm font-medium text-foreground">{team.name}</span>

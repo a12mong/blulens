@@ -1434,6 +1434,18 @@ components:
         status: { type: string, enum: [pending, created, aliased, rejected] }
         teamId: { type: [string, 'null'], format: uuid }
         createdAt: { type: string, format: date-time }
+        requestedByName: { type: [string, 'null'], readOnly: true, description: 'displayName of the requester; null if the user no longer exists' }
+        similarTeams:
+          type: array
+          readOnly: true
+          maxItems: 5
+          description: 'up to 5 ACTIVE teams whose normalised name or alias is close to the requested name (architecture A8 normalisation), so the Committee can alias instead of creating a duplicate'
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
     AuditedReasonInput:
       type: object
       description: reason-bearing input (>= 20 chars) for audited privileged actions

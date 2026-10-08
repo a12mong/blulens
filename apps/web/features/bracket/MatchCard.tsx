@@ -24,6 +24,10 @@ export type MatchCardData = {
   status: MatchStatus;
   games?: { a: number; b: number }[];
   withdrawnIds?: string[];
+  isThirdPlace?: boolean;
+  topPlaceholder?: string | null;
+  bottomPlaceholder?: string | null;
+  court?: string | null;
 };
 
 export interface MatchCardProps {
@@ -90,6 +94,7 @@ export function MatchCard({ match, highlightEntryId }: MatchCardProps) {
 
   const renderRow = (
     entry: EntryRef | null,
+    placeholder: string | null | undefined,
     scoreKey: 'a' | 'b',
     testId: 'match-top' | 'match-bottom',
   ) => {
@@ -148,7 +153,9 @@ export function MatchCard({ match, highlightEntryId }: MatchCardProps) {
               )}
             </>
           ) : (
-            <span className="font-sans text-sm text-night-muted">รอผล</span>
+            <span className="font-sans text-sm text-night-muted">
+              {placeholder || 'รอผล'}
+            </span>
           )}
         </div>
 
@@ -179,12 +186,35 @@ export function MatchCard({ match, highlightEntryId }: MatchCardProps) {
       }`}
     >
       <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-night-line">
-        <span className="font-pixel text-xs text-night-muted">#{matchNo}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-pixel text-xs text-night-muted">#{matchNo}</span>
+          {match.court ? (
+            <span className="font-pixel text-xs text-night-muted">
+              {match.court}
+            </span>
+          ) : null}
+          {match.isThirdPlace ? (
+            <span
+              data-testid="match-third-place"
+              className="font-sans text-xs text-night-muted border border-night-line px-1 rounded"
+            >
+              ชิงที่ 3
+            </span>
+          ) : null}
+          {games && games.length > 0 ? (
+            <span
+              data-testid="match-score-summary"
+              className="font-pixel text-xs text-night-muted"
+            >
+              {games.map((g) => `${g.a}–${g.b}`).join(', ')}
+            </span>
+          ) : null}
+        </div>
         {renderStatusBadge()}
       </div>
       <div className="flex flex-col gap-1">
-        {renderRow(top, 'a', 'match-top')}
-        {renderRow(bottom, 'b', 'match-bottom')}
+        {renderRow(top, match.topPlaceholder, 'a', 'match-top')}
+        {renderRow(bottom, match.bottomPlaceholder, 'b', 'match-bottom')}
       </div>
     </article>
   );

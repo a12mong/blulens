@@ -2,6 +2,8 @@
 
 > ⚠ ยึด `../contract-alignment.md` และ `../v3-umpire-grading-v2.md` · อ้างอิง `tournament-format.md` §3–§6 · สถานะ: ร่าง [WAITING FOR OWNER APPROVAL]
 
+> **ตัดสินแล้ว (owner, bl-32, 2026-10-08):** หน้า standings สาธารณะ (guest/สาธารณะ) ใช้ธีม **pixel night** เดียวกับ bracket S10 (night tokens, ตัวเลขใช้ Press Start 2P) ; ส่วน Committee ภายในยังใช้ธีมแอปปกติ
+
 - **บทบาท:** Committee แก้ · Admin ดูอย่างเดียว · **Route:** `/committee/events/:id/groups` (แท็บ "สาย" ของ S04 ขยาย)
 
 ## ส่วนประกอบ
