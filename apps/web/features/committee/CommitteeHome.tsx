@@ -25,6 +25,13 @@ export const COMMITTEE_HUB_ITEMS: readonly CommitteeHubItem[] = [
     href: '/committee/teams/requests',
   },
   {
+    id: 'rubrics',
+    testId: 'committee-link-rubrics',
+    title: 'เกณฑ์การประเมิน',
+    description: 'ดูเวอร์ชัน แก้ร่าง และเปิดใช้เกณฑ์ใหม่',
+    href: '/committee/rubrics',
+  },
+  {
     id: 'events',
     testId: 'committee-link-events',
     title: 'อีเวนต์',
