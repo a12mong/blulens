@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckIcon, TimerIcon } from '@/components/ui/Icon';
+import { TimerIcon, CheckIcon } from '@/components/ui/Icon';
 
 export type MatchStatus =
   | 'scheduled'

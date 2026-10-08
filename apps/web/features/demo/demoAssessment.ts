@@ -279,7 +279,7 @@ export const DEMO_DATA: DemoAssessmentPayload = {
     disputed: {
       statusKey: 'disputed',
       statusLabel: 'เห็นต่างกันมาก',
-      statusChip: '⚠ เห็นต่างกันมาก',
+      statusChip: 'เห็นต่างกันมาก',
       statusClass: 'bg-rose-100 text-rose-900 border-rose-300',
       banner:
         'กรรมการเห็นต่างกันมาก — รอ Committee ตัดสินและอาจเพิ่มกรรมการคนที่ 3',
