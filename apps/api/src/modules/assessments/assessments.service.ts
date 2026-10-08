@@ -4,9 +4,11 @@ import type { Assessment, AssessmentResult } from '@prisma/client';
 import { GRADE_KEYS, GRADES, gradeIndex, projectGrade, type GradeKey } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { StorageService, assessmentClipKey } from '../../common/storage/storage.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
+import { randomUUID } from 'node:crypto';
 
 export interface DecideOptions {
   allowedFrom: AssessmentStatus[];
@@ -60,6 +62,7 @@ export class AssessmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(actor: AuthUser, query: ListAssessmentsParams) {
@@ -1023,5 +1026,71 @@ export class AssessmentsService {
       createdAt: assessment.createdAt,
       updatedAt: assessment.updatedAt,
     };
+  }
+
+  async getClipUploadUrl(
+    assessmentId: string,
+    body: { fileName: string; contentType: string; sizeBytes: number },
+    user: AuthUser,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // Lock assessment FOR UPDATE
+      const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM assessments WHERE id = ${assessmentId}::uuid FOR UPDATE
+      `;
+      if (lockedRows.length === 0) {
+        throw ApiException.notFound('Assessment not found', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      // Fetch assessment with clips
+      const assessment = await tx.assessment.findUnique({
+        where: { id: assessmentId },
+        include: { clips: { select: { status: true } } },
+      });
+
+      if (!assessment) {
+        throw ApiException.notFound('Assessment not found', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      // Check subject is caller
+      if (assessment.subjectUserId !== user.id) {
+        throw ApiException.notFound('Assessment not found', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      // Check status is draft
+      if (assessment.status !== 'draft') {
+        throw ApiException.conflict('Assessment is not in draft status', 'ASSESSMENT_NOT_DRAFT');
+      }
+
+      // Check clip limit (max 3 non-rejected clips)
+      const activeClips = assessment.clips.filter((c) => c.status !== 'rejected').length;
+      if (activeClips >= 3) {
+        throw ApiException.conflict('Clip limit reached (max 3)', 'CLIP_LIMIT_REACHED');
+      }
+
+      // Create clip and presign URL
+      const clipId = randomUUID();
+      const objectKey = assessmentClipKey(assessmentId, clipId, body.contentType as any);
+      const now = new Date();
+      const presign = await this.storage.presignPut(objectKey, body.contentType as any, now);
+
+      await tx.clip.create({
+        data: {
+          id: clipId,
+          assessmentId,
+          objectKey,
+          status: 'pending_upload',
+          contentType: body.contentType,
+          sizeBytes: BigInt(body.sizeBytes),
+          uploadExpiresAt: presign.expiresAt,
+        },
+      });
+
+      return {
+        clipId,
+        uploadUrl: presign.url,
+        expiresAt: presign.expiresAt,
+      };
+    });
   }
 }
