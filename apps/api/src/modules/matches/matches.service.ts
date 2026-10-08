@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Match, Prisma } from '@prisma/client';
+import { z } from 'zod';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
@@ -1357,5 +1358,153 @@ export class MatchesService {
         };
       },
     );
+  }
+
+  async getEventUmpires(eventId: string, user: AuthUser) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { tournament: { select: { status: true } } },
+    });
+
+    if (!event) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    const umpires = await this.prisma.eventUmpire.findMany({
+      where: { eventId },
+      include: { user: { select: { displayName: true } } },
+      orderBy: { user: { displayName: 'asc' } },
+    });
+
+    return umpires.map((u) => ({
+      userId: u.userId,
+      displayName: u.user.displayName,
+      courts: [...u.courts].sort(),
+    }));
+  }
+
+  async putEventUmpires(eventId: string, body: unknown, user: AuthUser) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    // Parse and validate body
+    const putUmpireSchema = z.object({
+      userId: z.string().uuid(),
+      displayName: z.string().readonly(),
+      courts: z.array(z.string().trim().min(1).max(20)).transform((arr) => [...new Set(arr)]),
+    });
+
+    const bodySchema = z
+      .array(putUmpireSchema)
+      .refine((arr) => new Set(arr.map((u) => u.userId)).size === arr.length, {
+        message: 'Duplicate user IDs',
+        path: [],
+      });
+
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ApiException(HttpStatus.BAD_REQUEST, 'INVALID_REQUEST', 'Invalid request body');
+    }
+
+    const newUmpires = parsed.data;
+
+    // Get before state for audit
+    const beforeUmpires = await this.prisma.eventUmpire.findMany({
+      where: { eventId },
+      include: { user: { select: { displayName: true } } },
+    });
+
+    // Check all users exist and have Umpire role
+    for (const umpire of newUmpires) {
+      const userWithRole = await this.prisma.user.findUnique({
+        where: { id: umpire.userId },
+        include: { roles: { select: { role: true } } },
+      });
+
+      if (!userWithRole) {
+        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่พบ', {
+          userId: umpire.userId,
+        });
+      }
+
+      if (userWithRole.status === 'disabled') {
+        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่สามารถใช้ได้', {
+          userId: umpire.userId,
+        });
+      }
+
+      const hasUmpireRole = userWithRole.roles.some((r: any) => r.role === 'Umpire');
+      if (!hasUmpireRole) {
+        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่มีบทบาท', {
+          userId: umpire.userId,
+        });
+      }
+    }
+
+    // Update in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Get IDs to keep
+      const keepUserIds = new Set(newUmpires.map((u) => u.userId));
+
+      // Delete umpires not in new list
+      await tx.eventUmpire.deleteMany({
+        where: {
+          eventId,
+          userId: { notIn: Array.from(keepUserIds) as string[] },
+        },
+      });
+
+      // Upsert new umpires
+      const upserted = [];
+      for (const umpire of newUmpires) {
+        const result = await tx.eventUmpire.upsert({
+          where: { eventId_userId: { eventId, userId: umpire.userId } },
+          create: {
+            eventId,
+            userId: umpire.userId,
+            courts: umpire.courts,
+          },
+          update: {
+            courts: umpire.courts,
+          },
+          include: { user: { select: { displayName: true } } },
+        });
+        upserted.push(result);
+      }
+
+      // Audit
+      const afterUmpires = upserted.map((u) => ({
+        userId: u.userId,
+        displayName: u.user.displayName,
+        courts: [...u.courts].sort(),
+      }));
+
+      const beforeData = beforeUmpires.map((u) => ({
+        userId: u.userId,
+        displayName: u.user.displayName,
+        courts: [...u.courts].sort(),
+      }));
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'event.umpires',
+          entityType: 'event',
+          entityId: eventId,
+          before: beforeData,
+          after: afterUmpires,
+        },
+        tx,
+      );
+
+      return afterUmpires.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    });
+
+    return result;
   }
 }

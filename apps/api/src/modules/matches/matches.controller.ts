@@ -115,4 +115,20 @@ export class MatchesController {
   ) {
     return this.matches.rejectMatchResult(matchId, body.reason, user);
   }
+
+  @Roles('Committee', 'Umpire')
+  @Get('events/:eventId/umpires')
+  getEventUmpires(@Param('eventId', uuid) eventId: string, @CurrentUser() user: AuthUser) {
+    return this.matches.getEventUmpires(eventId, user);
+  }
+
+  @Roles('Committee')
+  @Put('events/:eventId/umpires')
+  putEventUmpires(
+    @Param('eventId', uuid) eventId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.matches.putEventUmpires(eventId, body, user);
+  }
 }
