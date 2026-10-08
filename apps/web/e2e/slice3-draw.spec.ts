@@ -63,8 +63,13 @@ test.describe.serial('slice 3: committee group draw', () => {
     const open = await committeeCtx.post(`tournaments/${tid}/status`, { data: { to: 'open' } });
     expect(open.status(), await open.text()).toBe(200);
 
-    const users = await data<{ items: Array<{ id: string; displayName: string }> }>(await committeeCtx.get('users?role=Member&limit=50'));
-    const byName = new Map(users.items.map((u) => [u.displayName, u.id]));
+    // by name (q=): the unfiltered member list is ordered by displayName and fills up with 'Ungraded Player' test users
+    const byName = new Map<string, string>();
+    for (const n of ['สมชาย ใจดี', 'วิภา ศรีสุข', 'ธนา รุ่งเรือง', 'มาลี สายสมร', 'กิตติ พานทอง', 'นภา ทองดี']) {
+      const r = await data<{ items: Array<{ id: string; displayName: string }> }>(await committeeCtx.get(`users?role=Member&limit=20&q=${encodeURIComponent(n)}`));
+      const hit = r.items.find((u) => u.displayName === n);
+      if (hit) byName.set(n, hit.id);
+    }
     const names = ['สมชาย ใจดี', 'วิภา ศรีสุข', 'ธนา รุ่งเรือง', 'มาลี สายสมร', 'กิตติ พานทอง', 'นภา ทองดี'];
     const ids = names.map((n) => byName.get(n)!);
     ids.forEach((i, k) => expect(i, `seed member ${names[k]}`).toBeTruthy());
