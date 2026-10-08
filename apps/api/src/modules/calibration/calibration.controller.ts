@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Param } from '@nestjs/common';
+import { ParseUUIDPipe } from '@nestjs/common';
 import { Roles, CurrentUser } from '../../common/auth/decorators';
 import { createZodDto } from '../../common/zod/zod';
 import { z } from 'zod';
@@ -27,5 +28,11 @@ export class CalibrationController {
   @Roles('Committee', 'Admin')
   createCalibrationSet(@Body() body: CreateCalibrationSetDto, @CurrentUser() user: AuthUser) {
     return this.service.createCalibrationSet(body.name, body.period, user);
+  }
+
+  @Get(':setId')
+  @Roles('Committee', 'Admin')
+  getSetDetail(@Param('setId', new ParseUUIDPipe()) setId: string) {
+    return this.service.getSetDetail(setId);
   }
 }
