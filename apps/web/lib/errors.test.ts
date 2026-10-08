@@ -47,6 +47,29 @@ describe('thaiError', () => {
     expect(
       thaiError(new ApiRequestError(409, 'MATCH_LOCKED', 'Match locked')),
     ).toBe('แมตช์นี้ล็อกแล้ว');
+
+    // Clip upload error codes
+    expect(
+      thaiError(new ApiRequestError(409, 'CLIP_LIMIT_REACHED', 'Limit reached')),
+    ).toBe('อัปโหลดได้สูงสุด 3 คลิป');
+    expect(
+      thaiError(new ApiRequestError(409, 'ASSESSMENT_NOT_DRAFT', 'Not draft')),
+    ).toBe('ส่งคำขอแล้ว เพิ่มคลิปไม่ได้');
+    expect(
+      thaiError(new ApiRequestError(422, 'CLIP_TOO_LONG', 'Too long')),
+    ).toBe('คลิปยาวเกิน 5 นาที');
+    expect(
+      thaiError(new ApiRequestError(409, 'CLIP_NOT_UPLOADED', 'Not uploaded')),
+    ).toBe('ยังอัปโหลดไม่เสร็จ ลองใหม่อีกครั้ง');
+    expect(
+      thaiError(new ApiRequestError(422, 'CLIP_MISMATCH', 'Mismatch')),
+    ).toBe('ไฟล์ที่อัปโหลดไม่ตรงกับที่เลือก ลองใหม่');
+    expect(
+      thaiError(new ApiRequestError(409, 'CLIP_REJECTED', 'Rejected')),
+    ).toBe('คลิปนี้ใช้ไม่ได้ กรุณาเลือกไฟล์ใหม่');
+    expect(
+      thaiError(new ApiRequestError(404, 'CLIP_NOT_FOUND', 'Not found')),
+    ).toBe('ไม่พบคลิป');
   });
 
   it('every listed code has a non-empty Thai text', () => {
@@ -95,6 +118,13 @@ describe('thaiError', () => {
       'UMPIRE_NOT_ELIGIBLE',
       'UMPIRE_IS_PLAYER',
       'MATCH_LOCKED',
+      'CLIP_LIMIT_REACHED',
+      'ASSESSMENT_NOT_DRAFT',
+      'CLIP_TOO_LONG',
+      'CLIP_NOT_UPLOADED',
+      'CLIP_MISMATCH',
+      'CLIP_REJECTED',
+      'CLIP_NOT_FOUND',
     ];
 
     codes.forEach((code) => {
