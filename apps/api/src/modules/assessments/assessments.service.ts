@@ -13,6 +13,7 @@ import {
 import { ApiException } from '../../common/errors/api.exception';
 import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
+import { NotificationsService } from '../notifications/notifications.service';
 import { randomUUID } from 'node:crypto';
 
 export interface DecideOptions {
@@ -68,6 +69,7 @@ export class AssessmentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(actor: AuthUser, query: ListAssessmentsParams) {
@@ -590,6 +592,19 @@ export class AssessmentsService {
         });
       }
 
+      // N5: Emit blind review assignment notification
+      await this.notifications.emit(
+        tx,
+        actor.id,
+        body.reviewerIds.map((reviewerId) => ({
+          recipientUserId: reviewerId,
+          type: 'review_assigned',
+          title: `มีงานประเมินใหม่ ${body.reviewerIds.length} งาน`,
+          body: null,
+          link: '/review',
+        })),
+      );
+
       // Audit
       await this.audit.record(
         {
@@ -966,6 +981,99 @@ export class AssessmentsService {
         },
         tx,
       );
+
+      // Emit notifications (N1-N4) based on action
+      const notifications: Array<{ recipientUserId: string; type: string; title: string; body?: string | null; link?: string | null }> = [];
+
+      const memberTitle = `การประเมินของ ${assessment.subjectUserId === actor.id ? 'คุณ' : 'ผู้เล่น'}`;
+      const memberLink = `/me/assessments/${assessmentId}`;
+
+      if (opts.action === 'assessment.approve') {
+        notifications.push({
+          recipientUserId: assessment.subjectUserId,
+          type: 'assessment_approved',
+          title: 'ผลการประเมินอนุมัติแล้ว',
+          body: memberTitle,
+          link: memberLink,
+        });
+        const committeeMembers = await tx.user.findMany({
+          where: {
+            roles: { some: { role: 'Committee' } },
+            status: 'active',
+          },
+          select: { id: true },
+        });
+        for (const member of committeeMembers) {
+          notifications.push({
+            recipientUserId: member.id,
+            type: 'assessment_approved',
+            title: 'ผลการประเมินอนุมัติแล้ว',
+            body: memberTitle,
+            link: `/committee/assessments/${assessmentId}`,
+          });
+        }
+      } else if (opts.action === 'assessment.return') {
+        notifications.push({
+          recipientUserId: assessment.subjectUserId,
+          type: 'assessment_returned',
+          title: 'คำขอประเมินส่งกลับเพื่อแก้ไข',
+          body: memberTitle,
+          link: memberLink,
+        });
+        const committeeMembers = await tx.user.findMany({
+          where: {
+            roles: { some: { role: 'Committee' } },
+            status: 'active',
+          },
+          select: { id: true },
+        });
+        for (const member of committeeMembers) {
+          notifications.push({
+            recipientUserId: member.id,
+            type: 'assessment_returned',
+            title: 'คำขอประเมินส่งกลับเพื่อแก้ไข',
+            body: memberTitle,
+            link: `/committee/assessments/${assessmentId}`,
+          });
+        }
+      } else if (opts.action === 'assessment.confirm') {
+        notifications.push({
+          recipientUserId: assessment.subjectUserId,
+          type: 'assessment_confirmed',
+          title: 'ผลการประเมินยืนยันแล้ว',
+          body: memberTitle,
+          link: memberLink,
+        });
+      } else if (opts.action === 'assessment.override') {
+        notifications.push({
+          recipientUserId: assessment.subjectUserId,
+          type: 'assessment_overridden',
+          title: 'ผลการประเมินถูกกำหนดเกรดเอง',
+          body: memberTitle,
+          link: memberLink,
+        });
+        const committeeMembers = await tx.user.findMany({
+          where: {
+            roles: { some: { role: 'Committee' } },
+            status: 'enabled',
+            id: { not: actor.id },
+          },
+          select: { id: true },
+        });
+        for (const member of committeeMembers) {
+          notifications.push({
+            recipientUserId: member.id,
+            type: 'assessment_overridden',
+            title: 'ผลการประเมินถูกกำหนดเกรดเอง',
+            body: memberTitle,
+            link: `/committee/assessments/${assessmentId}`,
+          });
+        }
+      }
+
+      if (notifications.length > 0) {
+        await this.notifications.emit(tx, actor.id, notifications);
+      }
     });
 
     return this.getDetail(assessmentId, actor);
