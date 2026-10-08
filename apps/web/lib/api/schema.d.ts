@@ -3756,6 +3756,10 @@ export interface components {
             dueAt: string;
             /** Format: date-time */
             submittedAt?: string | null;
+            /** @description clips with status uploaded (queue card "N คลิป"); blind-safe */
+            clipCount?: number;
+            /** @description sum of durationSec of those clips; null when any of them has no duration. Calibration tasks fill both fields the same way from their clip, so the card never tells them apart */
+            totalDurationSec?: number | null;
         };
         ReviewAssignmentDetail: components["schemas"]["ReviewAssignment"] & {
             clips: components["schemas"]["Clip"][];
