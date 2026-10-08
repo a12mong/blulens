@@ -88,7 +88,7 @@ export function BracketPage({ eventId, fixture = false }: BracketPageProps) {
 
   const hasData = rawRounds.length > 0 || rawStandings.length > 0;
 
-  if (!fixture && (is404 || (otherError && !hasData))) {
+  if (!fixture && ((is404 || otherError) && !hasData)) {
     if (is404) {
       return (
         <main

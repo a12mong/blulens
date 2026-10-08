@@ -82,6 +82,43 @@ describe('BracketPage', () => {
     expect(backLink).toHaveAttribute('href', '/events');
   });
 
+  it('falls back to the standings when the bracket 404s but groups exist', () => {
+    vi.mocked(useBracket).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: { status: 404, message: 'Not found' },
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: [
+        {
+          groupId: 'g1',
+          entryId: 'e1',
+          entry: { id: 'e1', players: [] },
+          rank: 1,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          points: 0,
+          pointsFor: 0,
+          pointsAgainst: 0,
+          diff: 0,
+          confirmed: false,
+        },
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+      dataUpdatedAt: 0,
+    } as any);
+
+    render(<BracketPage eventId="evt-1" fixture={false} />);
+
+    expect(screen.queryByTestId('bracket-unpublished')).toBeNull();
+    expect(screen.getAllByTestId('group-standings')).toHaveLength(1);
+  });
+
   it('shows loading status while fetching', () => {
     vi.mocked(useBracket).mockReturnValue({
       data: undefined,
