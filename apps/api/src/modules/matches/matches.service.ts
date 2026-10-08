@@ -8,9 +8,11 @@ import {
   computeGroupStandings,
   eventFormatSchema,
   matchResultTransition,
+  rankBestThirds,
   resolveMatchFormat,
   validateMatchScore,
   walkoverGames,
+  type GroupInput,
   type GroupMatch,
   type MatchFlag,
   type MatchFormat,
@@ -187,6 +189,20 @@ export class MatchesService {
     };
   }
 
+  private parseGames(raw: unknown): [number, number][] {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item) => {
+      if (Array.isArray(item) && item.length >= 2) {
+        return [Number(item[0]), Number(item[1])] as [number, number];
+      }
+      if (item && typeof item === 'object') {
+        const g = item as { a?: unknown; b?: unknown };
+        return [Number(g.a ?? 0), Number(g.b ?? 0)] as [number, number];
+      }
+      return [0, 0] as [number, number];
+    });
+  }
+
   private computeGroupLiveRows(
     group: {
       members: Array<{ entryId: string }>;
@@ -205,9 +221,7 @@ export class MatchesService {
       a: m.topEntryId ?? '',
       b: m.bottomEntryId ?? '',
       status: m.status as GroupMatch['status'],
-      games: Array.isArray(m.games)
-        ? (m.games as Array<{ a: number; b: number }>).map((g) => [g.a, g.b] as [number, number])
-        : [],
+      games: this.parseGames(m.games),
     }));
 
     return computeGroupStandings(entryIds, groupMatches, pointsCfg, seed);
@@ -583,13 +597,6 @@ export class MatchesService {
         }
       }
 
-      if (bestThirds > 0) {
-        throw ApiException.conflict(
-          'BEST_THIRDS_NOT_AVAILABLE',
-          'ระบบจัดอันดับอันดับสามที่ดีที่สุดยังไม่พร้อมใช้งาน',
-        );
-      }
-
       // 4. Fetch groups with members and matches
       const groups = await tx.group.findMany({
         where: { drawId: draw.id },
@@ -607,6 +614,23 @@ export class MatchesService {
         },
       });
 
+      let bestThirdEntryIds = new Set<string>();
+      if (bestThirds > 0) {
+        const groupInputs: GroupInput[] = groups.map((g, idx) => ({
+          groupIndex: idx,
+          entryIds: g.members.map((m) => m.entryId),
+          matches: g.matches.map((m) => ({
+            a: m.topEntryId ?? '',
+            b: m.bottomEntryId ?? '',
+            status: m.status as GroupMatch['status'],
+            games: this.parseGames(m.games),
+          })),
+        }));
+
+        const bestThirdRows = rankBestThirds(groupInputs, pointsCfg, draw.seed);
+        bestThirdEntryIds = new Set(bestThirdRows.slice(0, bestThirds).map((r) => r.entryId));
+      }
+
       const now = new Date();
       interface StandingsRecordToCreate {
         groupId: string;
@@ -621,7 +645,7 @@ export class MatchesService {
         pointsAgainst: number;
         diff: number;
         tiebreakNote: string | null;
-        qualification: 'qualified' | 'out';
+        qualification: 'qualified' | 'best_third' | 'out';
       }
 
       const rowsToCreate: StandingsRecordToCreate[] = [];
@@ -630,9 +654,11 @@ export class MatchesService {
         const liveRows = this.computeGroupLiveRows(group, pointsCfg, draw.seed);
 
         for (const row of liveRows) {
-          let qualification: 'qualified' | 'out';
+          let qualification: 'qualified' | 'best_third' | 'out';
           if (row.rank <= advancePerGroup) {
             qualification = 'qualified';
+          } else if (bestThirdEntryIds.has(row.entryId)) {
+            qualification = 'best_third';
           } else {
             qualification = 'out';
           }

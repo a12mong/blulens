@@ -29,6 +29,7 @@ describe('confirm-groups (bl-25-11)', () => {
 
   let completeDrawId: string;
   let incompleteDrawId: string;
+  let bestThirdsDrawId: string;
   let firstMatchId: string;
 
   beforeAll(async () => {
@@ -212,22 +213,22 @@ describe('confirm-groups (bl-25-11)', () => {
     // Event 3: Event with no published draw
     noDrawEventId = await createEventWith6Entries('MD', 'nodraw');
 
-    // Event 4: Event with bestThirds > 0
-    bestThirdsEventId = await createEventWith6Entries('XD', 'b3', 2);
+    // Event 4: Event with bestThirds > 0 (1 best third among 2 groups)
+    bestThirdsEventId = await createEventWith6Entries('XD', 'b3', 1);
     const prev4 = await http()
       .post(`/api/v1/events/${bestThirdsEventId}/groups/preview`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
       .send({})
       .expect(201);
-    const draw4Id = prev4.body.data.id;
+    bestThirdsDrawId = prev4.body.data.id;
     await http()
-      .post(`/api/v1/draws/${draw4Id}/publish`)
+      .post(`/api/v1/draws/${bestThirdsDrawId}/publish`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
       .send({ acknowledgeConflicts: true })
       .expect(200);
 
     const matches4 = await prisma.match.findMany({
-      where: { drawId: draw4Id },
+      where: { drawId: bestThirdsDrawId },
     });
     for (const m of matches4) {
       await http()
@@ -302,15 +303,41 @@ describe('confirm-groups (bl-25-11)', () => {
     expect(res.body.error.details.count).toBe(1);
   });
 
-  it('bestThirds > 0 -> 409 BEST_THIRDS_NOT_AVAILABLE', async () => {
+  it('bestThirds > 0 -> confirms with rankBestThirds assigning best_third qualification', async () => {
     const res = await http()
       .post(`/api/v1/events/${bestThirdsEventId}/groups/confirm`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
       .send({})
-      .expect(409);
+      .expect(200);
 
-    expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('BEST_THIRDS_NOT_AVAILABLE');
+    expect(res.body.success).toBe(true);
+    const rows = res.body.data;
+    expect(rows).toHaveLength(6);
+
+    const qualified = rows.filter(
+      (r: { qualification: string }) => r.qualification === 'qualified',
+    );
+    const bestThirds = rows.filter(
+      (r: { qualification: string }) => r.qualification === 'best_third',
+    );
+    const out = rows.filter((r: { qualification: string }) => r.qualification === 'out');
+
+    expect(qualified).toHaveLength(4);
+    expect(bestThirds).toHaveLength(1);
+    expect(out).toHaveLength(1);
+
+    // Verify DB GroupStanding rows
+    const dbRows = await prisma.groupStanding.findMany({
+      where: { group: { drawId: bestThirdsDrawId } },
+    });
+    expect(dbRows).toHaveLength(6);
+    expect(dbRows.filter((r) => r.qualification === 'best_third')).toHaveLength(1);
+
+    // Verify draw status is 'locked' in DB
+    const dbDraw = await prisma.draw.findUnique({
+      where: { id: bestThirdsDrawId },
+    });
+    expect(dbDraw?.status).toBe('locked');
   });
 
   it('confirm when every match is final -> 200, GroupStanding rows in DB, draw locked, audit log recorded', async () => {
