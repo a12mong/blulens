@@ -174,20 +174,26 @@ export function GroupDraw({ eventId }: GroupDrawProps) {
         ? rawFormat.type
         : undefined;
 
-  const groupSize =
+  const isKnockout = formatType === 'knockout';
+  const isGroupsKnockout = formatType === 'groups_knockout';
+  const isFormatKnown = isKnockout || isGroupsKnockout;
+
+  const rawGroupSize =
     typeof rawFormat === 'object' && rawFormat !== null && 'groupSize' in rawFormat && typeof rawFormat.groupSize === 'number'
       ? rawFormat.groupSize
       : typeof eventData?.groupSize === 'number'
         ? eventData.groupSize
-        : 4;
+        : undefined;
 
-  const formatLabel = formatType === 'groups_knockout' ? 'แบ่งกลุ่ม' : 'น็อคเอาท์';
-  const isGroupsFormat = formatType === 'groups_knockout';
+  // default 4 only when format is known
+  const groupSize = rawGroupSize ?? (isFormatKnown ? 4 : undefined);
+
+  const formatLabel = isGroupsKnockout ? 'แบ่งกลุ่ม' : isKnockout ? 'น็อคเอาท์' : 'ไม่ทราบ';
 
   const approvedCount = entriesQuery.data
     ? entriesQuery.data.filter((e) => e.status === 'approved' || !e.status).length
     : 0;
-  const isNotEnoughEntries = approvedCount < groupSize;
+  const isNotEnoughEntries = typeof groupSize === 'number' ? approvedCount < groupSize : false;
 
   // Queries for groups (preview or published)
   const publishedGroupsQuery = useGroups(eventId, 'published', {
@@ -327,10 +333,11 @@ export function GroupDraw({ eventId }: GroupDrawProps) {
             data-testid="draw-precheck"
             className="p-4 rounded-lg border border-border bg-card text-card-foreground text-sm font-medium"
           >
-            ผู้สมัครอนุมัติแล้ว {approvedCount} คู่ · รูปแบบ: {formatLabel} · กลุ่มละ {groupSize}
+            ผู้สมัครอนุมัติแล้ว {approvedCount} คู่ · รูปแบบ: {formatLabel}
+            {typeof groupSize === 'number' ? ` · กลุ่มละ ${groupSize}` : ''}
           </div>
 
-          {!isGroupsFormat ? (
+          {isKnockout ? (
             <div
               data-testid="draw-not-groups"
               className="p-4 rounded-lg border border-border bg-card text-card-foreground space-y-3"
