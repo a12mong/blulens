@@ -82,7 +82,6 @@ test.describe.serial('member result loop', () => {
     test.use({ storageState: MEMBER_AUTH_FILE });
 
     test('L2 before approval: detail shows no grade yet, status and the uploaded clip', async ({ page }) => {
-      test.fail(true, 'KNOWN ISSUE: GET /assessments/{id} returns latestResult with status pending_approval (contract enum is pending|approved|superseded) and MyAssessmentDetail treats it as published, so the member sees "ผลประกาศแล้ว" and the grade before the Committee approves');
       await page.goto(`/me/assessments/${id}`);
       await expect(page.getByTestId('myassess-status')).toBeVisible({ timeout: 30000 });
       await expect(page.getByTestId('myassess-pending')).toBeVisible();

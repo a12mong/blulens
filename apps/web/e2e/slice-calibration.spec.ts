@@ -81,16 +81,13 @@ test.describe.serial('committee calibration sets', () => {
     expect((await fetch(d.clipDetails[0].viewUrl)).status, 'reference clip is playable').toBe(200);
   });
 
-  test('K2b a second reference clip uploads; the pick button stays disabled afterwards until a reload (known issue, recorded as an annotation)', async ({ page }) => {
+  test('K2b a second reference clip uploads and the pick button is usable again right after', async ({ page }) => {
     await page.goto(`/committee/calibration/${setId}`);
     await expect(page.getByTestId('calib-clip')).toHaveCount(1, { timeout: 30000 });
     await uploadOne(page, 'Professional', 'P', 2);
     expect((await detail()).clipDetails.map((c: any) => c.referenceKey).sort()).toEqual(['P', 'S']);
-    // KNOWN ISSUE: CalibrationDetail keeps uploadState = done after a successful upload, so the picker cannot be reused without a reload
     await pickGrade(page.getByTestId('calib-add'), 'Standard', 'S');
-    const reusable = await page.getByTestId('calib-pick').isEnabled();
-    if (!reusable) test.info().annotations.push({ type: 'known-issue', description: 'calib-pick stays disabled after a successful upload until the page is reloaded (uploadState never returns to idle)' });
-    console.log('calib-pick reusable after upload:', reusable);
+    await expect(page.getByTestId('calib-pick'), 'the picker is reusable after a successful upload').toBeEnabled();
   });
 
   test('K3 change a clip reference grade in the UI: PATCH 200 and the API shows it', async ({ page }) => {
