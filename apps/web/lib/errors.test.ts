@@ -22,6 +22,17 @@ describe('thaiError', () => {
     // TypeError -> network message
     const netError = new TypeError('fetch failed');
     expect(thaiError(netError)).toBe('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+
+    // Group stage confirm error codes
+    expect(
+      thaiError(new ApiRequestError(409, 'GROUP_MATCHES_INCOMPLETE', 'Incomplete')),
+    ).toBe('ยังมีแมตช์รอบกลุ่มที่ยังไม่ยืนยัน');
+    expect(
+      thaiError(new ApiRequestError(409, 'NO_PUBLISHED_GROUP_DRAW', 'No draw')),
+    ).toBe('ยังไม่ได้เผยแพร่การจับกลุ่ม');
+    expect(
+      thaiError(new ApiRequestError(409, 'STAGE_CONFIRMED', 'Stage confirmed')),
+    ).toBe('รอบนี้ยืนยันแล้ว แก้ไขไม่ได้');
   });
 
   it('every listed code has a non-empty Thai text', () => {
@@ -63,6 +74,8 @@ describe('thaiError', () => {
       'DRAW_INPUT_CHANGED',
       'DRAW_CONFLICTS_NOT_ACKNOWLEDGED',
       'DRAW_KIND_NOT_SUPPORTED',
+      'GROUP_MATCHES_INCOMPLETE',
+      'NO_PUBLISHED_GROUP_DRAW',
     ];
 
     codes.forEach((code) => {

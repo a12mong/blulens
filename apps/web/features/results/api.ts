@@ -6,6 +6,7 @@ import { apiFetch, type ApiRequestError } from '@/lib/api/client';
 import type { components } from '@/lib/api/schema';
 
 export type Match = components['schemas']['Match'];
+export type GroupStanding = components['schemas']['GroupStanding'];
 
 export type MatchDecisionPayload = {
   matchId: string;
@@ -56,6 +57,32 @@ export function useMatchDecision(
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'matches'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'bracket'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'standings'] });
+      options?.onSuccess?.(...args);
+    },
+  });
+}
+
+export function useConfirmGroups(
+  eventId: string,
+  options?: Omit<
+    UseMutationOptions<GroupStanding[], ApiRequestError, void>,
+    'mutationFn'
+  >,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async () => {
+      return apiFetch<GroupStanding[]>(`/events/${eventId}/groups/confirm`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: (...args) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'matches'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'standings'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'bracket'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'groups'] });
       options?.onSuccess?.(...args);
     },
   });

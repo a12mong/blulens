@@ -44,6 +44,8 @@ const MESSAGES: Record<string, string> = {
   DRAW_INPUT_CHANGED: 'รายชื่อผู้สมัครเปลี่ยนแล้ว โปรดจับกลุ่มใหม่',
   DRAW_CONFLICTS_NOT_ACKNOWLEDGED: 'ต้องรับทราบทีมที่ชนกันก่อนเผยแพร่',
   DRAW_KIND_NOT_SUPPORTED: 'ยังไม่รองรับรูปแบบนี้',
+  GROUP_MATCHES_INCOMPLETE: 'ยังมีแมตช์รอบกลุ่มที่ยังไม่ยืนยัน',
+  NO_PUBLISHED_GROUP_DRAW: 'ยังไม่ได้เผยแพร่การจับกลุ่ม',
 };
 
 function hasThai(text: string): boolean {
