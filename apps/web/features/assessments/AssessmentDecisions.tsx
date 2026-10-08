@@ -61,7 +61,7 @@ export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
 
   const handleConfirm = () => {
     actionMutation.mutate(
-      { action: 'confirm' },
+      { action: 'confirm', body: { resultVersion: latestResult?.version ?? undefined } },
       {
         onSuccess: () => setConfirmOpen(false),
       },

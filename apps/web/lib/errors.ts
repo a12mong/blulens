@@ -11,6 +11,7 @@ const MESSAGES: Record<string, string> = {
   ASSESSMENT_INVALID_TRANSITION: 'สถานะปัจจุบันไม่รองรับการดำเนินการนี้',
   ASSESSMENT_NOT_PROVISIONAL: 'ผลนี้ไม่ใช่ผลชั่วคราว ยืนยันไม่ได้',
   ASSESSMENT_APPROVE_NOTE_REQUIRED: 'ต้องระบุหมายเหตุอย่างน้อย 5 ตัวอักษรเมื่ออนุมัติผลที่เห็นต่างกัน',
+  OVERRIDE_CONFLICT_OF_INTEREST: 'คุณสังกัดทีมเดียวกับผู้ถูกประเมิน จึงแก้ผลไม่ได้',
   RESULT_VERSION_STALE: 'ผลมีการเปลี่ยนแปลงแล้ว กรุณาโหลดหน้าใหม่',
   ASSESSMENT_STATE_CHANGED: 'มีผู้ตัดสินใจไปก่อนแล้ว กรุณาโหลดหน้าใหม่',
   ENTRY_FRESH_ASSESSMENT_MISSING: 'ไม่พบการประเมินใหม่ที่จำเป็น',

@@ -201,7 +201,7 @@ describe('AssessmentDecisions', () => {
 
     fireEvent.click(screen.getByTestId('confirm-submit'));
     expect(mockMutate).toHaveBeenCalledWith(
-      { action: 'confirm' },
+      { action: 'confirm', body: { resultVersion: 2 } },
       expect.any(Object),
     );
   });
