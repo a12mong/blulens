@@ -28,7 +28,7 @@ describe('AssessmentDetailView', () => {
     latestResult: {
       version: 1,
       source: 'computed',
-      status: 'pending',
+      status: 'pending_approval',
       grade: {
         score: 7.5,
         margin: 0.5,

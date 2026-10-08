@@ -36,7 +36,7 @@ describe('AssessmentDecisions', () => {
     latestResult: {
       version: 2,
       source: 'computed',
-      status: 'pending',
+      status: 'pending_approval',
       grade: {
         score: 7.2,
         lower: 'S-',
