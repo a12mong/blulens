@@ -141,10 +141,15 @@ describe('GET /events & /tournaments - Event.format reads (bl-29-1)', () => {
   });
 
   describe('Invalid format JSON handling', () => {
-    it('invalid stored JSON is handled gracefully', async () => {
-      // Verify that invalid JSON in format field returns null instead of crashing
-      // This is tested implicitly - toEvent function has safeParse which returns null on invalid JSON
-      expect(true).toBe(true);
+    it('returns null for invalid stored JSON without error', async () => {
+      // Update event with invalid JSON to test error handling
+      await prisma.event.update({
+        where: { id: eventWithoutFormatId },
+        data: { format: { type: 'nonsense', groupSize: 'x' } as any },
+      });
+
+      const res = await http().get(`/api/v1/events/${eventWithoutFormatId}`).set('Cookie', adminCookie).expect(200);
+      expect(res.body.data.format).toBeNull();
     });
   });
 });
