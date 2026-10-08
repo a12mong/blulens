@@ -6,7 +6,7 @@ import { COMMITTEE_AUTH_FILE } from './selectors';
  * Slice 3 end-to-end: group draw -> publish -> umpire reports -> Committee approves -> groups confirm (lock).
  * Fresh event per run (3 club-sharing approved pairs, groupSize 3 = one group, 3 round-robin matches).
  * Draw preview/publish go through the UI, umpire reports through the API, approvals through the UI,
- * lock through the API (no UI for groups/confirm yet). SQL only on blulens_e2e: event_umpires row for seeded umpire1.
+ * lock through the UI. The umpire is added through /committee/events/{id}/umpires (no SQL).
  * See docs/qa/slice3-full-e2e.md.
  */
 
@@ -92,12 +92,22 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
       expect((await adminCtx.post(`entries/${eid}/forward`)).status()).toBe(200);
       expect((await committeeCtx.post(`entries/${eid}/approve`, { data: {} })).status()).toBe(200);
     }
-    // seeded umpire1 is assigned to this event (courts empty = match court)
-    sql(`insert into event_umpires (event_id,user_id,courts,created_at) select '${eventId}',id,'{}',now() from users where email='umpire1@blulens.local' on conflict do nothing`);
   });
 
   test.describe('committee UI', () => {
     test.use({ storageState: COMMITTEE_AUTH_FILE });
+
+    test('F1b Committee adds the seeded umpire1 to the event through the UI (/umpires, no SQL)', async ({ page }) => {
+      const me = await data(await umpireCtx.get('auth/me'));
+      const umpireId = (me.id ?? me.user?.id) as string;
+      await page.goto(`/committee/events/${eventId}/umpires`);
+      await expect(page.getByTestId('umpire-empty')).toBeVisible({ timeout: 30000 });
+      await page.getByTestId('umpire-add').click();
+      const put = page.waitForResponse((r) => r.url().includes(`/events/${eventId}/umpires`) && r.request().method() === 'PUT');
+      await page.getByTestId('umpire-list').getByRole('combobox').selectOption({ value: umpireId });
+      expect((await put).status()).toBe(200);
+      await expect(page.getByTestId(`umpire-row-${umpireId}`)).toContainText('ทุกสนาม', { timeout: 20000 });
+    });
 
     test('F2 draw: preview, acknowledge conflicts, publish through the UI', async ({ page }) => {
       await page.goto(`/committee/events/${eventId}/groups`);
