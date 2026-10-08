@@ -33,6 +33,46 @@ export interface EventMatchesQuery {
   round?: number;
 }
 
+export interface EventGroupsQuery {
+  draw?: 'published' | 'preview';
+}
+
+export interface EventGroupMember {
+  entryId: string;
+  seedInGroup: number;
+  pot: number;
+  entry: EntryRef | null;
+}
+
+export interface MappedMatch {
+  id: string;
+  stage: string;
+  groupId: string | null;
+  round: number;
+  a: string | null;
+  b: string | null;
+  aEntry: EntryRef | null;
+  bEntry: EntryRef | null;
+  games: { a: number; b: number }[];
+  result: string | null;
+  status: string;
+  court: string | null;
+  umpireId: string | null;
+  reportedBy: string | null;
+  reportedAt: string | null;
+  confirmedBy: string | null;
+  confirmedAt: string | null;
+  flags: unknown[];
+  format: MatchFormat;
+}
+
+export interface EventGroup {
+  id: string;
+  label: string;
+  members: EventGroupMember[];
+  matches: MappedMatch[];
+}
+
 export interface UmpireMatchesQuery {
   status?: 'scheduled' | 'reported' | 'confirmed';
 }
@@ -122,7 +162,7 @@ export class MatchesService {
     return entryMap;
   }
 
-  private mapMatch(m: Match, entryMap: Map<string, EntryRef>, format: MatchFormat) {
+  private mapMatch(m: Match, entryMap: Map<string, EntryRef>, format: MatchFormat): MappedMatch {
     return {
       id: m.id,
       stage: m.stage,
@@ -346,6 +386,80 @@ export class MatchesService {
     }
 
     return result;
+  }
+
+  async getEventGroups(
+    eventId: string,
+    query: EventGroupsQuery,
+    user?: AuthUser,
+  ): Promise<EventGroup[]> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { tournament: { select: { status: true } } },
+    });
+
+    if (!event || (event.tournament.status === 'draft' && !isStaff(user))) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    if (query.draw === 'preview' && !isStaff(user)) {
+      throw ApiException.forbidden('ไม่อนุญาตให้ดูตัวอย่างผลการจับสลาก', 'FORBIDDEN');
+    }
+
+    const isPreview = query.draw === 'preview';
+    const draw = await this.prisma.draw.findFirst({
+      where: {
+        eventId,
+        kind: 'group',
+        status: isPreview ? 'preview' : { in: ['published', 'locked'] },
+      },
+      orderBy: { version: 'desc' },
+    });
+
+    if (!draw) {
+      return [];
+    }
+
+    const groups = await this.prisma.group.findMany({
+      where: { drawId: draw.id },
+      orderBy: { label: 'asc' },
+      include: {
+        members: {
+          orderBy: { seedInGroup: 'asc' },
+        },
+        matches: {
+          orderBy: [{ round: 'asc' }, { matchNo: 'asc' }],
+        },
+      },
+    });
+
+    if (groups.length === 0) {
+      return [];
+    }
+
+    const allEntryIds = Array.from(
+      new Set(
+        [
+          ...groups.flatMap((g) => g.members.map((m) => m.entryId)),
+          ...groups.flatMap((g) => g.matches.flatMap((m) => [m.topEntryId, m.bottomEntryId])),
+        ].filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    );
+
+    const entryMap = await this.loadEntryMap(this.prisma, allEntryIds);
+    const groupFormat = resolveMatchFormat(event.format, 'group');
+
+    return groups.map((g) => ({
+      id: g.id,
+      label: g.label,
+      members: g.members.map((m) => ({
+        entryId: m.entryId,
+        seedInGroup: m.seedInGroup,
+        pot: m.pot,
+        entry: entryMap.get(m.entryId) ?? null,
+      })),
+      matches: g.matches.map((m) => this.mapMatch(m, entryMap, groupFormat)),
+    }));
   }
 
   async getUmpireMatches(query: UmpireMatchesQuery, caller: AuthUser) {

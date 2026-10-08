@@ -1022,13 +1022,16 @@ paths:
       tags: [format]
       summary: Groups with members and the round-robin schedule
       x-roles: [Guest, Member, Reviewer, Committee, Admin]
-      parameters: [{ $ref: '#/components/parameters/EventId' }]
+      parameters:
+        - { $ref: '#/components/parameters/EventId' }
+        - { name: draw, in: query, schema: { type: string, enum: [published, preview], default: published }, description: 'which group draw to read: published (everyone) or the current unpublished preview (Committee/Admin only)' }
       responses:
         '200':
           description: ok
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/Group' } }
+        '403': { description: 'draw=preview by a non-staff caller (FORBIDDEN)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /events/{eventId}/groups/confirm:
     post:
       tags: [format]
@@ -1507,6 +1510,8 @@ components:
         state: { type: string, enum: [open, submitted, expired, declined] }
         dueAt: { type: string, format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time }
+        clipCount: { type: integer, minimum: 0, description: 'clips with status uploaded (queue card "N คลิป"); blind-safe' }
+        totalDurationSec: { type: [integer, 'null'], description: 'sum of durationSec of those clips; null when any of them has no duration. Calibration tasks fill both fields the same way from their clip, so the card never tells them apart' }
     ReviewAssignmentDetail:
       allOf:
         - { $ref: '#/components/schemas/ReviewAssignment' }
@@ -1818,6 +1823,7 @@ components:
               entryId: { type: string, format: uuid }
               seedInGroup: { type: integer }
               pot: { type: integer }
+              entry: { allOf: [{ $ref: '#/components/schemas/EntryRef' }], readOnly: true, description: 'display label of the entry (names, clubs; grade only when visible per A14), so group cards need no extra lookup' }
         matches: { type: array, items: { $ref: '#/components/schemas/Match' } }
     GroupStanding:
       type: object

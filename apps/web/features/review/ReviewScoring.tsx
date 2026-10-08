@@ -75,19 +75,47 @@ export function ReviewScoring({ id }: ReviewScoringProps) {
     const isExpired = data.state === 'expired';
     const heading = isExpired ? 'งานนี้หมดเวลาแล้ว' : 'ส่งผลประเมินแล้ว';
 
+    interface AssignmentCommentable {
+      comment?: string | null;
+      myComment?: string | null;
+      review?: { comment?: string | null };
+    }
+
+    const submittedComment =
+      (data as unknown as AssignmentCommentable).comment ??
+      (data as unknown as AssignmentCommentable).myComment ??
+      (data as unknown as AssignmentCommentable).review?.comment ??
+      (draft.draft.comment || null);
+
     return (
       <div className="space-y-6 p-4">
-        <div>
-          <h1 className="text-2xl font-bold mb-4">{heading}</h1>
-          <ClipPlayer clips={(data.clips || []).filter((c) => c.id) as any} onRefreshNeeded={() => refetch()} />
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">{heading}</h1>
+            <p className="text-sm text-muted-foreground">งาน #{id.substring(id.length - 4).toUpperCase()}</p>
+          </div>
+          <Link
+            href="/review"
+            className="text-primary hover:opacity-90 font-medium transition-opacity"
+          >
+            ← คิว
+          </Link>
         </div>
+
+        {data.submittedAt && (
+          <p className="text-xs text-muted-foreground">
+            ส่งเมื่อ {new Date(data.submittedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+          </p>
+        )}
+
+        <ClipPlayer clips={(data.clips || []).filter((c) => c.id) as any} onRefreshNeeded={() => refetch()} />
 
         {data.rubric?.criteria && (
           <div className="space-y-4">
             {data.rubric.criteria.map((criterion, index) => (
               <RubricItemCard
                 key={criterion.key}
-                index={index}
+                index={index + 1}
                 criterion={criterion}
                 value={
                   (data.myScores?.find((s) => s.criterion === criterion.key)?.gradeKey || null) as any
@@ -98,14 +126,34 @@ export function ReviewScoring({ id }: ReviewScoringProps) {
             ))}
           </div>
         )}
+
+        {Boolean(submittedComment && submittedComment.trim().length > 0) && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-medium">ความเห็นรวม</h2>
+            <div
+              data-testid="scoring-comment-readonly"
+              className="p-3 border border-border rounded bg-card text-card-foreground text-sm whitespace-pre-wrap"
+            >
+              {submittedComment}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   // Open state
   const criteria = data.rubric?.criteria || [];
+  const total = criteria.length;
   const answeredCount = criteria.filter((c) => draft.draft.scores[c.key] !== undefined).length;
   const isComplete = answeredCount === criteria.length && criteria.length > 0;
+
+  const gradedCount = criteria.filter(
+    (c) => draft.draft.scores[c.key] !== null && draft.draft.scores[c.key] !== undefined
+  ).length;
+  const cannotAssessCount = criteria.filter((c) => draft.draft.scores[c.key] === null).length;
+  const hasComment = Boolean(draft.draft.comment && draft.draft.comment.trim().length > 0);
+  const showCannotAssessWarning = cannotAssessCount * 2 > total;
 
   const handleSubmitClick = () => {
     setShowConfirm(true);
@@ -163,7 +211,7 @@ export function ReviewScoring({ id }: ReviewScoringProps) {
           {criteria.map((criterion, index) => (
             <RubricItemCard
               key={criterion.key}
-              index={index}
+              index={index + 1}
               criterion={criterion}
               value={draft.draft.scores[criterion.key] as GradeKey | null | undefined}
               onChange={(gradeKey) => {
@@ -218,8 +266,20 @@ export function ReviewScoring({ id }: ReviewScoringProps) {
       {/* Confirm Dialog */}
       {showConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div role="dialog" aria-modal="true" className="bg-card rounded-lg p-6 max-w-sm mx-4 space-y-4 shadow-lg">
-            <p className="text-card-foreground">ส่งแล้วแก้ไขไม่ได้ ยืนยันหรือไม่</p>
+          <div role="dialog" aria-modal="true" className="bg-card rounded-lg p-6 max-w-sm mx-4 space-y-4 shadow-lg border border-border">
+            <p className="text-card-foreground font-medium">ส่งแล้วแก้ไขไม่ได้ ยืนยันหรือไม่</p>
+            <p data-testid="scoring-summary" className="text-sm text-muted-foreground">
+              {`ให้ระดับ ${gradedCount} · ประเมินไม่ได้ ${cannotAssessCount} · ความเห็น ${hasComment ? 'มี' : 'ไม่มี'}`}
+            </p>
+            {showCannotAssessWarning && (
+              <div
+                data-testid="scoring-warning"
+                className="flex items-center gap-2 p-3 rounded bg-warning/15 text-warning-foreground text-sm font-medium"
+              >
+                <span aria-hidden="true">⚠️</span>
+                <span>ประเมินไม่ได้เกินครึ่ง</span>
+              </div>
+            )}
             <div className="flex gap-3 justify-end">
               <button
                 data-testid="scoring-cancel"

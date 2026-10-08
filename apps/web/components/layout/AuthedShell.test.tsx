@@ -37,4 +37,40 @@ describe('AuthedShell', () => {
     render(<AuthedShell>y</AuthedShell>);
     expect(mutate).not.toHaveBeenCalled();
   });
+
+  it('shows a menu skeleton while /me loads and the full role menu after', () => {
+    // 1. Pending state: useMe loading/pending
+    vi.mocked(authApi.useMe).mockReturnValue({
+      data: undefined,
+      isSuccess: false,
+      isLoading: true,
+    } as unknown as ReturnType<typeof authApi.useMe>);
+
+    const { rerender } = render(<AuthedShell>เนื้อหา</AuthedShell>);
+
+    expect(screen.getByTestId('menu-skeleton')).toBeInTheDocument();
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+
+    // 2. Resolved state: committee user
+    vi.mocked(authApi.useMe).mockReturnValue({
+      data: {
+        id: 'u1',
+        displayName: 'สมหญิง คณะกรรมการ',
+        roles: ['Committee'],
+      },
+      isSuccess: true,
+      isLoading: false,
+    } as unknown as ReturnType<typeof authApi.useMe>);
+
+    rerender(<AuthedShell>เนื้อหา</AuthedShell>);
+
+    expect(screen.queryByTestId('menu-skeleton')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'ผลประเมิน' })).toBeInTheDocument();
+
+    const accountBlock = screen.getByTestId('account-block');
+    expect(accountBlock).toBeInTheDocument();
+    expect(accountBlock).toHaveTextContent('สมหญิง คณะกรรมการ');
+    expect(accountBlock).toHaveTextContent('คณะกรรมการ');
+    expect(screen.getByRole('button', { name: 'ออกจากระบบ' })).toBeInTheDocument();
+  });
 });
