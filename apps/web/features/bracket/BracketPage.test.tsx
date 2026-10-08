@@ -193,6 +193,39 @@ describe('BracketPage', () => {
     expect(screen.getByTestId('bracket-tree')).toBeInTheDocument();
   });
 
+  it('opens on the knockout tab when a bracket is published even if standings exist', () => {
+    vi.mocked(useBracket).mockReturnValue({
+      data: {
+        eventId: 'evt-1',
+        provisional: false,
+        size: 2,
+        rounds: [
+          {
+            round: 1,
+            nameTh: 'ชิงชนะเลิศ',
+            matches: [
+              { matchNo: 1, round: 1, status: 'scheduled', topEntry: { entryId: 'a', displayName: 'A' }, bottomEntry: { entryId: 'b', displayName: 'B' } },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+    vi.mocked(useStandings).mockReturnValue({
+      data: [{ group: 'A', rank: 1, entry: { entryId: 'a', displayName: 'A' }, played: 1, won: 1, lost: 0, points: 2, confirmed: true }],
+      isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+
+    render(<BracketPage eventId="evt-1" fixture={false} />);
+
+    expect(screen.getByTestId('bracket-tree')).toBeInTheDocument();
+    expect(screen.queryByTestId('group-standings')).toBeNull();
+  });
+
   it('exports BRACKET_REFETCH_INTERVAL as 30000', () => {
     expect(BRACKET_REFETCH_INTERVAL).toBe(30_000);
   });

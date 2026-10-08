@@ -19,7 +19,8 @@ interface RowError {
 }
 
 export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
-  const { data: umpires, isLoading, error, refetch } = useEventUmpires(eventId);
+  const { data: umpiresData, isLoading, error, refetch } = useEventUmpires(eventId);
+  const umpires = umpiresData ?? [];
   const { data: matches = [] } = useEventMatches(eventId);
   const { data: umpireUsers = [] } = useUmpireUsers();
   const assignMatch = useAssignMatch(eventId);
@@ -49,14 +50,6 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
         >
           ลองใหม่
         </button>
-      </div>
-    );
-  }
-
-  if (!umpires || umpires.length === 0) {
-    return (
-      <div data-testid="umpire-empty" className="p-6 text-center text-muted-foreground">
-        ยังไม่ได้เลือกกรรมการสนาม
       </div>
     );
   }
@@ -102,6 +95,11 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
       <section data-testid="umpire-list">
         <h2 className="text-lg font-semibold mb-4">กรรมการสนามของรายการนี้</h2>
         <div className="space-y-3">
+          {umpires.length === 0 && (
+            <div data-testid="umpire-empty" className="p-6 text-center text-muted-foreground">
+              ยังไม่ได้เลือกกรรมการสนาม
+            </div>
+          )}
           {umpires.map(umpire => (
             <div
               key={umpire.userId}
@@ -195,7 +193,8 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
         )}
         <button
           onClick={() => setShowAddUmpire(!showAddUmpire)}
-          className="mt-4 px-4 py-2 border border-border rounded hover:bg-muted flex items-center gap-2"
+          data-testid="umpire-add"
+          className="mt-4 min-h-[44px] px-4 py-2 border border-border rounded hover:bg-muted flex items-center gap-2"
         >
           +
           <span>เพิ่มกรรมการ</span>

@@ -187,6 +187,8 @@ describe('UmpireAssignment', () => {
 
     expect(screen.getByTestId('umpire-empty')).toBeInTheDocument();
     expect(screen.getByTestId('umpire-empty')).toHaveTextContent('ยังไม่ได้เลือกกรรมการสนาม');
+    // the add button must stay reachable with zero umpires
+    expect(screen.getByTestId('umpire-add')).toBeInTheDocument();
   });
 
   it('shows error with retry button', async () => {

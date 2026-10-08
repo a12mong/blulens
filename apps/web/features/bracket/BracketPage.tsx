@@ -138,7 +138,10 @@ export function BracketPage({ eventId, fixture = false }: BracketPageProps) {
 
   const groups = groupStandings(rawStandings);
   const hasStandings = rawStandings.length > 0;
-  const activeTab = userSelectedTab ?? (hasStandings ? 'groups' : 'knockout');
+  const bracketPublished =
+    !fixture && bracketQuery.data?.provisional === false && rawRounds.length > 0;
+  const activeTab =
+    userSelectedTab ?? (bracketPublished || !hasStandings ? 'knockout' : 'groups');
 
   const updatedAt =
     !fixture && bracketQuery.dataUpdatedAt
