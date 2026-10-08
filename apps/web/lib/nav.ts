@@ -6,9 +6,9 @@ export type NavItem = { area: Area; href: string; label: string };
 export const NAV_ITEMS: readonly NavItem[] = [
   { area: 'member', href: AREA_PATH.member, label: 'ของฉัน' },
   { area: 'reviewer', href: AREA_PATH.reviewer, label: 'ตรวจประเมิน' },
-  { area: 'umpire', href: AREA_PATH.umpire, label: 'กรรมการสนาม' },
-  { area: 'committee', href: AREA_PATH.committee, label: 'คณะกรรมการ' },
-  { area: 'admin', href: AREA_PATH.admin, label: 'ผู้ดูแลระบบ' },
+  { area: 'umpire', href: AREA_PATH.umpire, label: 'บันทึกคะแนน' },
+  { area: 'committee', href: AREA_PATH.committee, label: 'ผลประเมิน' },
+  { area: 'admin', href: AREA_PATH.admin, label: 'จัดการผู้ใช้' },
 ];
 
 export const PUBLIC_NAV: readonly NavItem[] = [

@@ -1,4 +1,5 @@
-import { navFor } from './nav';
+import { navFor, NAV_ITEMS } from './nav';
+import { ROLE_LABELS } from './roles';
 
 describe('navFor', () => {
   it('guest sees only public links', () => {
@@ -9,6 +10,12 @@ describe('navFor', () => {
     expect(hrefs).toEqual(['/', '/events', '/me', '/review']);
   });
   it('admin alone does not get committee', () => {
-    expect(navFor(['Admin']).map((i) => i.href)).not.toContain('/committee');
+    expect(navFor(['Admin']).map((i) => i.href)).not.toContain('/committee/assessments');
+  });
+  it('no menu label equals a role label', () => {
+    const roleLabels = Object.values(ROLE_LABELS);
+    for (const item of NAV_ITEMS) {
+      expect(roleLabels).not.toContain(item.label);
+    }
   });
 });
