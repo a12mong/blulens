@@ -22,7 +22,7 @@ function formatTime(date: Date = new Date()): string {
   return `${hours}:${minutes}`;
 }
 
-function groupStandings(
+export function groupStandings(
   standings: GroupStanding[],
 ): { groupId: string; label: string; rows: GroupStanding[] }[] {
   const groupsMap = new Map<string, GroupStanding[]>();
