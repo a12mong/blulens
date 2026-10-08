@@ -114,7 +114,7 @@ export class MatchesService {
     private readonly audit: AuditService,
   ) {}
 
-  private async loadEntryMap(
+  async loadEntryMap(
     client: Prisma.TransactionClient | PrismaService,
     entryIds: string[],
   ): Promise<Map<string, EntryRef>> {

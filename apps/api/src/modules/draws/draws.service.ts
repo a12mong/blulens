@@ -7,16 +7,24 @@ import {
   eventFormatSchema,
   planGroups,
   roundRobinSchedule,
+  seedKnockout,
   type DrawEntry,
+  type Qualifier,
 } from '@blulens/shared';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { MatchesService, type EntryRef } from '../matches/matches.service';
 
 export interface CreateGroupPreviewInput {
   seed?: string;
   groupCount?: number;
+  reason?: string;
+}
+
+export interface CreateKnockoutPreviewInput {
+  seed?: string;
   reason?: string;
 }
 
@@ -30,6 +38,7 @@ export class DrawsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly matches: MatchesService,
   ) {}
 
   async createGroupPreview(eventId: string, body: CreateGroupPreviewInput, user: AuthUser) {
@@ -382,27 +391,350 @@ export class DrawsService {
     });
   }
 
+  async createKnockoutPreview(eventId: string, body: CreateKnockoutPreviewInput, user: AuthUser) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+    if (!event) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    // 1. Check published or locked knockout draw exists -> 409 DRAW_ALREADY_LOCKED
+    const existingPublishedOrLockedKnockout = await this.prisma.draw.findFirst({
+      where: {
+        eventId,
+        kind: 'knockout',
+        status: { in: ['published', 'locked'] },
+      },
+    });
+    if (existingPublishedOrLockedKnockout) {
+      throw ApiException.conflict(
+        'DRAW_ALREADY_LOCKED',
+        'สายการแข่งขันรอบแพ้คัดออกได้รับการเผยแพร่หรือล็อคแล้ว ไม่สามารถสร้างสายใหม่ได้',
+      );
+    }
+
+    // 2. The event's group draw must have status 'locked' (groups confirmed) else 409 GROUP_STAGE_NOT_CONFIRMED
+    const lockedGroupDraw = await this.prisma.draw.findFirst({
+      where: {
+        eventId,
+        kind: 'group',
+        status: 'locked',
+      },
+      orderBy: { version: 'desc' },
+    });
+    if (!lockedGroupDraw) {
+      throw ApiException.conflict(
+        'GROUP_STAGE_NOT_CONFIRMED',
+        'รอบแบ่งกลุ่มยังไม่ได้รับการยืนยันผล',
+      );
+    }
+
+    // 3. Extract advancePerGroup from event format
+    const parsedFormat = eventFormatSchema.safeParse(event.format);
+    let advancePerGroup = 2;
+    if (parsedFormat.success && parsedFormat.data.type === 'groups_knockout') {
+      advancePerGroup = parsedFormat.data.advancePerGroup;
+    } else if (event.format && typeof event.format === 'object') {
+      const raw = event.format as Record<string, unknown>;
+      if (typeof raw.advancePerGroup === 'number') advancePerGroup = raw.advancePerGroup;
+    }
+
+    // 4. Load GroupStanding rows for lockedGroupDraw
+    const standings = await this.prisma.groupStanding.findMany({
+      where: {
+        group: { drawId: lockedGroupDraw.id },
+      },
+      include: {
+        group: { select: { id: true, label: true } },
+      },
+      orderBy: [{ group: { label: 'asc' } }, { rank: 'asc' }],
+    });
+
+    // Group labels and indices (A = 0, B = 1, etc.)
+    const uniqueGroupLabels = Array.from(new Set(standings.map((s) => s.group.label))).sort(
+      (a, b) => a.localeCompare(b),
+    );
+    const groupLabelToIndex = new Map(uniqueGroupLabels.map((label, idx) => [label, idx]));
+
+    interface RawQualifier {
+      standing: (typeof standings)[0];
+      groupIndex: number;
+      tier: 1 | 2 | 3;
+      place: 1 | 2 | 3;
+    }
+
+    const rawQualifiers: RawQualifier[] = [];
+    for (const s of standings) {
+      const gIndex = groupLabelToIndex.get(s.group.label) ?? 0;
+      if (s.rank === 1 && s.qualification === 'qualified') {
+        rawQualifiers.push({ standing: s, groupIndex: gIndex, tier: 1, place: 1 });
+      } else if (s.rank === 2 && advancePerGroup >= 2 && s.qualification === 'qualified') {
+        rawQualifiers.push({ standing: s, groupIndex: gIndex, tier: 2, place: 2 });
+      } else if (s.qualification === 'best_third') {
+        rawQualifiers.push({ standing: s, groupIndex: gIndex, tier: 3, place: 3 });
+      }
+    }
+
+    if (rawQualifiers.length < 2) {
+      throw ApiException.conflict(
+        'KNOCKOUT_TOO_FEW_QUALIFIERS',
+        'จำนวนผู้ผ่านเข้ารอบไม่เพียงพอสำหรับการแข่งขันรอบแพ้คัดออก (ต้องมีอย่างน้อย 2 คน/คู่)',
+      );
+    }
+
+    // Load active teams for entries
+    const qualifierEntryIds = rawQualifiers.map((rq) => rq.standing.entryId);
+    const entries = await this.prisma.entry.findMany({
+      where: { id: { in: qualifierEntryIds } },
+      include: {
+        players: {
+          select: { teamId: true },
+        },
+      },
+    });
+    const entryTeamMap = new Map<string, string[]>();
+    for (const e of entries) {
+      const teamIds = Array.from(
+        new Set(
+          e.players
+            .map((p) => p.teamId)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0),
+        ),
+      );
+      entryTeamMap.set(e.id, teamIds);
+    }
+
+    // Compute tierRank inside each tier: points desc, diff desc, pointsFor desc, entryId asc
+    const qualifiersByTier = new Map<1 | 2 | 3, RawQualifier[]>([
+      [1, []],
+      [2, []],
+      [3, []],
+    ]);
+    for (const rq of rawQualifiers) {
+      qualifiersByTier.get(rq.tier)!.push(rq);
+    }
+
+    const qualifiers: Qualifier[] = [];
+    const sourceInfoMap = new Map<string, { groupLabel: string; place: 1 | 2 | 3 }>();
+
+    for (const tier of [1, 2, 3] as const) {
+      const items = qualifiersByTier.get(tier)!;
+      items.sort((a, b) => {
+        if (b.standing.points !== a.standing.points) {
+          return b.standing.points - a.standing.points;
+        }
+        if (b.standing.diff !== a.standing.diff) {
+          return b.standing.diff - a.standing.diff;
+        }
+        if (b.standing.pointsFor !== a.standing.pointsFor) {
+          return b.standing.pointsFor - a.standing.pointsFor;
+        }
+        return a.standing.entryId.localeCompare(b.standing.entryId);
+      });
+
+      items.forEach((item, idx) => {
+        const entryId = item.standing.entryId;
+        qualifiers.push({
+          entryId,
+          teamIds: entryTeamMap.get(entryId) ?? [],
+          groupIndex: item.groupIndex,
+          tier: item.tier,
+          tierRank: idx + 1,
+        });
+        sourceInfoMap.set(entryId, {
+          groupLabel: item.standing.group.label,
+          place: item.place,
+        });
+      });
+    }
+
+    const seedSource: 'committee' | 'server' = body.seed ? 'committee' : 'server';
+    const seed = body.seed ?? randomBytes(16).toString('hex');
+
+    // Generate plan
+    const plan = seedKnockout(qualifiers, seed);
+
+    // Compute conflicts
+    const qualifierMap = new Map(qualifiers.map((q) => [q.entryId, q]));
+    interface ConflictItem {
+      matchNo: number;
+      kind: 'team' | 'group';
+      teamId: string | null;
+      groupLabel: string | null;
+    }
+    const conflicts: ConflictItem[] = [];
+
+    for (let m = 0; m < plan.slots.length; m += 2) {
+      const aId = plan.slots[m];
+      const bId = plan.slots[m + 1];
+      const matchNo = Math.floor(m / 2) + 1;
+
+      if (aId && bId) {
+        const a = qualifierMap.get(aId)!;
+        const b = qualifierMap.get(bId)!;
+
+        // Check same team
+        const sharedTeamId = a.teamIds.find((t) => b.teamIds.includes(t)) ?? null;
+        if (sharedTeamId !== null) {
+          conflicts.push({
+            matchNo,
+            kind: 'team',
+            teamId: sharedTeamId,
+            groupLabel: null,
+          });
+        }
+
+        // Check same group
+        if (a.groupIndex === b.groupIndex) {
+          conflicts.push({
+            matchNo,
+            kind: 'group',
+            teamId: null,
+            groupLabel: uniqueGroupLabels[a.groupIndex] ?? null,
+          });
+        }
+      }
+    }
+
+    // Seed map (1-based index in ordered tier list)
+    const ordered = [...qualifiers].sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      if (a.tierRank !== b.tierRank) return a.tierRank - b.tierRank;
+      return a.entryId.localeCompare(b.entryId);
+    });
+    const seedNoMap = new Map(ordered.map((q, idx) => [q.entryId, idx + 1]));
+
+    const inputHash = this.computeInputHash(qualifierEntryIds);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const lastDraw = await tx.draw.findFirst({
+          where: { eventId, kind: 'knockout' },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        const version = (lastDraw?.version ?? 0) + 1;
+
+        const trimmedReason = body.reason?.trim();
+        if (version >= 2 && !trimmedReason) {
+          throw ApiException.badRequest(
+            'VALIDATION_FAILED',
+            'ต้องระบุเหตุผลเมื่อสุ่มตัวอย่างใหม่',
+            { field: 'reason', fieldErrors: { reason: ['ต้องระบุเหตุผลเมื่อสุ่มตัวอย่างใหม่'] } },
+          );
+        }
+
+        const reasonToStore = trimmedReason || null;
+
+        const draw = await tx.draw.create({
+          data: {
+            eventId,
+            kind: 'knockout',
+            version,
+            status: 'preview',
+            seed,
+            seedSource,
+            inputHash,
+            reason: reasonToStore,
+            sourceGroupDrawId: lockedGroupDraw.id,
+            rulesetVersion: DRAW_RULESET_VERSION,
+            prngId: DRAW_PRNG_ID,
+            size: plan.size,
+            seedsCount: qualifiers.length,
+            sameTeamR1Count: plan.teamClashes,
+            conflicts: conflicts as unknown as Prisma.InputJsonValue,
+            snapshot: {
+              qualifiers: ordered,
+              sourceGroupDrawId: lockedGroupDraw.id,
+            } as unknown as Prisma.InputJsonValue,
+            createdBy: user.id,
+          },
+        });
+
+        const slotData = plan.slots.map((entryId, idx) => ({
+          drawId: draw.id,
+          position: idx + 1,
+          entryId: entryId ?? null,
+          seedNo: entryId ? (seedNoMap.get(entryId) ?? null) : null,
+        }));
+
+        await tx.drawSlot.createMany({
+          data: slotData,
+        });
+
+        await this.audit.record(
+          {
+            actorId: user.id,
+            action: 'draw.preview',
+            entityType: 'draw',
+            entityId: draw.id,
+            reason: reasonToStore ?? undefined,
+            after: {
+              id: draw.id,
+              eventId: draw.eventId,
+              version: draw.version,
+              status: draw.status,
+              kind: draw.kind,
+              seed: draw.seed,
+              size: draw.size,
+            },
+          },
+          tx,
+        );
+
+        const nonNullEntryIds = plan.slots.filter((id): id is string => typeof id === 'string');
+        const entryMap = await this.matches.loadEntryMap(tx, nonNullEntryIds);
+
+        const mappedSlots = slotData.map((slot) => {
+          const entryId = slot.entryId;
+          const source = entryId ? (sourceInfoMap.get(entryId) ?? null) : null;
+          return {
+            position: slot.position,
+            entryId,
+            seedNo: slot.seedNo,
+            entry: entryId ? (entryMap.get(entryId) ?? null) : null,
+            source,
+          };
+        });
+
+        return this.toDrawResponse(draw, mappedSlots);
+      });
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw ApiException.conflict(
+          'DRAW_VERSION_CONFLICT',
+          'เวอร์ชันของสายการแข่งขันชนกัน กรุณาลองใหม่อีกครั้ง',
+        );
+      }
+      throw err;
+    }
+  }
+
   private computeInputHash(entryIds: string[]): string {
     const sorted = [...entryIds].sort();
     return createHash('sha256').update(sorted.join(',')).digest('hex');
   }
 
-  private toDrawResponse(draw: {
-    id: string;
-    eventId: string;
-    version: number;
-    status: string;
-    sameTeamR1Count: number;
-    createdAt: Date;
-    createdBy: string;
-    seed: string;
-    inputHash: string;
-    kind: string;
-    rulesetVersion: string;
-    size: number;
-    conflicts: Prisma.JsonValue;
-    minimumPossibleConflicts: number;
-  }) {
+  private toDrawResponse(
+    draw: {
+      id: string;
+      eventId: string;
+      version: number;
+      status: string;
+      sameTeamR1Count: number;
+      createdAt: Date;
+      createdBy: string;
+      seed: string;
+      inputHash: string;
+      kind: string;
+      rulesetVersion: string;
+      size: number;
+      conflicts: Prisma.JsonValue;
+      minimumPossibleConflicts: number;
+    },
+    slots: unknown[] = [],
+  ) {
     return {
       id: draw.id,
       eventId: draw.eventId,
@@ -416,7 +748,7 @@ export class DrawsService {
       kind: draw.kind,
       rulesetVersion: draw.rulesetVersion,
       size: draw.size,
-      slots: [],
+      slots,
       conflicts: (draw.conflicts as unknown[]) ?? [],
       minimumPossibleConflicts: draw.minimumPossibleConflicts,
     };

@@ -16,6 +16,16 @@ const createGroupPreviewSchema = z.object({
 
 export class CreateGroupPreviewDto extends createZodDto(createGroupPreviewSchema) {}
 
+const createKnockoutPreviewSchema = z.object({
+  seed: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/, 'seed must be 32 hex characters')
+    .optional(),
+  reason: z.string().trim().min(5).max(2000).optional(),
+});
+
+export class CreateKnockoutPreviewDto extends createZodDto(createKnockoutPreviewSchema) {}
+
 const publishDrawSchema = z
   .object({
     acknowledgeConflicts: z.boolean().default(false),
@@ -40,6 +50,17 @@ export class DrawsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.draws.createGroupPreview(eventId, body, user);
+  }
+
+  @Roles('Committee', 'Admin')
+  @HttpCode(HttpStatus.CREATED)
+  @Post('events/:eventId/knockout/preview')
+  createKnockoutPreview(
+    @Param('eventId', uuid) eventId: string,
+    @Body() body: CreateKnockoutPreviewDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.draws.createKnockoutPreview(eventId, body, user);
   }
 
   @Roles('Committee', 'Admin')
