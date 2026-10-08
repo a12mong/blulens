@@ -16,6 +16,9 @@ import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MatchesService, type EntryRef } from '../matches/matches.service';
+import { nextSlot } from './bracket';
+
+export { nextSlot } from './bracket';
 
 export interface CreateGroupPreviewInput {
   seed?: string;
@@ -281,8 +284,14 @@ export class DrawsService {
         throw ApiException.notFound('ไม่พบสายการแข่งขันที่ต้องการ', 'DRAW_NOT_FOUND');
       }
 
-      // 3. Check kind (knockout publish is not supported yet)
-      if (draw.kind !== 'group') {
+      // 3. Check kind
+      if (draw.kind !== 'group' && draw.kind !== 'knockout') {
+        throw ApiException.conflict(
+          'DRAW_KIND_NOT_SUPPORTED',
+          'ระบบยังไม่รองรับการเผยแพร่สายการแข่งขันประเภทนี้',
+        );
+      }
+      if (draw.kind === 'knockout' && !draw.sourceGroupDrawId) {
         throw ApiException.conflict(
           'DRAW_KIND_NOT_SUPPORTED',
           'ระบบยังไม่รองรับการเผยแพร่สายการแข่งขันประเภทนี้',
@@ -309,32 +318,51 @@ export class DrawsService {
       if (existingPublishedOrLocked) {
         throw ApiException.conflict(
           'DRAW_ALREADY_LOCKED',
-          'สายการแข่งขันรอบแบ่งกลุ่มได้รับการเผยแพร่หรือล็อคแล้ว',
+          draw.kind === 'group'
+            ? 'สายการแข่งขันรอบแบ่งกลุ่มได้รับการเผยแพร่หรือล็อคแล้ว'
+            : 'สายการแข่งขันรอบแพ้คัดออกได้รับการเผยแพร่หรือล็อคแล้ว',
         );
       }
 
-      // 6. Recompute inputHash from the event's current approved entries
-      const currentApprovedEntries = await tx.entry.findMany({
-        where: {
-          eventId: draw.eventId,
-          status: 'approved',
-        },
-        select: { id: true },
-      });
-      const currentInputHash = this.computeInputHash(currentApprovedEntries.map((e) => e.id));
-      if (currentInputHash !== draw.inputHash) {
-        throw ApiException.conflict(
-          'DRAW_INPUT_CHANGED',
-          'ข้อมูลผู้สมัครที่ได้รับอนุมัติมีการเปลี่ยนแปลง โปรดสร้างพรีวิวใหม่ก่อนเผยแพร่',
-        );
+      // 6. Input check
+      if (draw.kind === 'group') {
+        const currentApprovedEntries = await tx.entry.findMany({
+          where: {
+            eventId: draw.eventId,
+            status: 'approved',
+          },
+          select: { id: true },
+        });
+        const currentInputHash = this.computeInputHash(currentApprovedEntries.map((e) => e.id));
+        if (currentInputHash !== draw.inputHash) {
+          throw ApiException.conflict(
+            'DRAW_INPUT_CHANGED',
+            'ข้อมูลผู้สมัครที่ได้รับอนุมัติมีการเปลี่ยนแปลง โปรดสร้างพรีวิวใหม่ก่อนเผยแพร่',
+          );
+        }
+      } else if (draw.kind === 'knockout') {
+        // Input check for knockout: the source group draw must still be 'locked' (else 409 DRAW_INPUT_CHANGED)
+        const sourceGroupDraw = await tx.draw.findUnique({
+          where: { id: draw.sourceGroupDrawId! },
+          select: { status: true },
+        });
+        if (!sourceGroupDraw || sourceGroupDraw.status !== 'locked') {
+          throw ApiException.conflict(
+            'DRAW_INPUT_CHANGED',
+            'สายการแข่งขันรอบแบ่งกลุ่มต้นทางไม่ได้อยู่ในสถานะล็อคแล้ว',
+          );
+        }
       }
 
       // 7. Conflicts check
       const acknowledgeConflicts = body.acknowledgeConflicts === true;
-      if (draw.sameTeamR1Count > 0 && !acknowledgeConflicts) {
+      const hasConflicts =
+        draw.sameTeamR1Count > 0 ||
+        (Array.isArray(draw.conflicts) && (draw.conflicts as unknown[]).length > 0);
+      if (hasConflicts && !acknowledgeConflicts) {
         throw ApiException.conflict(
           'DRAW_CONFLICTS_NOT_ACKNOWLEDGED',
-          'มีทีมเดียวกันอยู่ในกลุ่มเดียวกัน กรุณายืนยันการรับทราบข้อขัดแย้งก่อนเผยแพร่',
+          'มีข้อขัดแย้งในการจับสลาก กรุณายืนยันการรับทราบข้อขัดแย้งก่อนเผยแพร่',
         );
       }
 
@@ -366,7 +394,156 @@ export class DrawsService {
         },
       });
 
-      // 9. Audit 'draw.publish'
+      // 9. Create matches for knockout draws
+      let mappedSlots: unknown[] = [];
+      if (draw.kind === 'knockout') {
+        const slots = await tx.drawSlot.findMany({
+          where: { drawId: draw.id },
+          orderBy: { position: 'asc' },
+        });
+
+        const S = draw.size;
+        const R = Math.round(Math.log2(S));
+
+        // Event format check for thirdPlacePlayoff
+        const event = await tx.event.findUnique({
+          where: { id: draw.eventId },
+          select: { format: true },
+        });
+        const parsedFormat = eventFormatSchema.safeParse(event?.format);
+        let thirdPlacePlayoff = true;
+        if (parsedFormat.success) {
+          thirdPlacePlayoff = parsedFormat.data.thirdPlacePlayoff;
+        } else if (event?.format && typeof event.format === 'object') {
+          const raw = event.format as Record<string, unknown>;
+          if (typeof raw.thirdPlacePlayoff === 'boolean') {
+            thirdPlacePlayoff = raw.thirdPlacePlayoff;
+          }
+        }
+
+        interface MatchDraft {
+          eventId: string;
+          drawId: string;
+          stage: 'knockout' | 'third_place';
+          round: number;
+          matchNo: number;
+          court: null;
+          umpireId: null;
+          topEntryId: string | null;
+          bottomEntryId: string | null;
+          status: 'scheduled' | 'bye';
+          winnerEntryId: string | null;
+          result: null;
+        }
+
+        const matchesByRound = new Map<number, MatchDraft[]>();
+        for (let r = 1; r <= R; r++) {
+          const count = S / Math.pow(2, r);
+          const list: MatchDraft[] = [];
+          for (let i = 0; i < count; i++) {
+            list.push({
+              eventId: draw.eventId,
+              drawId: draw.id,
+              stage: 'knockout',
+              round: r,
+              matchNo: 0,
+              court: null,
+              umpireId: null,
+              topEntryId: null,
+              bottomEntryId: null,
+              status: 'scheduled',
+              winnerEntryId: null,
+              result: null,
+            });
+          }
+          matchesByRound.set(r, list);
+        }
+
+        // Round 1
+        const slotMap = new Map(slots.map((s) => [s.position, s.entryId]));
+        const r1Matches = matchesByRound.get(1)!;
+        const r1Count = S / 2;
+        for (let i = 0; i < r1Count; i++) {
+          const topEntryId = slotMap.get(2 * i + 1) ?? null;
+          const bottomEntryId = slotMap.get(2 * i + 2) ?? null;
+
+          const match = r1Matches[i]!;
+          match.topEntryId = topEntryId;
+          match.bottomEntryId = bottomEntryId;
+
+          const isTopNull = topEntryId === null;
+          const isBottomNull = bottomEntryId === null;
+
+          if (isTopNull !== isBottomNull) {
+            match.status = 'bye';
+            const winner = topEntryId ?? bottomEntryId;
+            match.winnerEntryId = winner;
+
+            if (R >= 2) {
+              const next = nextSlot(1, i);
+              const nextRoundList = matchesByRound.get(next.round)!;
+              const targetMatch = nextRoundList[next.index]!;
+              if (next.side === 'top') {
+                targetMatch.topEntryId = winner;
+              } else {
+                targetMatch.bottomEntryId = winner;
+              }
+            }
+          } else {
+            match.status = 'scheduled';
+            match.winnerEntryId = null;
+          }
+        }
+
+        let currentMatchNo = 1;
+        const allMatchesToCreate: MatchDraft[] = [];
+
+        for (let r = 1; r <= R; r++) {
+          const roundList = matchesByRound.get(r)!;
+          for (const match of roundList) {
+            match.matchNo = currentMatchNo++;
+            allMatchesToCreate.push(match);
+          }
+        }
+
+        if (thirdPlacePlayoff && R >= 2) {
+          allMatchesToCreate.push({
+            eventId: draw.eventId,
+            drawId: draw.id,
+            stage: 'third_place',
+            round: R,
+            matchNo: currentMatchNo++,
+            court: null,
+            umpireId: null,
+            topEntryId: null,
+            bottomEntryId: null,
+            status: 'scheduled',
+            winnerEntryId: null,
+            result: null,
+          });
+        }
+
+        for (const matchData of allMatchesToCreate) {
+          await tx.match.create({
+            data: matchData,
+          });
+        }
+
+        const nonNullEntryIds = slots
+          .map((s) => s.entryId)
+          .filter((id): id is string => typeof id === 'string');
+        const entryMap = await this.matches.loadEntryMap(tx, nonNullEntryIds);
+
+        mappedSlots = slots.map((s) => ({
+          position: s.position,
+          entryId: s.entryId,
+          seedNo: s.seedNo,
+          entry: s.entryId ? (entryMap.get(s.entryId) ?? null) : null,
+          source: null,
+        }));
+      }
+
+      // 10. Audit 'draw.publish'
       await this.audit.record(
         {
           actorId: user.id,
@@ -387,7 +564,7 @@ export class DrawsService {
         tx,
       );
 
-      return this.toDrawResponse(updatedDraw);
+      return this.toDrawResponse(updatedDraw, mappedSlots);
     });
   }
 
