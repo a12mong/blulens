@@ -186,7 +186,11 @@ describe('TournamentStatusBadge', () => {
       const badge = screen.getByTestId('tournament-status');
       expect(badge).toHaveAttribute('data-status', status);
       expect(badge).toHaveTextContent(label);
-      expect(badge).toHaveTextContent(symbol);
+      if (status === 'draft') {
+        expect(badge.querySelector('svg')).toBeInTheDocument();
+      } else {
+        expect(badge).toHaveTextContent(symbol);
+      }
       unmount();
     });
   });

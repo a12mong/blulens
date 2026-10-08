@@ -31,11 +31,11 @@ describe('PairMatrix', () => {
     expect(cell10).toHaveTextContent('0.78');
     expect(cell10).toHaveTextContent('ดี');
 
-    // Check cell 1-2: should contain 0.31, 'พอใช้' and '⚠'
+    // Check cell 1-2: should contain 0.31, 'พอใช้' and SVG warning icon
     const cell12 = screen.getByTestId('pair-cell-1-2');
     expect(cell12).toHaveTextContent('0.31');
     expect(cell12).toHaveTextContent('พอใช้');
-    expect(cell12).toHaveTextContent('⚠');
+    expect(cell12.querySelector('svg')).toBeInTheDocument();
 
     // Check cell 0-2: should show '—' with 'ข้อมูลร่วมไม่พอ'
     const cell02 = screen.getByTestId('pair-cell-0-2');
