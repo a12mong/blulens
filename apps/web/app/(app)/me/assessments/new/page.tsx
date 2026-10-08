@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { RequestAssessment } from '@/features/clips/RequestAssessment';
 
 export default function Page() {
-  if (process.env.NEXT_PUBLIC_UPLOAD_UI !== '1') {
+  if (process.env.NEXT_PUBLIC_UPLOAD_UI === '0') {
     notFound();
   }
   return (
