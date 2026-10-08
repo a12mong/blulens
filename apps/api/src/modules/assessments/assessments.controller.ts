@@ -3,6 +3,7 @@ import { AssessmentStatus } from '@prisma/client';
 import { Roles, CurrentUser } from '../../common/auth/decorators';
 import { createZodDto } from '../../common/zod/zod';
 import { z } from 'zod';
+import { GRADES } from '@blulens/shared';
 import { AssessmentsService } from './assessments.service';
 import type { AuthUser } from '../../common/auth/auth.types';
 
@@ -60,6 +61,24 @@ const ReturnAssessmentSchema = z
   .default({});
 
 class ReturnAssessmentDto extends createZodDto(ReturnAssessmentSchema) {}
+
+const ConfirmAssessmentSchema = z
+  .object({
+    resultVersion: z.number().int().optional(),
+    note: z.string().max(1000).optional(),
+  })
+  .optional()
+  .default({});
+
+class ConfirmAssessmentDto extends createZodDto(ConfirmAssessmentSchema) {}
+
+const OverrideAssessmentSchema = z.object({
+  centerKey: z.enum(GRADES),
+  reason: z.string().optional(),
+  resultVersion: z.number().int().optional(),
+});
+
+class OverrideAssessmentDto extends createZodDto(OverrideAssessmentSchema) {}
 
 @Controller('assessments')
 export class AssessmentsController {
@@ -124,5 +143,27 @@ export class AssessmentsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.assessmentsService.return(assessmentId, user, body);
+  }
+
+  @Post(':assessmentId/confirm')
+  @HttpCode(200)
+  @Roles('Committee')
+  async confirm(
+    @Param('assessmentId', uuid) assessmentId: string,
+    @Body() body: ConfirmAssessmentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.confirm(assessmentId, user, body);
+  }
+
+  @Post(':assessmentId/override')
+  @HttpCode(200)
+  @Roles('Committee')
+  async override(
+    @Param('assessmentId', uuid) assessmentId: string,
+    @Body() body: OverrideAssessmentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.override(assessmentId, user, body);
   }
 }
