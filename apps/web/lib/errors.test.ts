@@ -72,6 +72,7 @@ describe('thaiError', () => {
       'ASSIGNMENT_EXPIRED',
       'MATCH_SCORE_INVALID',
       'STAGE_CONFIRMED',
+      'NEXT_MATCH_ALREADY_PLAYED',
       'MATCH_ALREADY_CONFIRMED',
       'UMPIRE_NOT_ASSIGNED',
       'UMPIRE_OWN_MATCH',
