@@ -1,20 +1,20 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { AssessmentTable } from './AssessmentTable';
+import { AssessmentTable, type Assessment } from './AssessmentTable';
+import { AssessmentDecisions } from './AssessmentDecisions';
+import type { AssessmentDetail } from './api';
 import type { components } from '@/lib/api/schema';
 
-type GradeView = components['schemas']['GradeView'];
+vi.mock('./api', () => ({
+  useAssessmentAction: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  })),
+}));
 
-interface Assessment {
-  id: string;
-  subjectUserId: string;
-  subject?: { displayName: string } | null;
-  status: components['schemas']['AssessmentStatus'];
-  latestGrade: GradeView | null;
-  reviewsSubmitted: number;
-  reviewsRequired: number;
-  createdAt: string;
-}
+type GradeView = components['schemas']['GradeView'];
 
 const mockAssessments: Assessment[] = [
   {
@@ -67,8 +67,8 @@ describe('AssessmentTable', () => {
     expect(screen.getByText('3/3')).toBeInTheDocument();
 
     // Check grade labels
-    expect(screen.getByText('S-–S+')).toBeInTheDocument();
-    expect(screen.getByText('ยังสรุปไม่ได้')).toBeInTheDocument();
+    expect(screen.getAllByText('S-–S+')[0]).toBeInTheDocument();
+    expect(screen.getByText('รอผู้ตรวจ 3/3')).toBeInTheDocument();
 
     // Check links
     const links = screen.getAllByTestId('assessment-open');
@@ -144,5 +144,110 @@ describe('AssessmentTable', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveAttribute('data-assessment-id', 'assess-1');
     expect(rows[1]).toHaveAttribute('data-assessment-id', 'assess-2');
+  });
+
+  it('shows the grade for an overridden row and the result summary in the approve dialog', async () => {
+    // 1. Overridden row in AssessmentTable shows GradeBand compact + label + range
+    const overriddenItem: Assessment = {
+      id: 'assess-overridden',
+      subjectUserId: 'user-ov',
+      subject: { displayName: 'ชานนท์' },
+      status: 'overridden',
+      latestGrade: {
+        score: 7.5,
+        lower: 'S',
+        upper: 'S+',
+        center: 'S',
+        label: 'S/S+',
+        kind: 'straddle',
+      },
+      reviewsSubmitted: 2,
+      reviewsRequired: 2,
+      createdAt: '2026-10-07T12:00:00Z',
+    };
+
+    const unfinishedItem: Assessment = {
+      id: 'assess-unfinished',
+      subjectUserId: 'user-un',
+      subject: { displayName: 'กานต์' },
+      status: 'in_review',
+      latestGrade: null,
+      reviewsSubmitted: 1,
+      reviewsRequired: 2,
+      createdAt: '2026-10-07T13:00:00Z',
+    };
+
+    const { unmount } = render(
+      <AssessmentTable items={[overriddenItem, unfinishedItem]} />
+    );
+
+    const rows = screen.getAllByTestId('assessment-row');
+    const ovRow = rows[0];
+    expect(ovRow).toHaveTextContent('S/S+');
+    expect(ovRow).toHaveTextContent('ช่วง S–S+');
+    expect(ovRow).not.toHaveTextContent('ยังสรุปไม่ได้');
+    expect(ovRow.querySelector('[role="img"]')).toBeInTheDocument();
+
+    // 2. Unfinished row has no grade numbers and shows 'รอผู้ตรวจ n/m'
+    const unRow = rows[1];
+    expect(unRow).toHaveTextContent('รอผู้ตรวจ 1/2');
+    expect(unRow).not.toHaveTextContent('ยังสรุปไม่ได้');
+    const resultCell = unRow.querySelectorAll('td')[3];
+    expect(resultCell.textContent).toBe('รอผู้ตรวจ 1/2');
+    expect(unRow.querySelector('[role="img"]')).not.toBeInTheDocument();
+
+    unmount();
+
+    // 3. Result summary in approve dialog
+    const disputedDetail: AssessmentDetail = {
+      id: 'asm-disputed',
+      subjectUserId: 'user-d',
+      status: 'disputed',
+      createdAt: '2026-10-07T10:00:00Z',
+      subject: { userId: 'user-d', displayName: 'ธนกร', clubNames: [] },
+      latestResultVersion: 1,
+      latestResult: {
+        version: 1,
+        source: 'computed',
+        status: 'pending',
+        grade: {
+          score: 4.0,
+          margin: 3.75,
+          lower: 'RK1',
+          upper: 'S',
+          center: 'BG2',
+          kind: 'wide',
+          label: 'RK1–S',
+        },
+        nRaters: 2,
+        nExcluded: 0,
+        flags: ['HIGH_DISAGREEMENT'],
+        methodVersion: 'grading-v1',
+        computedAt: '2026-10-07T12:00:00Z',
+      },
+      reviewerRows: [],
+    };
+
+    render(<AssessmentDecisions detail={disputedDetail} />);
+    fireEvent.click(screen.getByTestId('decide-approve'));
+
+    const summary = screen.getByTestId('approve-summary');
+    expect(summary).toBeInTheDocument();
+    expect(summary).toHaveTextContent('RK1–S · 4.00 ± 3.75 · เห็นต่างกันมาก');
+  });
+
+  it('shows รอผล when an unfinished row has no review counts', () => {
+    const item: Assessment = {
+      id: 'assess-no-counts',
+      subjectUserId: 'user-nc',
+      status: 'draft',
+      latestGrade: null,
+      reviewsSubmitted: undefined,
+      reviewsRequired: undefined,
+      createdAt: '2026-10-07T10:00:00Z',
+    };
+
+    render(<AssessmentTable items={[item]} />);
+    expect(screen.getByText('รอผล')).toBeInTheDocument();
   });
 });

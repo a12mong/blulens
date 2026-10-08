@@ -12,6 +12,40 @@ export type AssessmentDecisionsProps = {
   detail: AssessmentDetail;
 };
 
+export const DECISION_FLAG_LABELS: Record<string, string> = {
+  HIGH_DISAGREEMENT: 'เห็นต่างกันมาก',
+  OUTLIER_EXCLUDED: 'ค่าผิดปกติถูกตัดออก',
+  LOW_RATER_COUNT: 'จำนวนกรรมการน้อย',
+  OVERRIDE: 'แก้ไขโดยคณะกรรมการ',
+  SINGLE_REVIEWER: 'ประเมินโดยกรรมการ 1 คน',
+  PAIR_DISAGREEMENT: 'คู่กรรมการเห็นต่างกัน',
+};
+
+export function getApproveSummary(detail: AssessmentDetail): string {
+  const result = detail.latestResult;
+  const grade = result?.grade;
+  const label = grade?.label ?? '-';
+  const score =
+    typeof grade?.score === 'number' ? grade.score.toFixed(2) : '-';
+  const margin =
+    typeof grade?.margin === 'number' ? grade.margin.toFixed(2) : '0.00';
+
+  let flagText = '';
+  if (result?.flags && result.flags.length > 0) {
+    flagText = result.flags
+      .map((f) => DECISION_FLAG_LABELS[f] ?? f)
+      .join(', ');
+  } else if (detail.status === 'disputed') {
+    flagText = 'เห็นต่างกันมาก';
+  } else if (detail.status === 'pending_approval') {
+    flagText = 'รออนุมัติ';
+  }
+
+  return flagText
+    ? `${label} · ${score} ± ${margin} · ${flagText}`
+    : `${label} · ${score} ± ${margin}`;
+}
+
 export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
   const { id, status, latestResult } = detail;
   let useActionHook: typeof assessmentApi.useAssessmentAction | undefined;
@@ -232,6 +266,12 @@ export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
             <h2 className="text-lg font-semibold text-foreground">
               อนุมัติผลการประเมิน
             </h2>
+            <div
+              data-testid="approve-summary"
+              className="text-sm font-medium text-foreground bg-muted p-2.5 rounded border border-border"
+            >
+              {getApproveSummary(detail)}
+            </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-muted-foreground">
                 {status === 'disputed'

@@ -2,19 +2,24 @@
 
 import Link from 'next/link';
 import { AssessmentStatusBadge } from './AssessmentStatusBadge';
+import { GradeBand, type GradeKey } from '@/components/ui/GradeBand';
 import type { components } from '@/lib/api/schema';
 
 type AssessmentStatus = components['schemas']['AssessmentStatus'];
 type GradeView = components['schemas']['GradeView'];
 
-interface Assessment {
+export interface Assessment {
   id: string;
   subjectUserId: string;
-  subject?: { displayName: string } | null;
+  subject?: { displayName?: string } | null;
   status: AssessmentStatus;
-  latestGrade: GradeView | null;
-  reviewsSubmitted: number;
-  reviewsRequired: number;
+  latestGrade?: GradeView | null;
+  latestResult?: {
+    grade: GradeView;
+    [key: string]: unknown;
+  } | null;
+  reviewsSubmitted?: number;
+  reviewsRequired?: number;
   createdAt: string;
 }
 
@@ -78,7 +83,7 @@ export function AssessmentTable({
             const val = e.target.value === 'all' ? undefined : (e.target.value as AssessmentStatus);
             onStatusChange?.(val);
           }}
-          className="px-3 py-2 border border-border rounded text-sm bg-background"
+          className="px-3 py-2 min-h-[44px] border border-border rounded text-sm bg-background"
         >
           <option value="all">ทั้งหมด</option>
           {allStatuses.map((s) => (
@@ -116,16 +121,54 @@ export function AssessmentTable({
                   <AssessmentStatusBadge status={item.status} />
                 </td>
                 <td className="px-4 py-2">
-                  {item.reviewsSubmitted}/{item.reviewsRequired}
+                  {typeof item.reviewsSubmitted === 'number' &&
+                  typeof item.reviewsRequired === 'number'
+                    ? `${item.reviewsSubmitted}/${item.reviewsRequired}`
+                    : '-'}
                 </td>
-                <td className="px-4 py-2">
-                  {item.latestGrade?.label ?? 'ยังสรุปไม่ได้'}
+                <td className="px-4 py-2" data-testid="assessment-result">
+                  {(() => {
+                    const grade = item.latestResult?.grade ?? item.latestGrade;
+                    if (grade) {
+                      return (
+                        <div className="space-y-1">
+                          <div
+                            className="text-sm flex flex-wrap items-center gap-1.5"
+                            data-testid="assessment-grade-text"
+                          >
+                            <span className="font-bold">{grade.label}</span>
+                            {grade.lower && grade.upper ? (
+                              <span className="text-muted-foreground">{` · ช่วง ${grade.lower}–${grade.upper}`}</span>
+                            ) : null}
+                          </div>
+                          {grade.lower &&
+                          grade.upper &&
+                          typeof grade.score === 'number' ? (
+                            <GradeBand
+                              lower={grade.lower as GradeKey}
+                              upper={grade.upper as GradeKey}
+                              score={grade.score}
+                              label={grade.label}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    }
+                    return (
+                      <span className="text-muted-foreground">
+                        {typeof item.reviewsSubmitted === 'number' &&
+                        typeof item.reviewsRequired === 'number'
+                          ? `รอผู้ตรวจ ${item.reviewsSubmitted}/${item.reviewsRequired}`
+                          : 'รอผล'}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-4 py-2">
                   <Link
                     href={`/committee/assessments/${item.id}`}
                     data-testid="assessment-open"
-                    className="text-primary hover:underline"
+                    className="text-primary hover:underline min-h-[44px] inline-flex items-center"
                   >
                     ดูรายละเอียด
                   </Link>
