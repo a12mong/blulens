@@ -19,7 +19,7 @@
 รัน: `cd apps/web && pnpm exec playwright test --project=setup --project=chromium slice3-full` (API ของตัวเอง `WEB_URL` ตั้งแล้ว, db `blulens_e2e`, seed เดโมรันแล้ว).
 Mutation: เปลี่ยน testid `standings-provisional` → F6 แดง.
 
-**ช่องว่างของ product ที่พบ (ใช้ workaround SQL ใน F3):** แมตช์ที่เกิดจากการเผยแพร่ไม่มี `court` และไม่มี API ตั้งสนาม ขณะที่กรรมการที่ผูกกับอีเวนต์แบบ `courts` ว่าง ถูกถือว่า "ไม่ได้รับมอบหมาย" (`UMPIRE_NOT_ASSIGNED`) ทั้งที่ schema ระบุว่าว่าง = ทุกสนาม → กรรมการรายงานผลของกลุ่มที่เพิ่งจับไม่ได้ในเส้นทางจริง.
+**แก้แล้ว (bl-25-15, develop 04daa20):** แมตช์ที่เกิดจากการเผยแพร่ไม่มี `court` และกรรมการที่ผูกกับอีเวนต์แบบ `courts` ว่าง (= ทุกสนาม) รายงานผลได้ F3 จึงไม่ใช้ workaround SQL อีกต่อไป และยืนยันว่าแมตช์เริ่มต้นไม่มี court
 | F7b | โหลดหน้าใหม่: แสดง `groupconfirm-done` และไม่มีปุ่มยืนยัน |
 
 **ยังไม่ครอบคลุม:** best thirds, รอบ knockout.
