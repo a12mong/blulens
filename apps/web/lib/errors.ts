@@ -47,6 +47,9 @@ const MESSAGES: Record<string, string> = {
   GROUP_MATCHES_INCOMPLETE: 'ยังมีแมตช์รอบกลุ่มที่ยังไม่ยืนยัน',
   NO_PUBLISHED_GROUP_DRAW: 'ยังไม่ได้เผยแพร่การจับกลุ่ม',
   GROUP_STAGE_NOT_CONFIRMED: 'ต้องยืนยันผลรอบกลุ่มก่อนจัดสายน็อกเอาต์',
+  UMPIRE_NOT_ELIGIBLE: 'กรรมการนี้ไม่มีสิทธิ์ในรายการนี้',
+  UMPIRE_IS_PLAYER: 'กรรมการเป็นผู้เล่นในแมตช์นี้',
+  MATCH_LOCKED: 'แมตช์นี้ล็อกแล้ว',
 };
 
 function hasThai(text: string): boolean {

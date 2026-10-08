@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { WarningIcon } from '@/components/ui/Icon';
-import { useEventUmpires, useEventMatches, useAssignMatch, useSaveEventUmpires } from './api';
+import { thaiError } from '@/lib/errors';
+import { useEventUmpires, useEventMatches, useAssignMatch, useSaveEventUmpires, useUmpireUsers } from './api';
 import type { components } from '@/lib/api/schema';
 
 type EventUmpire = components['schemas']['EventUmpire'];
@@ -12,9 +13,15 @@ interface UmpireAssignmentProps {
   eventId: string;
 }
 
+interface RowError {
+  matchId: string;
+  message: string;
+}
+
 export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
   const { data: umpires, isLoading, error, refetch } = useEventUmpires(eventId);
   const { data: matches = [] } = useEventMatches(eventId);
+  const { data: umpireUsers = [] } = useUmpireUsers();
   const assignMatch = useAssignMatch(eventId);
   const saveUmpires = useSaveEventUmpires(eventId);
 
@@ -22,6 +29,7 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
   const [editingUmpireId, setEditingUmpireId] = useState<string | null>(null);
   const [editingCourts, setEditingCourts] = useState<string>('');
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<RowError[]>();
 
   if (isLoading) {
     return (
@@ -76,6 +84,13 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
       } else {
         await assignMatch.mutateAsync({ matchId, court: value });
       }
+      setRowErrors(prev => prev?.filter(e => e.matchId !== matchId));
+    } catch (err) {
+      const errorMsg = thaiError(err as any, 'ไม่สามารถมอบหมายได้');
+      setRowErrors(prev => {
+        const filtered = prev?.filter(e => e.matchId !== matchId) ?? [];
+        return [...filtered, { matchId, message: errorMsg }];
+      });
     } finally {
       setPendingRowId(null);
     }
@@ -148,6 +163,36 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
           ))}
         </div>
 
+        {showAddUmpire && (
+          <div className="mt-4 p-4 border border-border rounded-lg bg-card">
+            <p className="text-sm text-muted-foreground mb-3">เลือกกรรมการจากรายชื่อ</p>
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  const userId = e.target.value;
+                  const user = umpireUsers.find(u => u.id === userId);
+                  if (user) {
+                    const newUmpire: EventUmpire = { userId, displayName: user.displayName, courts: [] };
+                    const updated = [...(umpires || []), newUmpire];
+                    saveUmpires.mutateAsync(updated);
+                    setShowAddUmpire(false);
+                  }
+                }
+              }}
+              defaultValue=""
+              className="px-3 py-2 border border-border rounded w-full"
+            >
+              <option value="">— เลือกกรรมการ —</option>
+              {umpireUsers
+                .filter(u => !umpires?.some(um => um.userId === u.id))
+                .map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.displayName}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
         <button
           onClick={() => setShowAddUmpire(!showAddUmpire)}
           className="mt-4 px-4 py-2 border border-border rounded hover:bg-muted flex items-center gap-2"
@@ -183,41 +228,50 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {matches.map(match => (
-                  <tr key={match.id} data-testid={`umpire-match-row-${match.id}`}>
-                    <td className="px-4 py-3">
-                      {match.aEntry?.displayName ?? '—'} vs {match.bEntry?.displayName ?? '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {match.stage === 'group' ? `กลุ่ม ${match.round}` : match.stage === 'knockout' ? `รอบ ${match.round}` : 'ชิงที่ 3'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={match.court || ''}
-                        onChange={e => handleAssignMatch(match.id as string, 'court', e.target.value || null)}
-                        placeholder="สนาม"
-                        disabled={pendingRowId === match.id}
-                        className="px-2 py-1 border border-border rounded text-sm w-20 disabled:opacity-50"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={match.umpireId || ''}
-                        onChange={e => handleAssignMatch(match.id as string, 'umpireId', e.target.value || null)}
-                        disabled={pendingRowId === match.id}
-                        className="px-2 py-1 border border-border rounded text-sm disabled:opacity-50"
-                      >
-                        <option value="">— เลือก —</option>
-                        {umpires.map(u => (
-                          <option key={u.userId} value={u.userId}>
-                            {u.displayName}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                {matches.map(match => {
+                  const rowError = rowErrors?.find(e => e.matchId === match.id);
+                  const matchUmpireUser = umpireUsers.find(u => u.id === match.umpireId);
+                  return (
+                    <tr key={match.id} data-testid={`umpire-match-row-${match.id}`}>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p>{match.aEntry?.displayName ?? '—'} vs {match.bEntry?.displayName ?? '—'}</p>
+                          {rowError && (
+                            <p className="text-xs text-destructive mt-1">{rowError.message}</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {match.stage === 'group' ? `กลุ่ม ${match.round}` : match.stage === 'knockout' ? `รอบ ${match.round}` : 'ชิงที่ 3'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={match.court || ''}
+                          onChange={e => handleAssignMatch(match.id as string, 'court', e.target.value || null)}
+                          placeholder="สนาม"
+                          disabled={pendingRowId === match.id}
+                          className="px-2 py-1 border border-border rounded text-sm w-20 disabled:opacity-50"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={match.umpireId || ''}
+                          onChange={e => handleAssignMatch(match.id as string, 'umpireId', e.target.value || null)}
+                          disabled={pendingRowId === match.id}
+                          className="px-2 py-1 border border-border rounded text-sm disabled:opacity-50"
+                        >
+                          <option value="">— เลือก —</option>
+                          {umpireUsers.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.displayName}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
