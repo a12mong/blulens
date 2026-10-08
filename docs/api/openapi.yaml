@@ -920,8 +920,10 @@ paths:
               properties:
                 seed: { type: string, pattern: '^[0-9a-f]{32}$', description: omit to let the server generate one (CSPRNG) }
                 seedCount: { type: integer, minimum: 0, description: omit to use the ruleset default }
+                reason: { type: string, minLength: 5, maxLength: 2000, description: 'draw.md D5: REQUIRED when a preview already exists for this event (version >= 2), else 400 VALIDATION_FAILED; stored in the draw.preview audit row and shown with that version' }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+        '400': { $ref: '#/components/responses/Validation' }
         '409': { description: 'ENTRIES_NOT_CLOSED | DRAW_ALREADY_LOCKED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /events/{eventId}/draws:
     get:
@@ -1015,8 +1017,10 @@ paths:
               properties:
                 seed: { type: string, pattern: '^[0-9a-f]{32}$' }
                 groupCount: { type: integer, minimum: 1, description: override when the default sizing rule fails }
+                reason: { type: string, minLength: 5, maxLength: 2000, description: 'draw.md D5: REQUIRED when a preview already exists for this event (version >= 2), else 400 VALIDATION_FAILED; stored in the draw.preview audit row and shown with that version' }
       responses:
         '201': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
+        '400': { $ref: '#/components/responses/Validation' }
   /events/{eventId}/groups:
     get:
       tags: [format]
