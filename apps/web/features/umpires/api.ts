@@ -25,7 +25,7 @@ export function useSaveEventUmpires(eventId: string) {
     mutationFn: async (umpires: EventUmpire[]) => {
       return apiFetch<EventUmpire[]>(`/events/${eventId}/umpires`, {
         method: 'PUT',
-        body: umpires,
+        body: umpires.map((u) => ({ userId: u.userId, courts: u.courts ?? [] })),
       });
     },
     onSuccess: () => {

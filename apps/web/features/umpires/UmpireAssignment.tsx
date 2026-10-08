@@ -70,7 +70,7 @@ export function UmpireAssignment({ eventId }: UmpireAssignmentProps) {
   };
 
   const handleSaveCourts = async (userId: string) => {
-    const courts = editingCourts.trim() === '' ? [] : editingCourts.split(',').map(c => c.trim());
+    const courts = editingCourts.trim() === '' ? [] : editingCourts.split(',').map(c => c.trim()).filter(Boolean);
     const updated = umpires.map(u => (u.userId === userId ? { ...u, courts } : u));
     await saveUmpires.mutateAsync(updated);
     setEditingUmpireId(null);
