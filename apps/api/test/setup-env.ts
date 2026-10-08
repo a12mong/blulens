@@ -17,3 +17,6 @@ if (existsSync(envFile)) {
 process.env.DATABASE_URL = testDatabaseUrl(process.env);
 
 process.env.DISABLE_RATE_LIMIT = '1';
+
+// Tests upload into their own bucket (created on first use), never the dev clips bucket.
+process.env.S3_BUCKET = `${process.env.S3_BUCKET ?? 'clips'}-test`;
