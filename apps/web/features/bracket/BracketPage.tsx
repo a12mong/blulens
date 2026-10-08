@@ -22,7 +22,7 @@ function formatTime(date: Date = new Date()): string {
   return `${hours}:${minutes}`;
 }
 
-function groupStandings(
+export function groupStandings(
   standings: GroupStanding[],
 ): { groupId: string; label: string; rows: GroupStanding[] }[] {
   const groupsMap = new Map<string, GroupStanding[]>();
@@ -88,7 +88,7 @@ export function BracketPage({ eventId, fixture = false }: BracketPageProps) {
 
   const hasData = rawRounds.length > 0 || rawStandings.length > 0;
 
-  if (!fixture && (is404 || (otherError && !hasData))) {
+  if (!fixture && ((is404 || otherError) && !hasData)) {
     if (is404) {
       return (
         <main

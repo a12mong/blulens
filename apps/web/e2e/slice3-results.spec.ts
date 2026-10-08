@@ -54,16 +54,13 @@ test.describe.serial('slice 3: committee results queue + standings', () => {
   test.beforeAll(async ({ playwright }) => {
     const pw = process.env.SEED_DEMO_PASSWORD;
     if (!pw) throw new Error('SEED_DEMO_PASSWORD must be set (no defaults)');
-    const base = sql(`select event_id from matches where stage='group' and status='scheduled' order by match_no limit 1`);
+    const base = sql(
+      `select m.event_id from matches m join events e on e.id = m.event_id join tournaments t on t.id = e.tournament_id where t.name = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3' and m.stage = 'group' and m.status = 'scheduled' and m.court is not null order by m.match_no limit 1`,
+    );
     expect(base, 'seeded scheduled group match missing: SEED_DEMO=1 db:seed on blulens_e2e').toMatch(/^[0-9a-f-]{36}$/);
     eventId = base;
 
-    sql(
-      `insert into users (id,email,password_hash,display_name,status,created_at,updated_at) ` +
-        `select gen_random_uuid(),'umpire1@blulens.local',password_hash,'Umpire 1 (e2e)','active',now(),now() from users where email='member1@blulens.local' on conflict (email) do nothing`,
-    );
-    sql(`insert into user_roles (user_id,role,created_at) select id,'Umpire',now() from users where email='umpire1@blulens.local' on conflict do nothing`);
-    sql(`insert into event_umpires (event_id,user_id,courts,created_at) select '${eventId}',id,'{}',now() from users where email='umpire1@blulens.local' on conflict do nothing`);
+    // umpire1@blulens.local is seeded by SEED_DEMO=1 (bl-25-6) with Umpire role and event_umpires row.
 
     const clone = (c: string) =>
       sql(

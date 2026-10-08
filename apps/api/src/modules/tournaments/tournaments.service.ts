@@ -3,6 +3,7 @@ import { Prisma, type Event as EventRow, type Tournament as TournamentRow } from
 import {
   GRADE_KEYS,
   TOURNAMENT_TRANSITIONS,
+  eventFormatSchema,
   type EventFormat,
   type EventInput,
   type TournamentInput,
@@ -30,6 +31,13 @@ export function toTournament(t: TournamentRow) {
 }
 
 export function toEvent(e: EventRow) {
+  let format: (EventFormat & { lockedAt: string | null }) | null = null;
+  if (e.format !== null) {
+    const parsed = eventFormatSchema.safeParse(e.format);
+    if ('data' in parsed && parsed.success !== false) {
+      format = { ...(parsed.data as EventFormat), lockedAt: e.formatLockedAt?.toISOString() ?? null };
+    }
+  }
   return {
     id: e.id,
     tournamentId: e.tournamentId,
@@ -41,6 +49,7 @@ export function toEvent(e: EventRow) {
     minReviewers: e.minReviewers,
     gradesDisclosedAt: e.gradesDisclosedAt?.toISOString() ?? null,
     gradesDisclosedReason: e.gradesDisclosedReason ?? null,
+    format,
   };
 }
 
@@ -83,7 +92,10 @@ export class TournamentsService {
 
   async detail(id: string, user?: AuthUser) {
     const t = await this.findVisible(id, user);
-    const events = await this.prisma.event.findMany({ where: { tournamentId: id }, orderBy: [{ discipline: 'asc' }, { gradeMinIndex: 'asc' }] });
+    const events = await this.prisma.event.findMany({
+      where: { tournamentId: id },
+      orderBy: [{ discipline: 'asc' }, { gradeMinIndex: 'asc' }],
+    });
     return { ...toTournament(t), events: events.map(toEvent) };
   }
 
@@ -111,7 +123,10 @@ export class TournamentsService {
 
   async events(tournamentId: string, user?: AuthUser) {
     await this.findVisible(tournamentId, user);
-    const rows = await this.prisma.event.findMany({ where: { tournamentId }, orderBy: [{ discipline: 'asc' }, { gradeMinIndex: 'asc' }] });
+    const rows = await this.prisma.event.findMany({
+      where: { tournamentId },
+      orderBy: [{ discipline: 'asc' }, { gradeMinIndex: 'asc' }],
+    });
     return rows.map(toEvent);
   }
 
@@ -169,7 +184,10 @@ export class TournamentsService {
   async eventDetail(eventId: string, user?: AuthUser) {
     const e = await this.prisma.event.findUnique({
       where: { id: eventId },
-      include: { tournament: true, _count: { select: { entries: { where: { status: { not: 'withdrawn' } } } } } },
+      include: {
+        tournament: true,
+        _count: { select: { entries: { where: { status: { not: 'withdrawn' } } } } },
+      },
     });
     if (!e || (e.tournament.status === 'draft' && !canSeeDrafts(user))) {
       throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');

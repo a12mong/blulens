@@ -2841,7 +2841,10 @@ export interface paths {
         /** Groups with members and the round-robin schedule */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description which group draw to read: published (everyone) or the current unpublished preview (Committee/Admin only) */
+                    draw?: "published" | "preview";
+                };
                 header?: never;
                 path: {
                     eventId: components["parameters"]["EventId"];
@@ -2857,6 +2860,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Group"][];
+                    };
+                };
+                /** @description draw=preview by a non-staff caller (FORBIDDEN) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
                     };
                 };
             };
@@ -3744,6 +3756,10 @@ export interface components {
             dueAt: string;
             /** Format: date-time */
             submittedAt?: string | null;
+            /** @description clips with status uploaded (queue card "N คลิป"); blind-safe */
+            clipCount?: number;
+            /** @description sum of durationSec of those clips; null when any of them has no duration. Calibration tasks fill both fields the same way from their clip, so the card never tells them apart */
+            totalDurationSec?: number | null;
         };
         ReviewAssignmentDetail: components["schemas"]["ReviewAssignment"] & {
             clips: components["schemas"]["Clip"][];
@@ -3838,6 +3854,8 @@ export interface components {
              */
             gradesDisclosedAt?: string | null;
             gradesDisclosedReason?: string | null;
+            /** @description the event format as saved by PUT /events/{eventId}/format (type knockout | groups_knockout, groupSize, advancePerGroup, bestThirds, both match formats, lockedAt); null = not configured yet (the web treats it as knockout and offers "ตั้งค่ารูปแบบ" before any draw). Returned on every Event read (list, detail, tournament detail). */
+            readonly format?: components["schemas"]["EventFormat"] | null;
         };
         /**
          * @description architecture §6.10; draw/group draws use approved entries only
@@ -4098,6 +4116,8 @@ export interface components {
                 entryId?: string;
                 seedInGroup?: number;
                 pot?: number;
+                /** @description display label of the entry (names, clubs; grade only when visible per A14), so group cards need no extra lookup */
+                readonly entry?: components["schemas"]["EntryRef"];
             }[];
             matches?: components["schemas"]["Match"][];
         };

@@ -176,4 +176,81 @@ describe('GroupStandingsTable', () => {
     expect(screen.queryByText('GRADE_SECRET_3')).toBeNull();
     expect(screen.queryByText('GRADE_SECRET_4')).toBeNull();
   });
+
+  it('maps tiebreaker keys to Thai names and falls back to เกณฑ์อื่น', () => {
+    const rows: GroupStanding[] = [
+      {
+        ...mockRows[0]!,
+        tiebreakNote: 'diff',
+      },
+      {
+        ...mockRows[1]!,
+        tiebreakNote: 'head_to_head',
+      },
+      {
+        ...mockRows[2]!,
+        tiebreakNote: 'points_for',
+      },
+      {
+        ...mockRows[3]!,
+        tiebreakNote: 'wins',
+      },
+      {
+        groupId: 'g-1',
+        entryId: 'e-5',
+        rank: 5,
+        played: 3,
+        won: 0,
+        drawn: 0,
+        lost: 3,
+        points: 0,
+        diff: -30,
+        qualification: 'out',
+        confirmed: true,
+        tiebreakNote: 'random_lottery',
+      },
+    ];
+
+    render(<GroupStandingsTable label="A" rows={rows} />);
+
+    const note = screen.getByTestId('tiebreak-note');
+    expect(note).toHaveTextContent('เสมอแต้ม ตัดสินด้วย: ผลต่างแต้ม');
+    expect(note).toHaveTextContent('เสมอแต้ม ตัดสินด้วย: เจอกันเอง');
+    expect(note).toHaveTextContent('เสมอแต้ม ตัดสินด้วย: แต้มได้');
+    expect(note).toHaveTextContent('เสมอแต้ม ตัดสินด้วย: จำนวนชนะ');
+    expect(note).toHaveTextContent('เสมอแต้ม ตัดสินด้วย: เกณฑ์อื่น');
+    expect(note).not.toHaveTextContent('diff');
+    expect(note).not.toHaveTextContent('head_to_head');
+    expect(note).not.toHaveTextContent('random_lottery');
+  });
+
+  it('renders column header and legend explaining W/D/L abbreviations', () => {
+    render(<GroupStandingsTable label="A" rows={mockRows} />);
+
+    // Header has responsive spans
+    const headers = screen.getAllByRole('columnheader');
+    const wdlHeader = headers.find((h) => h.textContent?.includes('ชนะ/เสมอ/แพ้'));
+    expect(wdlHeader).toBeDefined();
+    expect(wdlHeader).toHaveTextContent('ชนะ/เสมอ/แพ้');
+    expect(wdlHeader).toHaveTextContent('ช/ส/พ');
+
+    // Legend present
+    const legend = screen.getByTestId('standings-legend');
+    expect(legend).toHaveTextContent('ช = ชนะ · ส = เสมอ · พ = แพ้');
+  });
+
+  it('controls provisional badge with allPlayed prop when provided', () => {
+    // mockRows has confirmed: false on row 2, but allPlayed is true
+    const { rerender } = render(
+      <GroupStandingsTable label="A" rows={mockRows} allPlayed={true} />,
+    );
+    expect(screen.queryByTestId('standings-provisional')).toBeNull();
+
+    // all confirmed rows, but allPlayed is false
+    const confirmedRows = mockRows.map((r) => ({ ...r, confirmed: true }));
+    rerender(
+      <GroupStandingsTable label="A" rows={confirmedRows} allPlayed={false} />,
+    );
+    expect(screen.getByTestId('standings-provisional')).toBeInTheDocument();
+  });
 });

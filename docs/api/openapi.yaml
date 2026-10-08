@@ -1510,6 +1510,8 @@ components:
         state: { type: string, enum: [open, submitted, expired, declined] }
         dueAt: { type: string, format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time }
+        clipCount: { type: integer, minimum: 0, description: 'clips with status uploaded (queue card "N คลิป"); blind-safe' }
+        totalDurationSec: { type: [integer, 'null'], description: 'sum of durationSec of those clips; null when any of them has no duration. Calibration tasks fill both fields the same way from their clip, so the card never tells them apart' }
     ReviewAssignmentDetail:
       allOf:
         - { $ref: '#/components/schemas/ReviewAssignment' }
@@ -1613,6 +1615,10 @@ components:
             tournamentId: { type: string, format: uuid }
             gradesDisclosedAt: { type: [string, 'null'], format: date-time, description: 'A14 transparency disclosure' }
             gradesDisclosedReason: { type: [string, 'null'] }
+            format:
+              oneOf: [{ $ref: '#/components/schemas/EventFormat' }, { type: 'null' }]
+              readOnly: true
+              description: 'the event format as saved by PUT /events/{eventId}/format (type knockout | groups_knockout, groupSize, advancePerGroup, bestThirds, both match formats, lockedAt); null = not configured yet (the web treats it as knockout and offers "ตั้งค่ารูปแบบ" before any draw). Returned on every Event read (list, detail, tournament detail).'
     EntryStatus:
       type: string
       enum: [draft, pending_committee, approved, rejected, withdrawn]
