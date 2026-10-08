@@ -292,4 +292,29 @@ describe('bl-07 schema constraints', () => {
       ).toMatch(/review_scores_grade_index_chk/);
     });
   });
+
+  it('rubrics (bl-34): activation stamps activated_at, a deactivated version is retired, at most one draft', async () => {
+    await inRollback(async (tx) => {
+      await tx.rubric.updateMany({ data: { active: false } });
+      const active = await tx.rubric.create({
+        data: { methodVersion: `t-${randomUUID()}`, criteria: [], params: {}, active: true },
+      });
+      expect(active.activatedAt).toBeInstanceOf(Date);
+      const retired = await tx.rubric.update({ where: { id: active.id }, data: { active: false } });
+      expect(retired.activatedAt).toEqual(active.activatedAt);
+
+      const draft = await tx.rubric.create({ data: { methodVersion: `t-${randomUUID()}`, criteria: [], params: {} } });
+      expect(draft.activatedAt).toBeNull();
+      expect(
+        await violation(tx, () =>
+          tx.rubric.create({ data: { methodVersion: `t-${randomUUID()}`, criteria: [], params: {} } }),
+        ),
+      ).toMatch(/Unique constraint failed/);
+
+      const set = await tx.calibrationSet.create({
+        data: { name: 'Q4', period: '2026-Q4', createdBy: (await makeUser(tx)).id },
+      });
+      expect(set.assignedAt).toBeNull();
+    });
+  });
 });

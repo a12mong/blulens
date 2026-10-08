@@ -70,7 +70,8 @@ async function seedRubric(): Promise<string> {
   });
   if (existing) return 'rubric grading-v1: exists';
   const anyActive = await prisma.rubric.findFirst({ where: { active: true } });
-  await prisma.rubric.create({ data: { ...GRADING_V1, active: !anyActive } });
+  // the baseline is never an editor draft (rubrics_one_draft): activatedAt is always set
+  await prisma.rubric.create({ data: { ...GRADING_V1, active: !anyActive, activatedAt: new Date() } });
   return `rubric grading-v1: created (active=${!anyActive})`;
 }
 

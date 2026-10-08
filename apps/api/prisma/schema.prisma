@@ -212,6 +212,8 @@ model Rubric {
   /// N_min, outlier thresholds, margin parameters at that version.
   params        Json
   active        Boolean      @default(false)
+  /// Set when first activated (trigger). Status: active -> active; activatedAt set -> retired; else draft (at most one).
+  activatedAt   DateTime?    @map("activated_at") @db.Timestamptz(3)
   createdBy     String?      @map("created_by") @db.Uuid
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   assessments   Assessment[]
@@ -347,7 +349,11 @@ model CalibrationSet {
   id          String            @id @default(uuid()) @db.Uuid
   name        String            @db.VarChar(120)
   description String?
+  /// e.g. 2026-Q4
+  period      String?           @db.VarChar(16)
   active      Boolean           @default(true)
+  /// Set by POST /calibration-sets/{id}/assign; clips are frozen after (409 CALIBRATION_SET_ASSIGNED).
+  assignedAt  DateTime?         @map("assigned_at") @db.Timestamptz(3)
   createdBy   String            @map("created_by") @db.Uuid
   createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   clips       CalibrationClip[]
