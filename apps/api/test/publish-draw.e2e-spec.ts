@@ -301,7 +301,7 @@ describe('publish-draw (bl-25-9)', () => {
     const prev2 = await http()
       .post(`/api/v1/events/${event2Id}/groups/preview`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
-      .send({})
+      .send({ reason: 'สุ่มสายใหม่สำหรับตัวอย่างที่ 2' })
       .expect(201);
     const prev2Id = prev2.body.data.id;
 

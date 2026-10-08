@@ -11,6 +11,7 @@ const createGroupPreviewSchema = z.object({
     .regex(/^[0-9a-f]{32}$/, 'seed must be 32 hex characters')
     .optional(),
   groupCount: z.number().int().min(1).optional(),
+  reason: z.string().trim().min(5).max(2000).optional(),
 });
 
 export class CreateGroupPreviewDto extends createZodDto(createGroupPreviewSchema) {}

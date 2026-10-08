@@ -17,6 +17,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 export interface CreateGroupPreviewInput {
   seed?: string;
   groupCount?: number;
+  reason?: string;
 }
 
 export interface PublishDrawInput {
@@ -128,6 +129,17 @@ export class DrawsService {
         });
         const version = (lastDraw?.version ?? 0) + 1;
 
+        const trimmedReason = body.reason?.trim();
+        if (version >= 2 && !trimmedReason) {
+          throw ApiException.badRequest(
+            'VALIDATION_FAILED',
+            'ต้องระบุเหตุผลเมื่อสุ่มตัวอย่างใหม่',
+            { field: 'reason', fieldErrors: { reason: ['ต้องระบุเหตุผลเมื่อสุ่มตัวอย่างใหม่'] } },
+          );
+        }
+
+        const reasonToStore = trimmedReason || null;
+
         const conflicts = plan.sameTeamPairs.map(([a, b]) => ({ entryIds: [a, b] }));
 
         const draw = await tx.draw.create({
@@ -139,6 +151,7 @@ export class DrawsService {
             seed,
             seedSource,
             inputHash,
+            reason: reasonToStore,
             snapshot: {
               entries: drawEntries.map((d) => ({
                 id: d.id,
@@ -214,6 +227,7 @@ export class DrawsService {
             action: 'draw.preview',
             entityType: 'draw',
             entityId: draw.id,
+            reason: reasonToStore ?? undefined,
             after: {
               id: draw.id,
               eventId: draw.eventId,

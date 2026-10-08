@@ -49,7 +49,10 @@ export function usePreviewGroups(
     mutationFn: async (payload) =>
       apiFetch<Draw>(`/events/${eventId}/groups/preview`, {
         method: 'POST',
-        body: payload?.seed ? { seed: payload.seed } : {},
+        body: {
+          ...(payload?.seed ? { seed: payload.seed } : {}),
+          ...(payload?.reason ? { reason: payload.reason } : {}),
+        },
       }),
     onSuccess: (...args) => {
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'groups', 'preview'] });
