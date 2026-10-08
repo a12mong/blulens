@@ -58,9 +58,8 @@ describe('calibration-sets (bl-35-1)', () => {
     }
     const userIds = [committeeId, reviewerId, guestId].filter((id): id is string => !!id);
     if (userIds.length > 0) {
-      await prisma.user.deleteMany({
-        where: { id: { in: userIds } },
-      });
+      // audit rows (append-only) reference the committee user, so users are disabled, not deleted
+      await prisma.user.updateMany({ where: { id: { in: userIds } }, data: { status: 'disabled' } });
     }
     await app.close();
   });
@@ -92,23 +91,33 @@ describe('calibration-sets (bl-35-1)', () => {
       .send({});
 
     expect(res.status).toBe(400);
-    const error = res.body.error || res.body;
-    expect([error.code, error.name, 'VALIDATION_FAILED'].includes('VALIDATION_FAILED')).toBe(true);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
   });
 
-  it('GET /calibration-sets returns created set first', async () => {
+  it('GET /calibration-sets lists the created set newest first, clips mapped to referenceKey', async () => {
+    // a clip at ladder index 7 must come back as referenceKey 'S'
+    const clip = await prisma.calibrationClip.create({
+      data: { setId: calibrationSetId, objectKey: `calibration/${calibrationSetId}/${tag}.mp4`, referenceIndex: 7 },
+    });
+    const older = await prisma.calibrationSet.create({
+      data: { name: `${tag} Older`, createdBy: committeeId, createdAt: new Date(Date.now() - 60_000) },
+    });
+
     const res = await http()
       .get('/api/v1/calibration-sets')
-      .set('Cookie', cookieFor(committeeId, ['Committee']));
+      .set('Cookie', cookieFor(committeeId, ['Committee']))
+      .expect(200);
 
-    expect(res.status).toBe(200);
-    const data = res.body.data || res.body;
-    expect(data).toBeInstanceOf(Array);
-    expect(data.length).toBeGreaterThan(0);
-    expect(data[0].id).toBe(calibrationSetId);
-    expect(data[0].name).toBe(`${tag} Set`);
-    expect(data[0].period).toBe('2026-Q4');
-    expect(data[0].clips).toEqual([]);
+    const data = res.body.data as Array<{ id: string; name: string; period: string | null; clips: unknown[] }>;
+    const mine = data.filter((s) => s.id === calibrationSetId || s.id === older.id);
+    expect(mine.map((s) => s.id)).toEqual([calibrationSetId, older.id]);
+    expect(mine[0]).toMatchObject({ name: `${tag} Set`, period: '2026-Q4', clips: [{ clipId: clip.id, referenceKey: 'S' }] });
+    expect(mine[1]).toMatchObject({ period: null, clips: [] });
+  });
+
+  it('unauthenticated -> 401 UNAUTHENTICATED on GET and POST', async () => {
+    expect((await http().get('/api/v1/calibration-sets').expect(401)).body.error.code).toBe('UNAUTHENTICATED');
+    await http().post('/api/v1/calibration-sets').send({ name: 'x' }).expect(401);
   });
 
   it('Reviewer -> 403 on POST', async () => {
