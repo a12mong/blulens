@@ -1,7 +1,7 @@
 'use client';
 
-import type { UseQueryOptions } from '@tanstack/react-query';
-import { useQuery } from '@tanstack/react-query';
+import type { UseMutationOptions, UseQueryOptions } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import type { components } from '@/lib/api/schema';
 
@@ -41,6 +41,38 @@ export function useAssessmentDetail(
       return apiFetch<AssessmentDetail>(`/assessments/${id}`);
     },
     ...options,
+  });
+}
+
+export type AssessmentAction = 'confirm' | 'approve' | 'return' | 'override';
+
+export type AssessmentActionPayload = {
+  action: AssessmentAction;
+  body?: unknown;
+};
+
+export function useAssessmentAction(
+  id: string,
+  options?: Omit<
+    UseMutationOptions<AssessmentDetail, Error, AssessmentActionPayload>,
+    'mutationFn'
+  >,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async ({ action, body }: AssessmentActionPayload) => {
+      return apiFetch<AssessmentDetail>(`/assessments/${id}/${action}`, {
+        method: 'POST',
+        body: body as any,
+      });
+    },
+    onSuccess: (...args) => {
+      queryClient.setQueryData(assessmentDetailKey(id), args[0]);
+      queryClient.invalidateQueries({ queryKey: ['assessments'] });
+      (options?.onSuccess as any)?.(...args);
+    },
   });
 }
 
