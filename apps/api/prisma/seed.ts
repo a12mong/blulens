@@ -126,7 +126,7 @@ async function upsertUser(
   email: string,
   displayName: string,
   password: string,
-  roles: Array<'Admin' | 'Committee' | 'Member' | 'Reviewer'>,
+  roles: Array<'Admin' | 'Committee' | 'Member' | 'Reviewer' | 'Umpire'>,
 ) {
   const existing = await prisma.user.findUnique({ where: { email } });
   const user =
@@ -452,6 +452,8 @@ async function seedDemo(): Promise<string> {
     await upsertUser('reviewer3@blulens.local', 'ผู้ตรวจ 3', password, ['Reviewer']),
   ];
 
+  const umpire1 = await upsertUser('umpire1@blulens.local', 'กรรมการ 1', password, ['Umpire']);
+
   const teamIdByKey = new Map<string, string>();
   for (const t of DEMO_TEAMS) {
     const team = await prisma.team.upsert({
@@ -531,7 +533,11 @@ async function seedDemo(): Promise<string> {
   const groupStageMsg = await seedDemoGroupStage(admin?.id ?? null);
   console.log(groupStageMsg);
 
-  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg}, ${groupStageMsg})`;
+  // Create demo umpire for group stage
+  const umpireMsg = await seedDemoUmpire(umpire1.id);
+  console.log(umpireMsg);
+
+  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members + umpire1, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg}, ${groupStageMsg}, ${umpireMsg})`;
 }
 
 async function seedDemoReviews(
@@ -877,6 +883,45 @@ async function seedDemoGroupStage(adminId: string | null): Promise<string> {
   });
 
   return `demo group stage: created (${plan.groups.length} groups, ${totalMatches} matches)`;
+}
+
+async function seedDemoUmpire(umpireId: string): Promise<string> {
+  const tournamentName = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3';
+  const tournament = await prisma.tournament.findFirst({
+    where: { name: tournamentName },
+    include: {
+      events: {
+        where: { discipline: 'MD' },
+      },
+    },
+  });
+
+  if (!tournament || tournament.events.length === 0) {
+    return 'demo umpire: no event';
+  }
+
+  const mdEvent = tournament.events[0]!;
+
+  const existingUmpire = await prisma.eventUmpire.findFirst({
+    where: {
+      eventId: mdEvent.id,
+      userId: umpireId,
+    },
+  });
+
+  if (existingUmpire) {
+    return 'demo umpire: exists';
+  }
+
+  await prisma.eventUmpire.create({
+    data: {
+      eventId: mdEvent.id,
+      userId: umpireId,
+      courts: [],
+    },
+  });
+
+  return 'demo umpire: created';
 }
 
 async function main() {
