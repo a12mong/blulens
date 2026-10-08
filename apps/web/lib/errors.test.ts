@@ -53,6 +53,7 @@ describe('thaiError', () => {
       'REVIEWER_CONFLICT_OF_INTEREST',
       'REVIEWER_NOT_ELIGIBLE',
       'ASSESSMENT_NOT_ASSIGNABLE',
+      'MATCH_NOT_REPORTED',
     ];
 
     codes.forEach((code) => {

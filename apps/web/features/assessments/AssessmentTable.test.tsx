@@ -192,7 +192,7 @@ describe('AssessmentTable', () => {
     const unRow = rows[1];
     expect(unRow).toHaveTextContent('รอผู้ตรวจ 1/2');
     expect(unRow).not.toHaveTextContent('ยังสรุปไม่ได้');
-    const resultCell = unRow.querySelectorAll('td')[3];
+    const resultCell = unRow.querySelector('[data-testid="assessment-result"]')!;
     expect(resultCell.textContent).toBe('รอผู้ตรวจ 1/2');
     expect(unRow.querySelector('[role="img"]')).not.toBeInTheDocument();
 
@@ -249,5 +249,63 @@ describe('AssessmentTable', () => {
 
     render(<AssessmentTable items={[item]} />);
     expect(screen.getByText('รอผล')).toBeInTheDocument();
+  });
+
+  it('list row with event null shows "ประเมินทั่วไป"', () => {
+    const item: Assessment = {
+      id: 'assess-null-event',
+      subjectUserId: 'user-ne',
+      subject: { displayName: 'ผู้เล่น ทั่วไป' },
+      event: null,
+      status: 'in_review',
+      latestGrade: null,
+      reviewsSubmitted: 1,
+      reviewsRequired: 2,
+      createdAt: '2026-10-07T10:00:00Z',
+    };
+
+    render(<AssessmentTable items={[item]} />);
+    expect(screen.getByText('ประเมินทั่วไป')).toBeInTheDocument();
+  });
+
+  it('subject name shown instead of "ไม่ระบุ" and displays club names when non-empty', () => {
+    const item: Assessment = {
+      id: 'assess-subject-club',
+      subjectUserId: 'user-sc',
+      subject: {
+        displayName: 'พงษ์ศักดิ์ ชัยชนะ',
+        clubNames: ['สโมสร กทม.', 'สโมสร สิงห์'],
+      },
+      status: 'submitted',
+      latestGrade: null,
+      reviewsSubmitted: 0,
+      reviewsRequired: 2,
+      createdAt: '2026-10-07T10:00:00Z',
+    };
+
+    render(<AssessmentTable items={[item]} />);
+    expect(screen.getByText('พงษ์ศักดิ์ ชัยชนะ')).toBeInTheDocument();
+    expect(screen.getByText('สโมสร กทม., สโมสร สิงห์')).toBeInTheDocument();
+    expect(screen.queryByText('ไม่ระบุ')).toBeNull();
+  });
+
+  it('renders tournament name and discipline in Thai when event is provided', () => {
+    const item: Assessment = {
+      id: 'assess-with-event',
+      subjectUserId: 'user-we',
+      subject: { displayName: 'วิภาวี สดใส' },
+      event: {
+        tournamentName: 'BluLens Masters 2026',
+        discipline: 'MD',
+      },
+      status: 'in_review',
+      latestGrade: null,
+      reviewsSubmitted: 1,
+      reviewsRequired: 2,
+      createdAt: '2026-10-07T10:00:00Z',
+    };
+
+    render(<AssessmentTable items={[item]} />);
+    expect(screen.getByText('BluLens Masters 2026 · ชายคู่')).toBeInTheDocument();
   });
 });
