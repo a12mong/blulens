@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { resolveMatchFormat, type MatchFormat } from '@blulens/shared';
 
 export interface EntryRef {
   entryId: string;
@@ -103,6 +104,14 @@ export class MatchesService {
       });
     }
 
+    const groupFormat = resolveMatchFormat(event.format, 'group');
+    const knockoutFormat = resolveMatchFormat(event.format, 'knockout');
+    const formats: Record<string, MatchFormat> = {
+      group: groupFormat,
+      knockout: knockoutFormat,
+      third_place: knockoutFormat,
+    };
+
     return matches.map((m) => ({
       id: m.id,
       stage: m.stage,
@@ -122,6 +131,7 @@ export class MatchesService {
       confirmedBy: m.confirmedBy ?? null,
       confirmedAt: m.confirmedAt ? m.confirmedAt.toISOString() : null,
       flags: m.flags ?? [],
+      format: formats[m.stage] ?? knockoutFormat,
     }));
   }
 }
