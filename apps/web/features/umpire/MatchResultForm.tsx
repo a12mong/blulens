@@ -1,11 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { ApiRequestError } from '@/lib/api/client';
 import { thaiError } from '@/lib/errors';
 import { useReportResult, type Match } from './api';
 import { GameScoreStepper } from './GameScoreStepper';
 import { MatchFormatBadge } from './MatchFormatBadge';
 import { validateMatch, type Game, type MatchFormat } from './scoreRules';
+import { formatCourtName } from './UmpireMatchCard';
+import { useResultDraft } from './useResultDraft';
 
 export type MatchResultFormProps = {
   match: Match;
@@ -18,14 +22,19 @@ export function MatchResultForm({
   format,
   onReported,
 }: MatchResultFormProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const mutation = useReportResult(match.id ?? '');
+  const { draft, saveDraft, clearDraft } = useResultDraft(match.id ?? '');
 
   const [games, setGames] = useState<Game[]>(() => {
     const list: Game[] = [];
     for (let i = 0; i < format.games; i++) {
+      const draftGame = draft?.games?.[i];
+      const matchGame = match.games?.[i];
       list.push({
-        a: match.games?.[i]?.a ?? 0,
-        b: match.games?.[i]?.b ?? 0,
+        a: draftGame?.a ?? matchGame?.a ?? 0,
+        b: draftGame?.b ?? matchGame?.b ?? 0,
       });
     }
     return list;
@@ -48,38 +57,63 @@ export function MatchResultForm({
 
   let totalA = 0;
   let totalB = 0;
+  let gamesA = 0;
+  let gamesB = 0;
   for (let i = 0; i < visibleCount; i++) {
     totalA += games[i].a;
     totalB += games[i].b;
+    if (games[i].a > games[i].b) gamesA++;
+    else if (games[i].b > games[i].a) gamesB++;
   }
 
-  let summaryText = '';
+  let summaryPrimary = '';
+  let summarySecondary = '';
   let winnerDisplayName = '';
   if (validation.ok) {
     if (validation.winner === 'a') {
-      const diff = totalA - totalB;
       winnerDisplayName = nameA;
-      summaryText = `ผู้ชนะ: ${nameA}${diff > 0 ? ` (ผลต่าง +${diff})` : ''}`;
+      summaryPrimary = `ผู้ชนะ: ${nameA} (ชนะ ${gamesA}–${gamesB} เกม)`;
+      summarySecondary = `แต้มรวม ${totalA}–${totalB}`;
     } else if (validation.winner === 'b') {
-      const diff = totalB - totalA;
       winnerDisplayName = nameB;
-      summaryText = `ผู้ชนะ: ${nameB}${diff > 0 ? ` (ผลต่าง +${diff})` : ''}`;
+      summaryPrimary = `ผู้ชนะ: ${nameB} (ชนะ ${gamesB}–${gamesA} เกม)`;
+      summarySecondary = `แต้มรวม ${totalB}–${totalA}`;
     } else if (validation.winner === 'draw') {
       winnerDisplayName = 'เสมอ';
-      summaryText = 'เสมอ (ผลต่าง 0)';
+      summaryPrimary = `เสมอ ${gamesA}–${gamesB} เกม`;
+      summarySecondary = `แต้มรวม ${totalA}–${totalB}`;
     }
   }
 
+  const handleGameChange = (idx: number, nextGame: Game) => {
+    const updated = [...games];
+    updated[idx] = nextGame;
+    setGames(updated);
+    saveDraft({ games: updated, outcome: 'played' });
+  };
+
   const handleConfirmSubmit = () => {
+    const payloadGames = games.slice(0, visibleCount);
     mutation.mutate(
       {
         outcome: 'played',
-        games: games.slice(0, visibleCount),
+        games: payloadGames,
       },
       {
         onSuccess: (updated) => {
+          clearDraft();
           setConfirmOpen(false);
           onReported?.(updated);
+        },
+        onError: (err) => {
+          const apiErr = err as ApiRequestError;
+          if (apiErr?.status === 401) {
+            setConfirmOpen(false);
+            const currentPath =
+              pathname ||
+              (typeof window !== 'undefined' ? window.location.pathname : `/umpire/matches/${match.id}`);
+            router.push(`/login?next=${encodeURIComponent(currentPath)}`);
+          }
         },
       },
     );
@@ -90,8 +124,19 @@ export function MatchResultForm({
       { outcome },
       {
         onSuccess: (updated) => {
+          clearDraft();
           setWalkoverOpen(false);
           onReported?.(updated);
+        },
+        onError: (err) => {
+          const apiErr = err as ApiRequestError;
+          if (apiErr?.status === 401) {
+            setWalkoverOpen(false);
+            const currentPath =
+              pathname ||
+              (typeof window !== 'undefined' ? window.location.pathname : `/umpire/matches/${match.id}`);
+            router.push(`/login?next=${encodeURIComponent(currentPath)}`);
+          }
         },
       },
     );
@@ -103,7 +148,7 @@ export function MatchResultForm({
       <div className="flex flex-col gap-3 p-4 rounded-xl border border-border bg-card text-card-foreground">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {match.court ? <span>สนาม {match.court}</span> : null}
+            {match.court ? <span>{formatCourtName(match.court)}</span> : null}
             {match.court && (match.stage || match.round) ? <span>·</span> : null}
             {match.stage === 'group' ? <span>รอบกลุ่ม</span> : null}
             {match.stage === 'knockout' ? <span>รอบน็อคเอาท์</span> : null}
@@ -159,11 +204,7 @@ export function MatchResultForm({
             key={idx}
             index={idx}
             value={g}
-            onChange={(nextGame) => {
-              const updated = [...games];
-              updated[idx] = nextGame;
-              setGames(updated);
-            }}
+            onChange={(nextGame) => handleGameChange(idx, nextGame)}
             error={validation.errors[idx]}
             disabled={isConfirmed || mutation.isPending}
           />
@@ -174,9 +215,14 @@ export function MatchResultForm({
       {validation.ok ? (
         <div
           data-testid="result-summary"
-          className="p-4 rounded-xl border border-border bg-card text-center font-semibold text-foreground"
+          className="p-4 rounded-xl border border-border bg-card text-center font-semibold text-foreground flex flex-col gap-1"
         >
-          {summaryText}
+          <div>{summaryPrimary}</div>
+          {summarySecondary ? (
+            <div className="text-sm font-normal text-muted-foreground">
+              {summarySecondary}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -212,7 +258,7 @@ export function MatchResultForm({
       ) : null}
 
       {/* Mutation error */}
-      {mutation.error ? (
+      {mutation.error && (mutation.error as ApiRequestError)?.status !== 401 ? (
         <p
           role="alert"
           data-testid="result-error"
@@ -237,7 +283,7 @@ export function MatchResultForm({
               ผลจะถูกส่งเข้าสู่ระบบในสถานะรอยืนยันโดยคณะกรรมการ
             </p>
 
-            {mutation.error ? (
+            {mutation.error && (mutation.error as ApiRequestError)?.status !== 401 ? (
               <p role="alert" className="text-xs text-destructive">
                 {thaiError(mutation.error)}
               </p>
@@ -281,7 +327,7 @@ export function MatchResultForm({
               ระบุฝ่ายที่ไม่มาแข่งเพื่อปรับแพ้แบบชนะผ่าน
             </p>
 
-            {mutation.error ? (
+            {mutation.error && (mutation.error as ApiRequestError)?.status !== 401 ? (
               <p role="alert" className="text-xs text-destructive">
                 {thaiError(mutation.error)}
               </p>
