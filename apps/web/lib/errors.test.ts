@@ -45,6 +45,11 @@ describe('thaiError', () => {
       'NOT_FOUND',
       'REVIEW_ALREADY_SUBMITTED',
       'ASSIGNMENT_EXPIRED',
+      'MATCH_SCORE_INVALID',
+      'STAGE_CONFIRMED',
+      'MATCH_ALREADY_CONFIRMED',
+      'UMPIRE_NOT_ASSIGNED',
+      'UMPIRE_OWN_MATCH',
     ];
 
     codes.forEach((code) => {
