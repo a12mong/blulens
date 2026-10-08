@@ -444,30 +444,12 @@ export function rankBestThirds(
     if (group.entryIds.length > minSize) {
       const lastRow = standings[standings.length - 1];
       if (lastRow) {
-        const filterMatches = Array.from(group.matches).filter(
+        const restMatches = Array.from(group.matches).filter(
           (m) =>
-            countedStatuses.has(m.status) &&
-            ((m.a === thirdRow.entryId && m.b === lastRow.entryId) ||
-              (m.a === lastRow.entryId && m.b === thirdRow.entryId)),
+            !(m.a === thirdRow.entryId && m.b === lastRow.entryId) &&
+            !(m.a === lastRow.entryId && m.b === thirdRow.entryId)
         );
-
-        for (const match of filterMatches) {
-          let thirdPoints = 0;
-          let lastPoints = 0;
-
-          for (const [aPoints, bPoints] of match.games) {
-            if (match.a === thirdRow.entryId) {
-              thirdPoints += aPoints;
-              lastPoints += bPoints;
-            } else {
-              thirdPoints += bPoints;
-              lastPoints += aPoints;
-            }
-          }
-
-          thirdStats.pointsFor -= thirdPoints;
-          thirdStats.pointsAgainst -= lastPoints;
-        }
+        thirdStats = { entryId: thirdRow.entryId, ...computeThirdStats(thirdRow.entryId, restMatches, pointsCfg) };
       }
     }
 
@@ -558,4 +540,47 @@ function applyLotToThirds(entries: ThirdRow[], seed: string): ThirdRow[] {
   return shuffled
     .map((id) => entries.find((e) => e.entryId === id))
     .filter((e) => e !== undefined) as ThirdRow[];
+}
+
+function computeThirdStats(
+  entryId: string,
+  matches: readonly GroupMatch[],
+  pointsCfg: { win: number; draw: number; loss: number }
+) {
+  let points = 0;
+  let pointsFor = 0;
+  let pointsAgainst = 0;
+
+  for (const match of matches) {
+    if (match.status !== 'confirmed' && match.status !== 'walkover') continue;
+    if (match.a !== entryId && match.b !== entryId) continue;
+
+    let aGamesWon = 0;
+    let bGamesWon = 0;
+    let aTotal = 0;
+    let bTotal = 0;
+
+    for (const [aPoints, bPoints] of match.games) {
+      aTotal += aPoints;
+      bTotal += bPoints;
+      if (aPoints > bPoints) aGamesWon += 1;
+      else if (bPoints > aPoints) bGamesWon += 1;
+    }
+
+    if (match.a === entryId) {
+      pointsFor += aTotal;
+      pointsAgainst += bTotal;
+      if (aGamesWon > bGamesWon) points += pointsCfg.win;
+      else if (bGamesWon > aGamesWon) points += pointsCfg.loss;
+      else points += pointsCfg.draw;
+    } else {
+      pointsFor += bTotal;
+      pointsAgainst += aTotal;
+      if (bGamesWon > aGamesWon) points += pointsCfg.win;
+      else if (aGamesWon > bGamesWon) points += pointsCfg.loss;
+      else points += pointsCfg.draw;
+    }
+  }
+
+  return { points, pointsFor, pointsAgainst };
 }
