@@ -248,4 +248,57 @@ describe('AssessmentDecisions', () => {
     fireEvent.click(screen.getByTestId('decide-confirm'));
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
+
+  it('shows the grade for an overridden row and the result summary in the approve dialog', () => {
+    const disputedDetail: AssessmentDetail = {
+      ...baseDetail,
+      status: 'disputed',
+      latestResult: {
+        ...baseDetail.latestResult!,
+        grade: {
+          score: 4.0,
+          margin: 3.75,
+          lower: 'RK1',
+          upper: 'S',
+          center: 'BG2',
+          kind: 'wide',
+          label: 'RK1–S',
+        },
+        flags: ['HIGH_DISAGREEMENT'],
+      },
+    };
+
+    render(<AssessmentDecisions detail={disputedDetail} />);
+    fireEvent.click(screen.getByTestId('decide-approve'));
+
+    const summary = screen.getByTestId('approve-summary');
+    expect(summary).toBeInTheDocument();
+    expect(summary).toHaveTextContent('RK1–S · 4.00 ± 3.75 · เห็นต่างกันมาก');
+  });
+
+  it('renders approve-summary with fallback when flags is empty for pending_approval', () => {
+    const pendingDetail: AssessmentDetail = {
+      ...baseDetail,
+      status: 'pending_approval',
+      latestResult: {
+        ...baseDetail.latestResult!,
+        grade: {
+          score: 7.5,
+          margin: 0.5,
+          lower: 'S',
+          upper: 'S+',
+          center: 'S',
+          kind: 'exact',
+          label: 'S/S+',
+        },
+        flags: [],
+      },
+    };
+
+    render(<AssessmentDecisions detail={pendingDetail} />);
+    fireEvent.click(screen.getByTestId('decide-approve'));
+
+    const summary = screen.getByTestId('approve-summary');
+    expect(summary).toHaveTextContent('S/S+ · 7.50 ± 0.50 · รออนุมัติ');
+  });
 });
