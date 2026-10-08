@@ -1,13 +1,21 @@
 export type Role = 'Admin' | 'Committee' | 'Umpire' | 'Reviewer' | 'Member';
 export type Area = 'public' | 'member' | 'reviewer' | 'umpire' | 'committee' | 'admin';
 
+export const ROLE_LABELS: Record<Role, string> = {
+  Admin: 'ผู้ดูแลระบบ',
+  Committee: 'คณะกรรมการ',
+  Umpire: 'กรรมการสนาม',
+  Reviewer: 'ผู้ตรวจประเมิน',
+  Member: 'สมาชิก',
+};
+
 /** home path per area; Guest = no session */
 export const AREA_PATH: Record<Area, string> = {
   public: '/',
   member: '/me',
   reviewer: '/review',
   umpire: '/umpire',
-  committee: '/committee',
+  committee: '/committee/assessments',
   admin: '/admin',
 };
 
