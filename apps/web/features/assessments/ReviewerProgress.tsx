@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { CheckIcon } from '@/components/ui/Icon';
 import type { components } from '@/lib/api/schema';
 
 export type AssignmentProgressRow = components['schemas']['AssignmentProgressRow'];
@@ -35,13 +36,28 @@ export function formatEventLabel(
 
 const STATE_CONFIG: Record<
   AssignmentProgressRow['state'],
-  { label: string; icon: string }
+  { label: string }
 > = {
-  open: { label: 'รอส่ง', icon: '⏳' },
-  submitted: { label: 'ส่งแล้ว', icon: '✓' },
-  expired: { label: 'หมดเวลา', icon: '✕' },
-  declined: { label: 'ปฏิเสธ', icon: '⊘' },
+  open: { label: 'รอส่ง' },
+  submitted: { label: 'ส่งแล้ว' },
+  expired: { label: 'หมดเวลา' },
+  declined: { label: 'ปฏิเสธ' },
 };
+
+function getStateIcon(state: AssignmentProgressRow['state']) {
+  switch (state) {
+    case 'submitted':
+      return <CheckIcon className="w-4 h-4" />;
+    case 'open':
+      return <span className="inline-block text-primary">⏳</span>;
+    case 'expired':
+      return <span className="inline-block text-destructive">✕</span>;
+    case 'declined':
+      return <span className="inline-block text-muted-foreground">⊘</span>;
+    default:
+      return <span className="inline-block text-muted-foreground">•</span>;
+  }
+}
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return '-';
@@ -88,7 +104,6 @@ export function ReviewerProgress({ assignments }: ReviewerProgressProps) {
               const config =
                 STATE_CONFIG[assignment.state] ?? {
                   label: assignment.state,
-                  icon: '•',
                 };
               return (
                 <tr
@@ -101,7 +116,7 @@ export function ReviewerProgress({ assignments }: ReviewerProgressProps) {
                   </td>
                   <td className="p-3 text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5">
-                      <span aria-hidden="true">{config.icon}</span>
+                      <span aria-hidden="true">{getStateIcon(assignment.state)}</span>
                       <span>{config.label}</span>
                     </span>
                   </td>
