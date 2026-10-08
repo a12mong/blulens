@@ -51,6 +51,13 @@ const MESSAGES: Record<string, string> = {
   UMPIRE_NOT_ELIGIBLE: 'กรรมการนี้ไม่มีสิทธิ์ในรายการนี้',
   UMPIRE_IS_PLAYER: 'กรรมการเป็นผู้เล่นในแมตช์นี้',
   MATCH_LOCKED: 'แมตช์นี้ล็อกแล้ว',
+  CLIP_LIMIT_REACHED: 'อัปโหลดได้สูงสุด 3 คลิป',
+  ASSESSMENT_NOT_DRAFT: 'ส่งคำขอแล้ว เพิ่มคลิปไม่ได้',
+  CLIP_TOO_LONG: 'คลิปยาวเกิน 5 นาที',
+  CLIP_NOT_UPLOADED: 'ยังอัปโหลดไม่เสร็จ ลองใหม่อีกครั้ง',
+  CLIP_MISMATCH: 'ไฟล์ที่อัปโหลดไม่ตรงกับที่เลือก ลองใหม่',
+  CLIP_REJECTED: 'คลิปนี้ใช้ไม่ได้ กรุณาเลือกไฟล์ใหม่',
+  CLIP_NOT_FOUND: 'ไม่พบคลิป',
 };
 
 function hasThai(text: string): boolean {
