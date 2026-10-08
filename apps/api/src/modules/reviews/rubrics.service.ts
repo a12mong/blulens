@@ -70,7 +70,7 @@ export class RubricsService {
     let maxN = 1;
     for (const r of draftRubrics) {
       const match = r.methodVersion.match(/-r(\d+)$/);
-      if (match) {
+      if (match && match[1]) {
         const n = parseInt(match[1], 10);
         if (n > maxN) maxN = n;
       }
@@ -79,14 +79,13 @@ export class RubricsService {
     const newMethodVersion = `${baseName}-r${maxN + 1}`;
 
     // Create draft in transaction
-    let created: any;
     try {
-      created = await this.prisma.$transaction(async (tx) => {
-        const draft = await tx.rubric.create({
+      const draft = await this.prisma.$transaction(async (tx) => {
+        const newDraft = await tx.rubric.create({
           data: {
             methodVersion: newMethodVersion,
-            criteria: activeRubric.criteria,
-            params: activeRubric.params,
+            criteria: activeRubric.criteria as Prisma.InputJsonValue,
+            params: activeRubric.params as Prisma.InputJsonValue,
             active: false,
             createdBy: user.id,
           },
@@ -97,29 +96,21 @@ export class RubricsService {
             actorId: user.id,
             action: 'rubric.draft.create',
             entityType: 'rubric',
-            entityId: draft.id,
+            entityId: newDraft.id,
             after: { methodVersion: newMethodVersion },
           },
           tx,
         );
 
-        return draft;
+        return newDraft;
       });
+
+      return this.toRubric(draft);
     } catch (error: any) {
-      if (error?.code === 'P2002' && error?.meta?.target?.includes('rubrics_one_draft')) {
+      if (error?.code === 'P2002') {
         throw new ApiException(HttpStatus.CONFLICT, 'RUBRIC_DRAFT_EXISTS', 'มีแบบฟอร์มร่างอยู่แล้ว');
       }
       throw error;
     }
-
-    const existingDraft = await this.prisma.rubric.findFirst({
-      where: { active: false, activatedAt: null },
-    });
-
-    if (existingDraft && existingDraft.id !== created.id) {
-      throw new ApiException(HttpStatus.CONFLICT, 'RUBRIC_DRAFT_EXISTS', 'มีแบบฟอร์มร่างอยู่แล้ว');
-    }
-
-    return this.toRubric(created);
   }
 }
