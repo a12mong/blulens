@@ -19,6 +19,7 @@ import { AssessmentsModule } from './modules/assessments/assessments.module';
 import { MatchesModule } from './modules/matches/matches.module';
 import { RaterStatsModule } from './modules/rater-stats/rater-stats.module';
 import { DrawsModule } from './modules/draws/draws.module';
+import { CalibrationModule } from './modules/calibration/calibration.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { DrawsModule } from './modules/draws/draws.module';
     MatchesModule,
     RaterStatsModule,
     DrawsModule,
+    CalibrationModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
