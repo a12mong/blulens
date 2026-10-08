@@ -43,31 +43,20 @@ test.describe.serial('slice 3 umpire: UI workflow', () => {
     sql(
       `insert into matches (id,event_id,draw_id,stage,group_id,round,match_no,court,top_entry_id,bottom_entry_id,status,result_version) ` +
         `select gen_random_uuid(),event_id,draw_id,stage,group_id,round,(select max(match_no)+1 from matches x where x.draw_id=m.draw_id),court,top_entry_id,bottom_entry_id,'scheduled',0 ` +
-        `from matches m where stage='group' and status='scheduled' and umpire_id is null order by match_no limit 1 returning id`,
+        `from matches m where stage='group' and status='scheduled' and umpire_id is null and event_id='${eventId}' order by match_no limit 1 returning id`,
     );
 
   test.beforeAll(async ({ browser }) => {
     if (!pw) throw new Error('SEED_DEMO_PASSWORD must be set');
 
     const base = sql(
-      `select id||'|'||event_id||'|'||top_entry_id from matches where stage='group' and status='scheduled' order by match_no limit 1`,
+      `select m.id||'|'||m.event_id||'|'||m.top_entry_id from matches m join events e on e.id = m.event_id join tournaments t on t.id = e.tournament_id where t.name = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3' and m.stage = 'group' and m.status = 'scheduled' and m.court is not null order by m.match_no limit 1`,
     );
     expect(base, 'seeded scheduled group match missing in blulens_e2e').toContain('|');
     const [, ev, top] = base.split('|');
     eventId = ev;
 
-    // Ensure umpire1@blulens.local exists with role Umpire and event_umpires row
-    for (const n of [1, 2]) {
-      sql(
-        `insert into users (id,email,password_hash,display_name,status,created_at,updated_at) ` +
-          `select gen_random_uuid(),'umpire${n}@blulens.local',password_hash,'Umpire ${n} (e2e)','active',now(),now() ` +
-          `from users where email='member1@blulens.local' on conflict (email) do nothing`,
-      );
-      sql(`insert into user_roles (user_id,role,created_at) select id,'Umpire',now() from users where email='umpire${n}@blulens.local' on conflict do nothing`);
-    }
-    sql(
-      `insert into event_umpires (event_id,user_id,courts,created_at) select '${eventId}',id,'{}',now() from users where email='umpire1@blulens.local' on conflict do nothing`,
-    );
+    // umpire1@blulens.local is seeded by SEED_DEMO=1 (bl-25-6) with Umpire role and event_umpires row.
 
     // Player of top_entry also given Umpire role for own-match test
     playerEmail = sql(`select u.email from entry_players ep join users u on u.id=ep.user_id where ep.entry_id='${top}' limit 1`);
