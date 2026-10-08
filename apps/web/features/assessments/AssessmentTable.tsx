@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { AssessmentStatusBadge } from './AssessmentStatusBadge';
 import { GradeBand, type GradeKey } from '@/components/ui/GradeBand';
+import { formatEventLabel } from './ReviewerProgress';
 import type { components } from '@/lib/api/schema';
 
 type AssessmentStatus = components['schemas']['AssessmentStatus'];
@@ -11,7 +12,16 @@ type GradeView = components['schemas']['GradeView'];
 export interface Assessment {
   id: string;
   subjectUserId: string;
-  subject?: { displayName?: string } | null;
+  subject?: {
+    userId?: string;
+    displayName: string;
+    clubNames?: string[];
+  } | null;
+  event?: {
+    id?: string;
+    discipline?: 'MS' | 'WS' | 'MD' | 'WD' | 'XD' | string;
+    tournamentName?: string;
+  } | null;
   status: AssessmentStatus;
   latestGrade?: GradeView | null;
   latestResult?: {
@@ -100,6 +110,7 @@ export function AssessmentTable({
           <thead className="bg-muted">
             <tr>
               <th className="px-4 py-2 text-left font-medium">ผู้ถูกประเมิน</th>
+              <th className="px-4 py-2 text-left font-medium">อีเวนต์</th>
               <th className="px-4 py-2 text-left font-medium">สถานะ</th>
               <th className="px-4 py-2 text-left font-medium">รีวิว</th>
               <th className="px-4 py-2 text-left font-medium">ผล</th>
@@ -115,7 +126,21 @@ export function AssessmentTable({
                 className="border-t border-border hover:bg-muted/50"
               >
                 <td className="px-4 py-2">
-                  {item.subject?.displayName ?? 'ไม่ระบุ'}
+                  <div className="flex flex-col">
+                    <span className="font-medium text-foreground">
+                      {item.subject?.displayName?.trim()
+                        ? item.subject.displayName
+                        : 'ไม่ระบุ'}
+                    </span>
+                    {item.subject?.clubNames && item.subject.clubNames.length > 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        {item.subject.clubNames.join(', ')}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-4 py-2 text-muted-foreground" data-testid="assessment-event">
+                  {formatEventLabel(item.event)}
                 </td>
                 <td className="px-4 py-2">
                   <AssessmentStatusBadge status={item.status} />
