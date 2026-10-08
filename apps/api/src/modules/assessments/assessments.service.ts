@@ -1,8 +1,10 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { AssessmentStatus, Prisma } from '@prisma/client';
+import { GRADE_KEYS } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
+import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
 
 const DEFAULT_MIN_REVIEWERS = 2; // system default (G3'); becomes a system setting later
@@ -78,6 +80,158 @@ export class AssessmentsService {
     };
   }
 
+  async getDetail(assessmentId: string, actor: AuthUser) {
+    const isStaff = actor.roles.some((r) => r === 'Committee' || r === 'Admin');
+
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      include: {
+        clips: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!assessment) {
+      throw ApiException.notFound('ไม่พบคำขอประเมิน', 'ASSESSMENT_NOT_FOUND');
+    }
+
+    if (!isStaff && assessment.subjectUserId !== actor.id) {
+      throw ApiException.notFound('ไม่พบคำขอประเมิน', 'ASSESSMENT_NOT_FOUND');
+    }
+
+    const reviewsSubmitted = await this.prisma.reviewAssignment.count({
+      where: {
+        assessmentId,
+        state: 'submitted',
+      },
+    });
+
+    const clips = assessment.clips.map((c) => ({
+      id: c.id,
+      status: c.status,
+      viewUrl: this.computeViewUrl(c.status, c.objectKey),
+      durationSec: c.durationSec,
+    }));
+
+    const latestResultRow = await this.prisma.assessmentResult.findFirst({
+      where: { assessmentId },
+      orderBy: { version: 'desc' },
+    });
+
+    let latestResult = null;
+    let reviewerRows: any[] = [];
+
+    if (latestResultRow) {
+      latestResult = {
+        version: latestResultRow.version,
+        source: latestResultRow.source,
+        status: latestResultRow.status,
+        grade: toGradeView(latestResultRow),
+        nRaters: latestResultRow.nRaters,
+        nExcluded: latestResultRow.nExcluded,
+        spread: latestResultRow.spread !== null ? Number(latestResultRow.spread) : null,
+        flags: latestResultRow.flags,
+        methodVersion: latestResultRow.methodVersion,
+        reason: latestResultRow.reason,
+        computedAt: latestResultRow.computedAt.toISOString(),
+        computedBy: latestResultRow.computedBy,
+      };
+
+      if (isStaff) {
+        const inputs = (latestResultRow.inputs as any) ?? {};
+        const reviewIds: string[] = Array.isArray(inputs.reviewIds) ? inputs.reviewIds : [];
+        const scores: (number | null)[] = Array.isArray(inputs.scores) ? inputs.scores : [];
+        const excludedIndexes: number[] = Array.isArray(inputs.excludedIndexes)
+          ? inputs.excludedIndexes
+          : [];
+
+        if (reviewIds.length > 0) {
+          const reviews = await this.prisma.review.findMany({
+            where: { id: { in: reviewIds } },
+            include: {
+              assignment: {
+                include: {
+                  reviewer: {
+                    select: { id: true, displayName: true },
+                  },
+                },
+              },
+              scores: {
+                select: { criterion: true, gradeIndex: true },
+              },
+            },
+          });
+
+          let rubricCriteriaKeys: string[] = [];
+          if (assessment.rubricId) {
+            const rubric = await this.prisma.rubric.findUnique({
+              where: { id: assessment.rubricId },
+            });
+            if (rubric && Array.isArray(rubric.criteria)) {
+              rubricCriteriaKeys = (rubric.criteria as any[]).map((c) => c.key);
+            }
+          }
+
+          const reviewMap = new Map(reviews.map((r) => [r.id, r]));
+
+          reviewerRows = reviewIds.map((reviewId, i) => {
+            const r = reviewMap.get(reviewId);
+            const reviewerId = r?.assignment?.reviewer?.id ?? '';
+            const reviewerName = r?.assignment?.reviewer?.displayName ?? '';
+            const criteria = (r?.scores ?? []).map((s) => ({
+              criterion: s.criterion,
+              gradeKey:
+                s.gradeIndex !== null && s.gradeIndex !== undefined
+                  ? (GRADE_KEYS[s.gradeIndex] ?? null)
+                  : null,
+            }));
+
+            if (rubricCriteriaKeys.length > 0) {
+              criteria.sort((a, b) => {
+                const ia = rubricCriteriaKeys.indexOf(a.criterion);
+                const ib = rubricCriteriaKeys.indexOf(b.criterion);
+                return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+              });
+            }
+
+            return {
+              reviewerId,
+              reviewerName,
+              overall:
+                typeof scores[i] === 'number' ? scores[i] : r?.overall ? Number(r.overall) : null,
+              excluded: excludedIndexes.includes(i),
+              robustZ: null,
+              reviewerBias: null,
+              pairKappa: null,
+              criteria,
+            };
+          });
+        }
+      }
+    }
+
+    return {
+      ...this.mapAssessment(assessment, reviewsSubmitted, assessment.reviewsRequired),
+      clips,
+      latestResult,
+      reviewerRows,
+    };
+  }
+
+  private computeViewUrl(status: string, objectKey: string): string | null {
+    if (status !== 'uploaded') {
+      return null;
+    }
+    if (
+      objectKey.startsWith('/') ||
+      objectKey.startsWith('http://') ||
+      objectKey.startsWith('https://')
+    ) {
+      return objectKey;
+    }
+    return null;
+  }
   async create(
     actor: AuthUser,
     body: {

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, HttpCode, ParseUUIDPipe } from '@nestjs/common';
 import { AssessmentStatus } from '@prisma/client';
 import { Roles, CurrentUser } from '../../common/auth/decorators';
 import { createZodDto } from '../../common/zod/zod';
@@ -20,6 +20,8 @@ const ListAssessmentsQuerySchema = z.object({
 });
 
 export class ListAssessmentsQueryDto extends createZodDto(ListAssessmentsQuerySchema) {}
+
+const uuid = new ParseUUIDPipe({ version: '4' });
 
 const CreateAssessmentSchema = z.object({
   note: z.string().max(1000).optional(),
@@ -47,6 +49,15 @@ export class AssessmentsController {
   @Roles('Member', 'Committee', 'Admin')
   async list(@Query() query: ListAssessmentsQueryDto, @CurrentUser() user: AuthUser) {
     return this.assessmentsService.list(user, query);
+  }
+
+  @Get(':assessmentId')
+  @Roles('Member', 'Committee', 'Admin')
+  async getDetail(
+    @Param('assessmentId', uuid) assessmentId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.getDetail(assessmentId, user);
   }
 
   @Post()
