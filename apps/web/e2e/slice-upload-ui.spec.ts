@@ -1,6 +1,6 @@
 import { test, expect, type APIResponse } from '@playwright/test';
 import { join } from 'path';
-import { MEMBER_AUTH_FILE } from './selectors';
+import { COMMITTEE_AUTH_FILE, MEMBER_AUTH_FILE } from './selectors';
 
 /**
  * Member upload UI (bl-36, af1e6c1): /me -> "myresult-new" -> /me/assessments/new: note, start, pick a real mp4 (sample.mp4),
@@ -61,5 +61,34 @@ test.describe.serial('member upload UI', () => {
     expect(a.status).not.toBe('draft');
     expect((a.clips ?? []).filter((c: any) => c.status === 'uploaded').length).toBe(1);
     expect(a.clips[0].durationSec).toBeGreaterThan(0);
+  });
+
+  test('UP4 three clips (the 4th slot disappears), submit, and the assessment shows in the Committee queue', async ({ page, browser }) => {
+    await page.goto('/me/assessments/new');
+    const created = page.waitForResponse((r) => r.url().endsWith('/assessments') && r.request().method() === 'POST');
+    await page.getByTestId('request-note').fill(`e2e three clips ${Date.now()}`);
+    await page.getByTestId('request-start').click({ timeout: 30000 });
+    const id = (await data(await created)).id as string;
+    for (let n = 1; n <= 3; n++) {
+      const completed = page.waitForResponse((r) => /\/clips\/[^/]+\/complete/.test(r.url()) && r.request().method() === 'POST');
+      await page.getByTestId('clip-file').setInputFiles(SAMPLE);
+      expect((await completed).status()).toBe(200);
+      await expect(page.getByTestId('request-slot')).toHaveCount(n, { timeout: 30000 });
+    }
+    await expect(page.getByTestId('clip-file'), 'no 4th upload slot after 3 clips').toHaveCount(0);
+    const submitted = page.waitForResponse((r) => r.url().includes(`/assessments/${id}/submit`) && r.request().method() === 'POST');
+    await page.getByTestId('request-submit').click();
+    expect((await submitted).status()).toBe(200);
+    await expect(page.getByTestId('request-done')).toBeVisible({ timeout: 20000 });
+
+    const ctx = await browser.newContext({ storageState: COMMITTEE_AUTH_FILE, baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
+    const cp = await ctx.newPage();
+    await cp.goto('/committee/assessments');
+    const row = cp.locator(`[data-testid="assessment-row"][data-assessment-id="${id}"]`);
+    await expect(row, 'the new request is in the Committee queue').toBeVisible({ timeout: 30000 });
+    await expect(row).not.toContainText('ไม่ระบุ');
+    await ctx.close();
+    const a = await data(await page.request.get(API_BASE + `assessments/${id}`));
+    expect((a.clips ?? []).filter((c: any) => c.status === 'uploaded').length).toBe(3);
   });
 });
