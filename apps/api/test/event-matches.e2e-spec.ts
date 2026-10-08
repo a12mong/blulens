@@ -28,6 +28,7 @@ describe('event-matches (bl-25-1)', () => {
   let reportedMatchId: string;
   let scheduledMatchId: string;
   let previewMatchId: string;
+  let customEventId: string;
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -281,6 +282,82 @@ describe('event-matches (bl-25-1)', () => {
     });
     draftEventId = draftEvent.id;
     eventIds.push(draftEventId);
+
+    // 10. Groups_knockout event with custom groupMatchFormat
+    const customEvent = await prisma.event.create({
+      data: {
+        tournamentId: openTournament.id,
+        discipline: 'MD',
+        gradeMinIndex: 6,
+        gradeMaxIndex: 10,
+        minReviewers: 2,
+        format: {
+          type: 'groups_knockout',
+          groupSize: 4,
+          advancePerGroup: 2,
+          groupMatchFormat: {
+            preset: 'custom',
+            mode: 'fixed_games',
+            games: 2,
+            pointsPerGame: 21,
+            deuce: false,
+            cap: null,
+            drawAllowed: true,
+          },
+        },
+      },
+    });
+    customEventId = customEvent.id;
+    eventIds.push(customEventId);
+
+    const customDraw = await prisma.draw.create({
+      data: {
+        eventId: customEventId,
+        kind: 'group',
+        version: 1,
+        status: 'published',
+        seed: 'seed-custom',
+        seedSource: 'server',
+        inputHash: '3'.repeat(64),
+        snapshot: {},
+        rulesetVersion: '1.0',
+        prngId: 'pcg32',
+        size: 2,
+        seedsCount: 0,
+        createdBy: adminUser.id,
+      },
+    });
+
+    const customGroup = await prisma.group.create({
+      data: {
+        eventId: customEventId,
+        drawId: customDraw.id,
+        label: 'A',
+      },
+    });
+
+    await prisma.match.create({
+      data: {
+        eventId: customEventId,
+        drawId: customDraw.id,
+        groupId: customGroup.id,
+        stage: 'group',
+        round: 1,
+        matchNo: 1,
+        status: 'scheduled',
+      },
+    });
+
+    await prisma.match.create({
+      data: {
+        eventId: customEventId,
+        drawId: customDraw.id,
+        stage: 'knockout',
+        round: 1,
+        matchNo: 2,
+        status: 'scheduled',
+      },
+    });
   });
 
   afterAll(async () => {
@@ -325,6 +402,15 @@ describe('event-matches (bl-25-1)', () => {
     expect(first.result).toBe('a_win');
     expect(first.confirmedAt).toBe('2026-10-08T08:00:00.000Z');
     expect(first.flags).toEqual([]);
+    expect(first.format).toEqual({
+      preset: 'group_2x15',
+      mode: 'fixed_games',
+      games: 2,
+      pointsPerGame: 15,
+      deuce: false,
+      cap: null,
+      drawAllowed: true,
+    });
 
     expect(first.aEntry).toMatchObject({
       displayName: 'Entry One Name',
@@ -387,5 +473,52 @@ describe('event-matches (bl-25-1)', () => {
 
     expect(res.body.success).toBe(true);
     expect(res.body.data).toEqual([]);
+  });
+
+  it('event with no format -> matches carry group_2x15 preset (bl-25-1b)', async () => {
+    const res = await http().get(`/api/v1/events/${openEventId}/matches`).expect(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    for (const match of res.body.data) {
+      expect(match.format).toEqual({
+        preset: 'group_2x15',
+        mode: 'fixed_games',
+        games: 2,
+        pointsPerGame: 15,
+        deuce: false,
+        cap: null,
+        drawAllowed: true,
+      });
+    }
+  });
+
+  it('groups_knockout event with custom groupMatchFormat -> group matches carry it, knockout carries bo3_21 preset (bl-25-1b)', async () => {
+    const res = await http().get(`/api/v1/events/${customEventId}/matches`).expect(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(2);
+
+    const groupMatch = res.body.data.find((m: { stage: string }) => m.stage === 'group');
+    expect(groupMatch).toBeDefined();
+    expect(groupMatch.format).toEqual({
+      preset: 'custom',
+      mode: 'fixed_games',
+      games: 2,
+      pointsPerGame: 21,
+      deuce: false,
+      cap: null,
+      drawAllowed: true,
+    });
+
+    const knockoutMatch = res.body.data.find((m: { stage: string }) => m.stage === 'knockout');
+    expect(knockoutMatch).toBeDefined();
+    expect(knockoutMatch.format).toEqual({
+      preset: 'bo3_21',
+      mode: 'best_of',
+      games: 3,
+      pointsPerGame: 21,
+      deuce: true,
+      cap: 30,
+      drawAllowed: false,
+    });
   });
 });
