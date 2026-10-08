@@ -8,15 +8,18 @@ import {
   computeGroupStandings,
   eventFormatSchema,
   matchResultTransition,
+  rankBestThirds,
   resolveMatchFormat,
   validateMatchScore,
   walkoverGames,
+  type GroupInput,
   type GroupMatch,
   type MatchFlag,
   type MatchFormat,
   type ResultAction,
   type ResultActor,
   type ResultMatch,
+  type StandingRow,
 } from '@blulens/shared';
 
 export interface EntryRef {
@@ -186,6 +189,44 @@ export class MatchesService {
     };
   }
 
+  private parseGames(raw: unknown): [number, number][] {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item) => {
+      if (Array.isArray(item) && item.length >= 2) {
+        return [Number(item[0]), Number(item[1])] as [number, number];
+      }
+      if (item && typeof item === 'object') {
+        const g = item as { a?: unknown; b?: unknown };
+        return [Number(g.a ?? 0), Number(g.b ?? 0)] as [number, number];
+      }
+      return [0, 0] as [number, number];
+    });
+  }
+
+  private computeGroupLiveRows(
+    group: {
+      members: Array<{ entryId: string }>;
+      matches: Array<{
+        topEntryId: string | null;
+        bottomEntryId: string | null;
+        status: string;
+        games: unknown;
+      }>;
+    },
+    pointsCfg: { win: number; draw: number; loss: number },
+    seed: string,
+  ): StandingRow[] {
+    const entryIds = group.members.map((m) => m.entryId);
+    const groupMatches: GroupMatch[] = group.matches.map((m) => ({
+      a: m.topEntryId ?? '',
+      b: m.bottomEntryId ?? '',
+      status: m.status as GroupMatch['status'],
+      games: this.parseGames(m.games),
+    }));
+
+    return computeGroupStandings(entryIds, groupMatches, pointsCfg, seed);
+  }
+
   async getEventMatches(eventId: string, query: EventMatchesQuery, user?: AuthUser) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
@@ -198,7 +239,7 @@ export class MatchesService {
 
     const where: Prisma.MatchWhereInput = {
       eventId,
-      draw: { status: 'published' },
+      draw: { status: { in: ['published', 'locked'] } },
       ...(query.status ? { status: query.status } : {}),
       ...(query.stage ? { stage: query.stage } : {}),
       ...(query.round !== undefined ? { round: query.round } : {}),
@@ -245,7 +286,8 @@ export class MatchesService {
     }
 
     const draw = await this.prisma.draw.findFirst({
-      where: { eventId, kind: 'group', status: 'published' },
+      where: { eventId, kind: 'group', status: { in: ['published', 'locked'] } },
+      orderBy: { version: 'desc' },
     });
 
     if (!draw) {
@@ -338,19 +380,7 @@ export class MatchesService {
         }
       } else {
         // Live calculation: compute live standings from matches
-        const entryIds = group.members.map((m) => m.entryId);
-        const groupMatches: GroupMatch[] = group.matches.map((m) => ({
-          a: m.topEntryId ?? '',
-          b: m.bottomEntryId ?? '',
-          status: m.status as GroupMatch['status'],
-          games: Array.isArray(m.games)
-            ? (m.games as Array<{ a: number; b: number }>).map(
-                (g) => [g.a, g.b] as [number, number],
-              )
-            : [],
-        }));
-
-        const liveRows = computeGroupStandings(entryIds, groupMatches, pointsCfg, draw.seed);
+        const liveRows = this.computeGroupLiveRows(group, pointsCfg, draw.seed);
 
         for (const row of liveRows) {
           let qualification: 'qualified' | 'best_third_contender' | 'out';
@@ -462,6 +492,263 @@ export class MatchesService {
     }));
   }
 
+  async confirmEventGroups(eventId: string, user: AuthUser): Promise<EventGroupStanding[]> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { tournament: { select: { status: true } } },
+    });
+
+    if (!event) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    const existingDraw = await this.prisma.draw.findFirst({
+      where: {
+        eventId,
+        kind: 'group',
+        status: { in: ['published', 'locked'] },
+      },
+      orderBy: { version: 'desc' },
+    });
+
+    if (!existingDraw) {
+      throw ApiException.conflict(
+        'NO_PUBLISHED_GROUP_DRAW',
+        'ยังไม่มีการเผยแพร่สายการแข่งขันรอบแบ่งกลุ่ม',
+      );
+    }
+
+    if (existingDraw.status === 'locked') {
+      throw ApiException.conflict(
+        'DRAW_ALREADY_LOCKED',
+        'ผลรอบแบ่งกลุ่มได้รับการยืนยันและล็อคแล้ว',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Lock the draw row FOR UPDATE
+      const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM draws WHERE id = ${existingDraw.id}::uuid FOR UPDATE
+      `;
+      if (lockedRows.length === 0) {
+        throw ApiException.conflict(
+          'NO_PUBLISHED_GROUP_DRAW',
+          'ยังไม่มีการเผยแพร่สายการแข่งขันรอบแบ่งกลุ่ม',
+        );
+      }
+
+      const draw = await tx.draw.findUnique({
+        where: { id: existingDraw.id },
+      });
+
+      if (!draw || draw.status !== 'published') {
+        if (draw?.status === 'locked') {
+          throw ApiException.conflict(
+            'DRAW_ALREADY_LOCKED',
+            'ผลรอบแบ่งกลุ่มได้รับการยืนยันและล็อคแล้ว',
+          );
+        }
+        throw ApiException.conflict(
+          'NO_PUBLISHED_GROUP_DRAW',
+          'ยังไม่มีการเผยแพร่สายการแข่งขันรอบแบ่งกลุ่ม',
+        );
+      }
+
+      // 2. Check for incomplete matches (scheduled or reported)
+      const incompleteCount = await tx.match.count({
+        where: {
+          drawId: draw.id,
+          status: { in: ['scheduled', 'reported'] },
+        },
+      });
+
+      if (incompleteCount > 0) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'GROUP_MATCHES_INCOMPLETE',
+          `ยังมีแมตช์ในรอบแบ่งกลุ่มที่ยังไม่เสร็จสิ้น (${incompleteCount} แมตช์)`,
+          { count: incompleteCount, incompleteCount },
+        );
+      }
+
+      // 3. Parse event format
+      let advancePerGroup = 2;
+      let bestThirds = 0;
+      let pointsCfg = { win: 3, draw: 1, loss: 0 };
+
+      const parsed = eventFormatSchema.safeParse(event.format);
+      if (parsed.success) {
+        advancePerGroup = parsed.data.advancePerGroup;
+        bestThirds = parsed.data.bestThirds;
+        if (parsed.data.points) {
+          pointsCfg = parsed.data.points;
+        }
+      } else if (event.format && typeof event.format === 'object') {
+        const raw = event.format as Record<string, unknown>;
+        if (typeof raw.advancePerGroup === 'number') advancePerGroup = raw.advancePerGroup;
+        if (typeof raw.bestThirds === 'number') bestThirds = raw.bestThirds;
+        if (raw.points && typeof raw.points === 'object') {
+          const rawPts = raw.points as Record<string, unknown>;
+          pointsCfg = {
+            win: typeof rawPts.win === 'number' ? rawPts.win : 3,
+            draw: typeof rawPts.draw === 'number' ? rawPts.draw : 1,
+            loss: typeof rawPts.loss === 'number' ? rawPts.loss : 0,
+          };
+        }
+      }
+
+      // 4. Fetch groups with members and matches
+      const groups = await tx.group.findMany({
+        where: { drawId: draw.id },
+        orderBy: { label: 'asc' },
+        include: {
+          members: { select: { entryId: true } },
+          matches: {
+            select: {
+              topEntryId: true,
+              bottomEntryId: true,
+              status: true,
+              games: true,
+            },
+          },
+        },
+      });
+
+      let bestThirdEntryIds = new Set<string>();
+      if (bestThirds > 0) {
+        const groupInputs: GroupInput[] = groups.map((g, idx) => ({
+          groupIndex: idx,
+          entryIds: g.members.map((m) => m.entryId),
+          matches: g.matches.map((m) => ({
+            a: m.topEntryId ?? '',
+            b: m.bottomEntryId ?? '',
+            status: m.status as GroupMatch['status'],
+            games: this.parseGames(m.games),
+          })),
+        }));
+
+        const bestThirdRows = rankBestThirds(groupInputs, pointsCfg, draw.seed);
+        bestThirdEntryIds = new Set(bestThirdRows.slice(0, bestThirds).map((r) => r.entryId));
+      }
+
+      const now = new Date();
+      interface StandingsRecordToCreate {
+        groupId: string;
+        entryId: string;
+        rank: number;
+        played: number;
+        won: number;
+        drawn: number;
+        lost: number;
+        points: number;
+        pointsFor: number;
+        pointsAgainst: number;
+        diff: number;
+        tiebreakNote: string | null;
+        qualification: 'qualified' | 'best_third' | 'out';
+      }
+
+      const rowsToCreate: StandingsRecordToCreate[] = [];
+
+      for (const group of groups) {
+        const liveRows = this.computeGroupLiveRows(group, pointsCfg, draw.seed);
+
+        for (const row of liveRows) {
+          let qualification: 'qualified' | 'best_third' | 'out';
+          if (row.rank <= advancePerGroup) {
+            qualification = 'qualified';
+          } else if (bestThirdEntryIds.has(row.entryId)) {
+            qualification = 'best_third';
+          } else {
+            qualification = 'out';
+          }
+
+          const tiebreakNote = row.decidedBy === 'points' || !row.decidedBy ? null : row.decidedBy;
+
+          rowsToCreate.push({
+            groupId: group.id,
+            entryId: row.entryId,
+            rank: row.rank,
+            played: row.played,
+            won: row.won,
+            drawn: row.drawn,
+            lost: row.lost,
+            points: row.points,
+            pointsFor: row.pointsFor,
+            pointsAgainst: row.pointsAgainst,
+            diff: row.diff,
+            tiebreakNote,
+            qualification,
+          });
+        }
+      }
+
+      // 5. Create GroupStanding rows in DB
+      if (rowsToCreate.length > 0) {
+        await tx.groupStanding.createMany({
+          data: rowsToCreate.map((r) => ({
+            groupId: r.groupId,
+            entryId: r.entryId,
+            rank: r.rank,
+            played: r.played,
+            won: r.won,
+            drawn: r.drawn,
+            lost: r.lost,
+            points: r.points,
+            pointsFor: r.pointsFor,
+            pointsAgainst: r.pointsAgainst,
+            diff: r.diff,
+            tiebreakNote: r.tiebreakNote,
+            qualification: r.qualification,
+            confirmedBy: user.id,
+            confirmedAt: now,
+          })),
+        });
+      }
+
+      // 6. Update draw status to 'locked'
+      await tx.draw.update({
+        where: { id: draw.id },
+        data: { status: 'locked' },
+      });
+
+      // 7. Audit log 'groups.confirm'
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'groups.confirm',
+          entityType: 'draw',
+          entityId: draw.id,
+          before: { status: draw.status },
+          after: { status: 'locked' },
+        },
+        tx,
+      );
+
+      // 8. Return mapped rows with entry details and confirmed: true
+      const allEntryIds = rowsToCreate.map((r) => r.entryId);
+      const entryMap = await this.loadEntryMap(tx, allEntryIds);
+
+      return rowsToCreate.map((r) => ({
+        groupId: r.groupId,
+        entryId: r.entryId,
+        entry: entryMap.get(r.entryId) ?? null,
+        rank: r.rank,
+        played: r.played,
+        won: r.won,
+        drawn: r.drawn,
+        lost: r.lost,
+        points: r.points,
+        pointsFor: r.pointsFor,
+        pointsAgainst: r.pointsAgainst,
+        diff: r.diff,
+        tiebreakNote: r.tiebreakNote,
+        qualification: r.qualification,
+        confirmed: true,
+      }));
+    });
+  }
+
   async getUmpireMatches(query: UmpireMatchesQuery, caller: AuthUser) {
     // 1. Fetch caller's EventUmpire rows
     const eventUmpires = await this.prisma.eventUmpire.findMany({
@@ -507,7 +794,7 @@ export class MatchesService {
 
     // 4. Query matches
     const where: Prisma.MatchWhereInput = {
-      draw: { status: 'published' },
+      draw: { status: { in: ['published', 'locked'] } },
       OR: assignmentConditions,
       ...(query.status ? { status: query.status } : {}),
       ...playerExclusion,
