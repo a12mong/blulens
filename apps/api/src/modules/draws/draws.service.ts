@@ -12,6 +12,7 @@ import {
   type Qualifier,
 } from '@blulens/shared';
 import type { AuthUser } from '../../common/auth/auth.types';
+import { NotificationsService } from '../../common/notifications/notifications.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -36,12 +37,22 @@ export interface PublishDrawInput {
   reason?: string;
 }
 
+/** Thai discipline names for notification titles. */
+const DISCIPLINE_TH: Record<string, string> = {
+  MS: 'ชายเดี่ยว',
+  WS: 'หญิงเดี่ยว',
+  MD: 'ชายคู่',
+  WD: 'หญิงคู่',
+  XD: 'คู่ผสม',
+};
+
 @Injectable()
 export class DrawsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly matches: MatchesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createGroupPreview(eventId: string, body: CreateGroupPreviewInput, user: AuthUser) {
@@ -408,7 +419,7 @@ export class DrawsService {
         // Event format check for thirdPlacePlayoff
         const event = await tx.event.findUnique({
           where: { id: draw.eventId },
-          select: { format: true },
+          select: { format: true, discipline: true },
         });
         const parsedFormat = eventFormatSchema.safeParse(event?.format);
         let thirdPlacePlayoff = true;
@@ -533,6 +544,19 @@ export class DrawsService {
           .map((s) => s.entryId)
           .filter((id): id is string => typeof id === 'string');
         const entryMap = await this.matches.loadEntryMap(tx, nonNullEntryIds);
+
+        // N9 knockout_published (notifications.md; owner D2 default: the players in the bracket)
+        const recipients = await this.knockoutPublishedRecipients(tx, nonNullEntryIds);
+        await this.notifications.emit(
+          tx,
+          user.id,
+          recipients.map((recipientUserId) => ({
+            recipientUserId,
+            type: 'knockout_published' as const,
+            title: `สายน็อคเอาท์ประเภท${DISCIPLINE_TH[event?.discipline ?? ''] ?? ''} ประกาศแล้ว`,
+            link: `/events/${draw.eventId}/bracket`,
+          })),
+        );
 
         mappedSlots = slots.map((s) => ({
           position: s.position,
@@ -929,5 +953,21 @@ export class DrawsService {
       conflicts: (draw.conflicts as unknown[]) ?? [],
       minimumPossibleConflicts: draw.minimumPossibleConflicts,
     };
+  }
+
+  /**
+   * Who hears that a knockout draw was published (N9). Owner decision D2, default (a): every player of every entry
+   * in the bracket. A D2 change (team members of those players, or nobody) changes only this function.
+   */
+  private async knockoutPublishedRecipients(
+    tx: Prisma.TransactionClient,
+    entryIds: string[],
+  ): Promise<string[]> {
+    if (entryIds.length === 0) return [];
+    const players = await tx.entryPlayer.findMany({
+      where: { entryId: { in: entryIds } },
+      select: { userId: true },
+    });
+    return [...new Set(players.map((p) => p.userId))];
   }
 }

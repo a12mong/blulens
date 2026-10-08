@@ -309,6 +309,20 @@ describe('POST /api/v1/draws/:drawId/publish for knockout (bl-33-2)', () => {
     expect(pubRes.body.data.kind).toBe('knockout');
     expect(pubRes.body.data.size).toBe(4);
 
+    // N9 knockout_published (bl-39-3, D2 default): every player of the 4 entries in the bracket, once each;
+    // not the acting Committee user, not the players knocked out in the groups; group publish created none
+    const slotEntryIds = (await prisma.drawSlot.findMany({ where: { drawId } }))
+      .map((s) => s.entryId)
+      .filter((id): id is string => id !== null);
+    const players = await prisma.entryPlayer.findMany({ where: { entryId: { in: slotEntryIds } } });
+    const published = await prisma.notification.findMany({
+      where: { type: 'knockout_published', link: `/events/${eventId}/bracket` },
+    });
+    expect(published.map((n) => n.recipientUserId).sort()).toEqual(players.map((p) => p.userId).sort());
+    expect(published).toHaveLength(4);
+    expect(published[0]!.title).toBe('สายน็อคเอาท์ประเภทชายเดี่ยว ประกาศแล้ว');
+    expect(published.some((n) => n.recipientUserId === committeeId)).toBe(false);
+
     // 3. Verify matches created
     // GET /events/{id}/matches?stage=knockout lists 3
     const koMatchesRes = await http()
