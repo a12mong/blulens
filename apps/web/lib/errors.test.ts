@@ -54,6 +54,15 @@ describe('thaiError', () => {
       'REVIEWER_NOT_ELIGIBLE',
       'ASSESSMENT_NOT_ASSIGNABLE',
       'MATCH_NOT_REPORTED',
+      'EVENT_NOT_GROUP_FORMAT',
+      'DRAW_ALREADY_LOCKED',
+      'NOT_ENOUGH_ENTRIES',
+      'DRAW_VERSION_CONFLICT',
+      'GROUP_SIZES_IMPOSSIBLE',
+      'DRAW_NOT_FOUND',
+      'DRAW_INPUT_CHANGED',
+      'DRAW_CONFLICTS_NOT_ACKNOWLEDGED',
+      'DRAW_KIND_NOT_SUPPORTED',
     ];
 
     codes.forEach((code) => {

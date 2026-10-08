@@ -35,6 +35,15 @@ const MESSAGES: Record<string, string> = {
   REVIEWER_NOT_ELIGIBLE: 'ผู้ใช้นี้ไม่มีสิทธิ์เป็นผู้ประเมิน',
   ASSESSMENT_NOT_ASSIGNABLE: 'สถานะนี้มอบหมายผู้ประเมินเพิ่มไม่ได้',
   MATCH_NOT_REPORTED: 'แมตช์นี้ไม่ได้อยู่ในสถานะรอยืนยัน',
+  EVENT_NOT_GROUP_FORMAT: 'รายการนี้ไม่ใช่รูปแบบแบ่งกลุ่ม',
+  DRAW_ALREADY_LOCKED: 'จับกลุ่มล็อกแล้ว',
+  NOT_ENOUGH_ENTRIES: 'จำนวนผู้สมัครไม่พอจับกลุ่ม',
+  DRAW_VERSION_CONFLICT: 'มีการจับกลุ่มใหม่แล้ว โปรดโหลดซ้ำ',
+  GROUP_SIZES_IMPOSSIBLE: 'แบ่งกลุ่มตามจำนวนนี้ไม่ได้',
+  DRAW_NOT_FOUND: 'ไม่พบการจับกลุ่ม',
+  DRAW_INPUT_CHANGED: 'รายชื่อผู้สมัครเปลี่ยนแล้ว โปรดจับกลุ่มใหม่',
+  DRAW_CONFLICTS_NOT_ACKNOWLEDGED: 'ต้องรับทราบทีมที่ชนกันก่อนเผยแพร่',
+  DRAW_KIND_NOT_SUPPORTED: 'ยังไม่รองรับรูปแบบนี้',
 };
 
 function hasThai(text: string): boolean {

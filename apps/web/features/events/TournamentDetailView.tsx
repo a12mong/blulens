@@ -131,6 +131,13 @@ export function TournamentDetailView({
                     >
                       ผลที่รอยืนยัน
                     </Link>
+                    <Link
+                      data-testid="event-groups-committee"
+                      href={`/committee/events/${e.id}/groups`}
+                      className="inline-flex min-h-[44px] items-center rounded border border-border bg-card text-card-foreground px-4 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      จัดกลุ่ม
+                    </Link>
                   </>
                 )}
               </div>
