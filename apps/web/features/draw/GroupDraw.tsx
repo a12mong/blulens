@@ -23,11 +23,6 @@ type EntryRef = components['schemas']['EntryRef'];
 type EventFormat = components['schemas']['EventFormat'];
 type MatchWithMatchNo = components['schemas']['Match'] & { matchNo?: number };
 
-type EventWithFormat = Event & {
-  format?: EventFormat | string | null;
-  groupSize?: number | null;
-};
-
 type ConflictItem = NonNullable<Draw['conflicts']>[number] & {
   entryIds?: string[];
   a?: string;
@@ -165,30 +160,29 @@ export function GroupDraw({ eventId }: GroupDrawProps) {
   const eventQuery = useEvent(eventId);
   const entriesQuery = useEntries(eventId, 'approved');
 
-  const eventData = eventQuery.data as EventWithFormat | undefined;
-  const rawFormat = eventData?.format;
-  const formatType =
-    typeof rawFormat === 'string'
-      ? rawFormat
-      : typeof rawFormat === 'object' && rawFormat !== null
-        ? rawFormat.type
-        : undefined;
+  const eventData = eventQuery.data;
+  const format = eventData?.format;
+  const isKnockout = format?.type === 'knockout';
+  const isGroupsKnockout = format?.type === 'groups_knockout';
+  const isNull = format === null;
+  const isNotGroups = isKnockout || isNull;
 
-  const isKnockout = formatType === 'knockout';
-  const isGroupsKnockout = formatType === 'groups_knockout';
-  const isFormatKnown = isKnockout || isGroupsKnockout;
+  const notGroupsMessage = isNull
+    ? 'ยังไม่ได้ตั้งค่ารูปแบบแบ่งกลุ่ม'
+    : 'รายการนี้ไม่ใช่รูปแบบแบ่งกลุ่ม';
 
-  const rawGroupSize =
-    typeof rawFormat === 'object' && rawFormat !== null && 'groupSize' in rawFormat && typeof rawFormat.groupSize === 'number'
-      ? rawFormat.groupSize
-      : typeof eventData?.groupSize === 'number'
-        ? eventData.groupSize
-        : undefined;
+  const groupSize =
+    isGroupsKnockout || isKnockout
+      ? (typeof format?.groupSize === 'number' ? format.groupSize : 4)
+      : undefined;
 
-  // default 4 only when format is known
-  const groupSize = rawGroupSize ?? (isFormatKnown ? 4 : undefined);
-
-  const formatLabel = isGroupsKnockout ? 'แบ่งกลุ่ม' : isKnockout ? 'น็อคเอาท์' : 'ไม่ทราบ';
+  const formatLabel = isGroupsKnockout
+    ? 'แบ่งกลุ่ม'
+    : isKnockout
+      ? 'น็อคเอาท์'
+      : isNull
+        ? 'ยังไม่ได้ตั้งค่า'
+        : 'ไม่ทราบ';
 
   const approvedCount = entriesQuery.data
     ? entriesQuery.data.filter((e) => e.status === 'approved' || !e.status).length
@@ -337,12 +331,12 @@ export function GroupDraw({ eventId }: GroupDrawProps) {
             {typeof groupSize === 'number' ? ` · กลุ่มละ ${groupSize}` : ''}
           </div>
 
-          {isKnockout ? (
+          {isNotGroups ? (
             <div
               data-testid="draw-not-groups"
               className="p-4 rounded-lg border border-border bg-card text-card-foreground space-y-3"
             >
-              <p className="text-sm font-medium">รายการนี้ไม่ใช่รูปแบบแบ่งกลุ่ม</p>
+              <p className="text-sm font-medium">{notGroupsMessage}</p>
               <div>
                 <Link
                   href={`/events/${eventId}`}
