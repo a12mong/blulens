@@ -3854,6 +3854,8 @@ export interface components {
              */
             gradesDisclosedAt?: string | null;
             gradesDisclosedReason?: string | null;
+            /** @description the event format as saved by PUT /events/{eventId}/format (type knockout | groups_knockout, groupSize, advancePerGroup, bestThirds, both match formats, lockedAt); null = not configured yet (the web treats it as knockout and offers "ตั้งค่ารูปแบบ" before any draw). Returned on every Event read (list, detail, tournament detail). */
+            readonly format?: components["schemas"]["EventFormat"] | null;
         };
         /**
          * @description architecture §6.10; draw/group draws use approved entries only
