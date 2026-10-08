@@ -176,7 +176,7 @@ describe('GET/POST /me/notifications (bl-39-1)', () => {
     expect(res.body.data.items[4].readAt).not.toBeNull();
 
     // Never B's notification
-    const hasBNotif = res.body.data.items.some((n: any) => n.id === notifBId);
+    const hasBNotif = res.body.data.items.some((n: { id: string }) => n.id === notifBId);
     expect(hasBNotif).toBe(false);
   });
 

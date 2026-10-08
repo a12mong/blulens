@@ -1,5 +1,5 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Notification, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ApiException } from '../../common/errors/api.exception';
@@ -7,8 +7,11 @@ import type { AuthUser } from '../../common/auth/auth.types';
 
 const getNotificationsQuerySchema = z.object({
   cursor: z.string().uuid().optional(),
-  limit: z.number().int().min(1).max(100).default(20),
-  unread: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  unread: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 export type GetNotificationsQuery = z.infer<typeof getNotificationsQuerySchema>;
@@ -33,117 +36,68 @@ export interface NotificationPageDto {
 export class MeNotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getNotifications(
-    user: AuthUser,
-    query: unknown,
-  ): Promise<NotificationPageDto> {
+  async getNotifications(user: AuthUser, query: unknown): Promise<NotificationPageDto> {
     const parseResult = getNotificationsQuerySchema.safeParse(query);
     if (!parseResult.success) {
       const issue = parseResult.error.issues[0];
-      throw new ApiException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', issue?.message ?? 'Invalid request');
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        'VALIDATION_FAILED',
+        issue?.message ?? 'Invalid request',
+      );
     }
 
     const { cursor, limit, unread } = parseResult.data;
 
-    // Validate cursor if provided
+    // Order: unread first, then newest first (createdAt desc, id desc). Read rows are NOT ordered by readAt,
+    // so this is two simple queries (unread part, then read part) instead of one ORDER BY.
     let cursorRow: { readAt: Date | null; createdAt: Date; id: string } | null = null;
     if (cursor) {
-      cursorRow = await this.prisma.notification.findUnique({
-        where: { id: cursor },
+      cursorRow = await this.prisma.notification.findFirst({
+        where: { id: cursor, recipientUserId: user.id },
         select: { readAt: true, createdAt: true, id: true },
       });
       if (!cursorRow) {
-        throw new ApiException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Cursor notification not found');
-      }
-      // Verify cursor belongs to caller
-      const belongsToUser = await this.prisma.notification.count({
-        where: { id: cursor, recipientUserId: user.id },
-      });
-      if (belongsToUser === 0) {
-        throw new ApiException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Cursor does not belong to user');
+        throw new ApiException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'cursor ไม่ถูกต้อง');
       }
     }
-
-    // Build WHERE clause for base query
-    const where: Prisma.NotificationWhereInput = {
-      recipientUserId: user.id,
-    };
-
-    // Add pagination condition
-    if (cursorRow) {
-      const isUnread = cursorRow.readAt === null;
-      if (isUnread) {
-        // Cursor was unread: get remaining unread + all read
-        where.OR = [
-          {
-            AND: [
-              { readAt: null },
-              {
-                OR: [
-                  { createdAt: { lt: cursorRow.createdAt } },
-                  { AND: [{ createdAt: cursorRow.createdAt }, { id: { lt: cursorRow.id } }] },
-                ],
-              },
-            ],
-          },
-          { readAt: { not: null } },
-        ];
-      } else {
-        // Cursor was read: get remaining read
-        where.AND = [
-          {
-            readAt: { not: null },
-          },
-          {
-            OR: [
-              { createdAt: { lt: cursorRow.createdAt } },
-              { AND: [{ createdAt: cursorRow.createdAt }, { id: { lt: cursorRow.id } }] },
-            ],
-          },
-        ];
-      }
-    }
-
-    // If unread filter is requested, only return unread (but continue respecting cursor logic)
-    if (unread) {
-      if (where.OR) {
-        // Complex case: cursor is unread, filter is unread
-        // Replace OR with just the unread part
-        where.AND = [
-          { readAt: null },
-          {
-            OR: [
-              { createdAt: { lt: cursorRow!.createdAt } },
-              { AND: [{ createdAt: cursorRow!.createdAt }, { id: { lt: cursorRow!.id } }] },
-            ],
-          },
-        ];
-        delete where.OR;
-      } else {
-        // Add unread filter
-        (where as any).readAt = null;
-      }
-    }
-
-    // Fetch limit + 1 rows to determine if there are more
-    const rows = await this.prisma.notification.findMany({
-      where,
-      orderBy: [
-        { readAt: 'asc' },
-        { createdAt: 'desc' },
-        { id: 'desc' },
-      ],
-      take: limit + 1,
+    const after = (c: { createdAt: Date; id: string }): Prisma.NotificationWhereInput => ({
+      OR: [{ createdAt: { lt: c.createdAt } }, { createdAt: c.createdAt, id: { lt: c.id } }],
     });
+    const newestFirst: Prisma.NotificationOrderByWithRelationInput[] = [
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ];
+    const want = limit + 1;
 
-    // Determine next cursor
-    let nextCursor: string | null = null;
-    if (rows.length > limit) {
-      nextCursor = rows[limit - 1]!.id;
+    const rows: Notification[] = [];
+    const cursorIsRead = cursorRow?.readAt != null;
+    if (!cursorIsRead) {
+      rows.push(
+        ...(await this.prisma.notification.findMany({
+          where: { recipientUserId: user.id, readAt: null, ...(cursorRow ? after(cursorRow) : {}) },
+          orderBy: newestFirst,
+          take: want,
+        })),
+      );
+    }
+    if (!unread && rows.length < want) {
+      rows.push(
+        ...(await this.prisma.notification.findMany({
+          where: {
+            recipientUserId: user.id,
+            readAt: { not: null },
+            ...(cursorRow && cursorIsRead ? after(cursorRow) : {}),
+          },
+          orderBy: newestFirst,
+          take: want - rows.length,
+        })),
+      );
     }
 
-    // Return only up to limit rows
-    const items = rows.slice(0, limit).map((row) => ({
+    const page = rows.slice(0, limit);
+    const nextCursor = rows.length > limit ? page[page.length - 1]!.id : null;
+    const items = page.map((row) => ({
       id: row.id,
       type: row.type,
       title: row.title,

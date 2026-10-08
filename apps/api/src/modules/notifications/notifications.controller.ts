@@ -10,10 +10,7 @@ export class NotificationsController {
 
   @Get()
   @Roles('Member', 'Reviewer', 'Umpire', 'Committee', 'Admin')
-  getNotifications(
-    @Query() query: Record<string, unknown>,
-    @CurrentUser() user: AuthUser,
-  ) {
+  getNotifications(@Query() query: Record<string, unknown>, @CurrentUser() user: AuthUser) {
     return this.service.getNotifications(user, query);
   }
 
