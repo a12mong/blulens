@@ -16,6 +16,7 @@ import { UsersModule } from './modules/users/users.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { AssessmentsModule } from './modules/assessments/assessments.module';
+import { MatchesModule } from './modules/matches/matches.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AssessmentsModule } from './modules/assessments/assessments.module';
     UsersModule,
     ReviewsModule,
     AssessmentsModule,
+    MatchesModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
