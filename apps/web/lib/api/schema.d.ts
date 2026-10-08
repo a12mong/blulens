@@ -538,6 +538,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My notifications, unread first then newest first (cursor paged) + my unread count
+         * @description Only the caller's own rows. The web polls ?limit=1 every 60 s (and on navigation/focus) just to read unreadCount for the bell.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description true = unread only */
+                    unread?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPage"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark one of my notifications read (idempotent) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    notificationId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description read (already read -> 204, readAt unchanged) */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark all my unread notifications read */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            updated: number;
+                        };
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/teams": {
         parameters: {
             query?: never;
@@ -753,7 +875,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Get a presigned PUT URL for one clip (draft only; max 3 clips, 500 MB, mp4/mov) */
+        /**
+         * Get a presigned PUT URL for one clip (draft only; max 3 clips, 500 MB, mp4/mov)
+         * @description Creates the clip row (status pending_upload). Object key = clips/<assessmentId>/<clipId>.<mp4|mov> (extension from contentType).
+         *     expiresAt = now + 15 min. The PUT must send exactly the Content-Type declared here (it is signed into the URL).
+         *     After the PUT the web calls POST /clips/{clipId}/complete.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -849,6 +976,76 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clips/{clipId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a member clip uploaded after the presigned PUT (owner Member, draft assessment only)
+         * @description Step 3 of the presign flow: upload-url -> PUT bytes to uploadUrl -> complete.
+         *     Server HEADs clips/<assessmentId>/<clipId>.<mp4|mov>, checks size and Content-Type against what upload-url declared, stores durationSec, sets status uploaded.
+         *     Idempotent: a clip already uploaded returns 200 with the same clip (no re-check). Non-owner or not a draft -> 404.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    clipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description client-measured from the <video> element (v1 has no transcoding/ffprobe). < 1 -> 400 VALIDATION_FAILED; > 300 -> 422 CLIP_TOO_LONG */
+                        durationSec: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok (status uploaded, viewUrl = fresh 15-min presigned GET) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Clip"];
+                    };
+                };
+                400: components["responses"]["Validation"];
+                404: components["responses"]["NotFound"];
+                /** @description CLIP_NOT_UPLOADED (HEAD finds no object at the key) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+                /** @description CLIP_MISMATCH (object size != declared sizeBytes, or object Content-Type != declared contentType) | CLIP_TOO_LONG (durationSec > 300) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1920,7 +2117,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Presigned PUT for one calibration clip + its Committee reference grade */
+        /**
+         * Presigned PUT for one calibration clip + its Committee reference grade
+         * @description Same rules as the member upload-url. Object key = calibration/<setId>/<clipId>.<mp4|mov>; expiresAt = now + 15 min;
+         *     the PUT must send the declared Content-Type. Then POST /calibration-sets/{setId}/clips/{clipId}/complete. Set assigned -> 409 CALIBRATION_SET_ASSIGNED.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -1950,12 +2151,91 @@ export interface paths {
                     content: {
                         "application/json": {
                             /** Format: uuid */
-                            clipId?: string;
+                            clipId: string;
                             /** Format: uri */
-                            uploadUrl?: string;
+                            uploadUrl: string;
                             /** Format: date-time */
-                            expiresAt?: string;
+                            expiresAt: string;
                         };
+                    };
+                };
+                /** @description CALIBRATION_SET_ASSIGNED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calibration-sets/{setId}/clips/{clipId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a calibration clip uploaded after the presigned PUT (Committee, set not yet assigned)
+         * @description Same flow, body and errors as POST /clips/{clipId}/complete; the key is calibration/<setId>/<clipId>.<mp4|mov>.
+         *     Idempotent: already uploaded -> 200 with the same set detail.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                    clipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description client-measured from the <video> element (v1 has no transcoding/ffprobe). < 1 -> 400 VALIDATION_FAILED; > 300 -> 422 CLIP_TOO_LONG */
+                        durationSec: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CalibrationSetDetail"];
+                    };
+                };
+                400: components["responses"]["Validation"];
+                404: components["responses"]["NotFound"];
+                /** @description CLIP_NOT_UPLOADED (HEAD finds no object at the key) | CALIBRATION_SET_ASSIGNED (set already assigned) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+                /** @description CLIP_MISMATCH (object size != declared sizeBytes, or object Content-Type != declared contentType) | CLIP_TOO_LONG (durationSec > 300) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
                     };
                 };
             };
@@ -3924,6 +4204,31 @@ export interface components {
             nextCursor?: string | null;
         };
         /**
+         * @description stored as text, so new types are additive. review_assigned is BLIND: same text for assessment and calibration tasks, links to /review, never names the subject.
+         * @enum {string}
+         */
+        NotificationType: "assessment_approved" | "assessment_returned" | "assessment_confirmed" | "assessment_overridden" | "review_assigned" | "match_result_approved" | "match_result_rejected" | "umpire_assigned" | "knockout_published";
+        Notification: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["NotificationType"];
+            /** @description Thai, rendered when created */
+            title: string;
+            body: string | null;
+            /** @description in-app path starting with / (never an external URL) */
+            link: string | null;
+            /** Format: date-time */
+            readAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        NotificationPage: {
+            items: components["schemas"]["Notification"][];
+            nextCursor: string | null;
+            /** @description all my unread, independent of the page and the unread filter */
+            unreadCount: number;
+        };
+        /**
          * @description 15-rung ladder, index 0..14, ASCII hyphen
          * @enum {string}
          */
@@ -4080,7 +4385,7 @@ export interface components {
             status: "pending_upload" | "uploaded" | "rejected";
             /**
              * Format: uri
-             * @description presigned GET (15 min); null unless status = uploaded
+             * @description presigned GET (15 min); null unless status = uploaded. A seeded storage key that starts with / or http(s):// is passed through unchanged (demo sample clip /e2e/sample.mp4).
              */
             viewUrl: string | null;
             durationSec?: number | null;

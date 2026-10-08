@@ -49,12 +49,12 @@ describe('CommitteeHome', () => {
 });
 
 describe('CommitteeHome calibration flag', () => {
-  it('shows the calibration card only when NEXT_PUBLIC_CALIBRATION_UI is 1', () => {
+  it('shows the calibration card unless NEXT_PUBLIC_CALIBRATION_UI is 0', () => {
     vi.stubEnv('NEXT_PUBLIC_CALIBRATION_UI', '1');
     const { unmount } = render(<CommitteeHome />);
     expect(screen.getByTestId('committee-link-calibration')).toHaveAttribute('href', '/committee/calibration');
     unmount();
-    vi.stubEnv('NEXT_PUBLIC_CALIBRATION_UI', '');
+    vi.stubEnv('NEXT_PUBLIC_CALIBRATION_UI', '0');
     render(<CommitteeHome />);
     expect(screen.queryByTestId('committee-link-calibration')).toBeNull();
     vi.unstubAllEnvs();

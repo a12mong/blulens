@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 const SESSION_COOKIE = 'bl_session';
 
 // Protected routes require a valid session
-const PROTECTED_PREFIXES = ['/me', '/review', '/committee', '/admin', '/events'];
+const PROTECTED_PREFIXES = ['/me', '/notifications', '/review', '/committee', '/admin', '/events'];
 
 /**
  * Middleware for session-based routing: redirect unauthenticated users away from protected paths,
