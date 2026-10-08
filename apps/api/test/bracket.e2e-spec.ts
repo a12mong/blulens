@@ -205,28 +205,66 @@ describe('GET /events/{eventId}/bracket (bl-33-3)', () => {
         koEntryIds.push(entry.id);
       }
 
-      // Create published knockout draw with 4 entries
-      const koDrawRes = await http()
-        .post(`/api/v1/draws?eventId=${koEvent.id}&kind=knockout`)
-        .set('Cookie', committeeCookie)
-        .send({
+      // Create published knockout draw with DrawSlots for 4 entries
+      const koDraw = await prisma.draw.create({
+        data: {
+          eventId: koEvent.id,
+          kind: 'knockout',
+          version: 1,
+          status: 'published',
+          seed: 'test-seed-q4',
+          seedSource: 'committee',
+          inputHash: 'test-hash',
+          snapshot: { entries: koEntryIds.map((id, idx) => ({ id, seedScore: idx + 1 })) },
+          rulesetVersion: '1.0',
+          prngId: 'test-prng',
           size: 4,
-          seedRank: [1, 2, 3, 4],
-        })
-        .expect(200);
+          seedsCount: 4,
+          createdBy: committeeId,
+          slots: {
+            create: koEntryIds.map((entryId, idx) => ({
+              position: idx + 1,
+              entryId,
+              seedNo: idx + 1,
+            })),
+          },
+        },
+      });
 
-      koDrawId = koDrawRes.body.data.id;
+      koDrawId = koDraw.id;
 
-      // Publish the draw
-      await http()
-        .post(`/api/v1/draws/${koDrawId}/publish`)
-        .set('Cookie', committeeCookie)
-        .expect(200);
+      // Create knockout matches for Q=4 (R1: 2 matches, R2: 1 final)
+      // matchNo is running counter across all rounds (not per-round)
+      const matches = [
+        { matchNo: 1, round: 1, topEntryId: koEntryIds[0], bottomEntryId: koEntryIds[1] },
+        { matchNo: 2, round: 1, topEntryId: koEntryIds[2], bottomEntryId: koEntryIds[3] },
+        { matchNo: 3, round: 2, topEntryId: null, bottomEntryId: null }, // Final, entries TBD
+      ];
+
+      for (const m of matches) {
+        await prisma.match.create({
+          data: {
+            eventId: koEvent.id,
+            drawId: koDrawId,
+            stage: 'knockout',
+            round: m.round,
+            matchNo: m.matchNo,
+            topEntryId: m.topEntryId,
+            bottomEntryId: m.bottomEntryId,
+            status: 'scheduled',
+          },
+        });
+      }
     });
 
     afterAll(async () => {
+      // Cleanup in order: matches, draws, entries, event, tournament
+      await prisma.match.deleteMany({ where: { eventId: koEvent.id } });
+      await prisma.draw.deleteMany({ where: { eventId: koEvent.id } });
+      await prisma.entry.deleteMany({ where: { eventId: koEvent.id } });
       await prisma.event.deleteMany({ where: { tournamentId: koTournament.id } });
       await prisma.tournament.delete({ where: { id: koTournament.id } });
+      // Users are cleaned up by the main afterAll
     });
 
     it('Q=4 published knockout -> 200 with bracket structure', async () => {
