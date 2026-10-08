@@ -366,17 +366,59 @@ describe('groups-preview (bl-25-8)', () => {
     expect(res.body.data).toEqual([]);
   });
 
-  it('second preview on same event -> version 2', async () => {
+  it('preview with reason too short (< 5 chars) -> 400 VALIDATION_FAILED', async () => {
+    const res = await http()
+      .post(`/api/v1/events/${groupEventId}/groups/preview`)
+      .set('Cookie', cookieFor(adminId, ['Admin']))
+      .send({ seed: fixedSeed, reason: 'abc' })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('second preview without reason -> 400 VALIDATION_FAILED', async () => {
     const res = await http()
       .post(`/api/v1/events/${groupEventId}/groups/preview`)
       .set('Cookie', cookieFor(adminId, ['Admin']))
       .send({ seed: fixedSeed })
+      .expect(400);
+
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    expect(res.body.error.message).toBe('ต้องระบุเหตุผลเมื่อสุ่มตัวอย่างใหม่');
+  });
+
+  const previewReason = 'สุ่มสายใหม่เนื่องจากต้องการกระจายทีม';
+
+  it('second preview with reason -> 201, version 2, Draw.reason saved, audit row reason set', async () => {
+    const res = await http()
+      .post(`/api/v1/events/${groupEventId}/groups/preview`)
+      .set('Cookie', cookieFor(adminId, ['Admin']))
+      .send({ seed: fixedSeed, reason: previewReason })
       .expect(201);
 
     expect(res.body.success).toBe(true);
     const draw2 = res.body.data;
     expect(draw2.version).toBe(2);
     expect(draw2.createdBy).toBe(adminId);
+
+    // Verify Draw.reason saved in DB
+    const dbDraw2 = await prisma.draw.findUnique({
+      where: { id: draw2.id },
+    });
+    expect(dbDraw2?.reason).toBe(previewReason);
+
+    // Verify audit row reason set
+    const audit2 = await prisma.auditLog.findFirst({
+      where: {
+        entityType: 'draw',
+        entityId: draw2.id,
+        action: 'draw.preview',
+      },
+    });
+    expect(audit2).not.toBeNull();
+    expect(audit2?.reason).toBe(previewReason);
 
     // Same seed twice -> same group membership (determinism)
     const draw1Groups = await prisma.group.findMany({
@@ -400,11 +442,11 @@ describe('groups-preview (bl-25-8)', () => {
       http()
         .post(`/api/v1/events/${groupEventId}/groups/preview`)
         .set('Cookie', cookieFor(committeeId, ['Committee']))
-        .send({}),
+        .send({ reason: 'สุ่มสายใหม่พร้อมกันเพื่อทดสอบ A' }),
       http()
         .post(`/api/v1/events/${groupEventId}/groups/preview`)
         .set('Cookie', cookieFor(adminId, ['Admin']))
-        .send({}),
+        .send({ reason: 'สุ่มสายใหม่พร้อมกันเพื่อทดสอบ B' }),
     ]);
 
     const statuses = [resA.status, resB.status].sort();
@@ -419,6 +461,54 @@ describe('groups-preview (bl-25-8)', () => {
     if (resB.status === 409) {
       expect(resB.body.error.code).toBe('DRAW_VERSION_CONFLICT');
     }
+  });
+
+  it('version 1 with a reason: stores reason on Draw and in audit (allowed)', async () => {
+    // Add 3rd entry to underflowEventId to make it eligible (>= 3 entries)
+    const p = await prisma.user.create({
+      data: {
+        email: `${tag}-ufp3@test.local`,
+        passwordHash: 'x',
+        displayName: `${tag} UF Player 3`,
+      },
+    });
+    userIds.push(p.id);
+
+    await prisma.entry.create({
+      data: {
+        eventId: underflowEventId,
+        status: 'approved',
+        name: 'UF Entry 3',
+        createdBy: adminId,
+        players: {
+          create: [{ userId: p.id, eventId: underflowEventId }],
+        },
+      },
+    });
+
+    const v1Reason = 'เหตุผลสำหรับการสุ่มครั้งแรก';
+    const res = await http()
+      .post(`/api/v1/events/${underflowEventId}/groups/preview`)
+      .set('Cookie', cookieFor(committeeId, ['Committee']))
+      .send({ reason: v1Reason })
+      .expect(201);
+
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.version).toBe(1);
+
+    const dbDraw = await prisma.draw.findUnique({
+      where: { id: res.body.data.id },
+    });
+    expect(dbDraw?.reason).toBe(v1Reason);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: 'draw',
+        entityId: res.body.data.id,
+        action: 'draw.preview',
+      },
+    });
+    expect(audit?.reason).toBe(v1Reason);
   });
 
   it('published draw exists -> 409 DRAW_ALREADY_LOCKED', async () => {
