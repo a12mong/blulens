@@ -54,6 +54,8 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
   let reviewerIds: string[] = [];
   let criteria: string[] = [];
   const ids = {} as Record<Kind, string>;
+  let tournamentName = '';
+  let subjectName = '';
 
   const status = (id: string) => sqlE2e(`select status from assessments where id='${id}'`);
   const latestVersion = (id: string) =>
@@ -119,6 +121,8 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
     ];
     reviewerIds.forEach((r) => expect(r, 'reviewer1/2 missing: SEED_DEMO=1 db:seed on blulens_e2e').toMatch(/^[0-9a-f-]{36}$/));
     const rubric = await data<any>(await committeeCtx.get('rubric'));
+    subjectName = sqlE2e("select display_name from users where email='member1@blulens.local'");
+    expect(subjectName).toBeTruthy();
     criteria = (rubric.criteria as Array<{ key: string }>).map((c) => c.key);
     expect(criteria.length, 'rubric criteria').toBeGreaterThan(0);
   });
@@ -131,7 +135,7 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
     // D: an event with minReviewers=1 so one review yields 'provisional'
     const t = await adminCtx.post('tournaments', {
       data: {
-        name: `QA Tourney committee ${Date.now()}`,
+        name: (tournamentName = `QA Tourney committee ${Date.now()}`),
         venue: 'e2e',
         startsOn: '2097-01-01', // below slice1's far-future dates so /events page 1 stays free for slice1
         entriesCloseAt: '2098-12-20T23:59:00.000Z',
@@ -165,6 +169,16 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
         const row = page.locator(`[data-testid="assessment-row"][data-assessment-id="${ids[kind]}"]`);
         await expect(row, `row ${kind}`).toBeVisible({ timeout: 20000 });
         await expect(row.getByTestId('assessment-status')).toHaveAttribute('data-status', expected);
+        // real subject name (bl-26-6), never the 'ไม่ระบุ' placeholder
+        await expect(row, `subject name ${kind}`).toContainText(subjectName);
+        await expect(row).not.toContainText('ไม่ระบุ');
+        const eventLabel = row.getByTestId('assessment-event');
+        if (kind === 'D') {
+          await expect(eventLabel, 'event assessment shows tournament · discipline').toContainText(tournamentName);
+          await expect(eventLabel).toContainText('·');
+        } else {
+          await expect(eventLabel, 'general assessment label').toHaveText('ประเมินทั่วไป');
+        }
       }
     });
 
@@ -368,6 +382,12 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
       );
       await page.getByTestId('assign-submit').click();
       expect((await post).status()).toBe(200);
+
+      // 3b. in_review detail shows the reviewer progress table: 2 of 3 submitted
+      await page.reload();
+      await expect(page.getByTestId('detail-progress')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByTestId('detail-progress')).toContainText('ส่งแล้ว 2/3');
+      await expect(page.getByTestId('progress-row')).toHaveCount(3);
 
       // 4. reviewer3 logs in through the UI, sees the task, scores and locks
       const r3Ctx = await browser.newContext({ baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
