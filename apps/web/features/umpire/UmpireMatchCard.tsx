@@ -21,11 +21,21 @@ const STATUS_LABELS: Record<string, string> = {
   void: 'ยกเลิก',
 };
 
+export function formatCourtName(court?: string | null): string {
+  if (!court) return 'สนาม -';
+  const trimmed = court.trim();
+  if (!trimmed) return 'สนาม -';
+  if (trimmed.startsWith('สนาม')) {
+    return trimmed;
+  }
+  return `สนาม ${trimmed}`;
+}
+
 export function UmpireMatchCard({ match }: UmpireMatchCardProps) {
-  const courtText = match.court ?? '-';
+  const courtText = formatCourtName(match.court);
   const stageText = (match.stage && STAGE_LABELS[match.stage]) || match.stage || '';
   const roundNum = match.round != null ? match.round : 1;
-  const headerText = `สนาม ${courtText} · ${stageText} รอบ ${roundNum}`;
+  const headerText = `${courtText} · ${stageText} รอบ ${roundNum}`;
 
   const nameA = match.aEntry?.displayName || 'ฝ่าย A';
   const clubA = match.aEntry?.teamNames?.join(', ');

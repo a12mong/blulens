@@ -8,6 +8,7 @@ import { DEFAULT_FORMATS, UmpireMatchPage } from './UmpireMatchPage';
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  usePathname: () => '/umpire/matches/m-knockout',
 }));
 
 vi.mock('./api', () => ({
@@ -20,6 +21,7 @@ describe('UmpireMatchPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     (useReportResult as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       mutate: mockMutate,
       isPending: false,
