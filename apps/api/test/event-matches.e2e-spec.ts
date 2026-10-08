@@ -430,6 +430,11 @@ describe('event-matches (bl-25-1)', () => {
     const third = matches[2];
     expect(third.aEntry.displayName).toBe(`${tag} Player 3`);
     expect(third.aEntry.teamNames).toEqual([]);
+
+    // bl-25-12: reported match has reportedByName = reporter's displayName; scheduled match null
+    const reportedMatch = matches[1];
+    expect(reportedMatch.reportedByName).toBe(`${tag} Admin`);
+    expect(third.reportedByName).toBeNull();
   });
 
   it('?status=reported -> 1', async () => {
@@ -441,6 +446,7 @@ describe('event-matches (bl-25-1)', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].id).toBe(reportedMatchId);
     expect(res.body.data[0].status).toBe('reported');
+    expect(res.body.data[0].reportedByName).toBe(`${tag} Admin`);
   });
 
   it('?round=abc -> 400', async () => {
