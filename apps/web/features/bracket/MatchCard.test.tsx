@@ -198,4 +198,65 @@ describe('MatchCard', () => {
     expect(bottomRow).toHaveTextContent('21');
     expect(bottomRow).toHaveTextContent('20');
   });
+
+  it('renders third-place badge when isThirdPlace is true', () => {
+    const match: MatchCardData = {
+      matchNo: 9,
+      top: topEntry,
+      bottom: bottomEntry,
+      winnerId: null,
+      status: 'scheduled',
+      isThirdPlace: true,
+    };
+
+    render(<MatchCard match={match} />);
+    const badge = screen.getByTestId('match-third-place');
+    expect(badge).toHaveTextContent('ชิงที่ 3');
+  });
+
+  it('renders match score summary when games are present, and omits when not present', () => {
+    const matchWithGames: MatchCardData = {
+      matchNo: 10,
+      top: topEntry,
+      bottom: bottomEntry,
+      winnerId: 'entry-1',
+      status: 'confirmed',
+      games: [
+        { a: 15, b: 11 },
+        { a: 15, b: 9 },
+      ],
+    };
+
+    const { rerender } = render(<MatchCard match={matchWithGames} />);
+    const summary = screen.getByTestId('match-score-summary');
+    expect(summary).toHaveTextContent('15–11, 15–9');
+
+    const scheduledWithoutGames: MatchCardData = {
+      matchNo: 11,
+      top: topEntry,
+      bottom: bottomEntry,
+      winnerId: null,
+      status: 'scheduled',
+    };
+    rerender(<MatchCard match={scheduledWithoutGames} />);
+    expect(screen.queryByTestId('match-score-summary')).toBeNull();
+  });
+
+  it('renders placeholders when entries are null and placeholders are provided', () => {
+    const match: MatchCardData = {
+      matchNo: 12,
+      top: null,
+      bottom: null,
+      topPlaceholder: 'แชมป์กลุ่ม A',
+      bottomPlaceholder: 'รองแชมป์กลุ่ม B',
+      winnerId: null,
+      status: 'scheduled',
+      court: 'Court 1',
+    };
+
+    render(<MatchCard match={match} />);
+    expect(screen.getByText('แชมป์กลุ่ม A')).toBeInTheDocument();
+    expect(screen.getByText('รองแชมป์กลุ่ม B')).toBeInTheDocument();
+    expect(screen.getByText('Court 1')).toBeInTheDocument();
+  });
 });

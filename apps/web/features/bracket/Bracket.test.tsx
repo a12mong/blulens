@@ -133,4 +133,115 @@ describe('Bracket', () => {
     const cells = rows[4].querySelectorAll('td');
     expect(cells[5]).toHaveTextContent('—');
   });
+
+  it('confirmed match shows its scores and a "ชนะ" marker, scheduled shows no scores', () => {
+    const customRounds = [
+      {
+        round: 1,
+        nameTh: 'รอบแรก',
+        matches: [
+          {
+            matchNo: 1,
+            round: 1,
+            top: 'e1',
+            bottom: 'e2',
+            topEntry: { entryId: 'e1', displayName: 'คู่ ก / ข' },
+            bottomEntry: { entryId: 'e2', displayName: 'คู่ ค / ง' },
+            winner: 'e1',
+            status: 'confirmed' as const,
+            games: [
+              { a: 15, b: 11 },
+              { a: 15, b: 9 },
+            ],
+          },
+          {
+            matchNo: 2,
+            round: 1,
+            top: 'e3',
+            bottom: 'e4',
+            topEntry: { entryId: 'e3', displayName: 'คู่ จ / ฉ' },
+            bottomEntry: { entryId: 'e4', displayName: 'คู่ ช / ซ' },
+            winner: null,
+            status: 'scheduled' as const,
+          },
+        ],
+      },
+    ];
+
+    render(<Bracket rounds={customRounds} />);
+
+    // Match 1 has scores 15–11, 15–9 and winner text ชนะ
+    const scoreSummaries = screen.getAllByTestId('match-score-summary');
+    expect(scoreSummaries.length).toBeGreaterThanOrEqual(1);
+    expect(scoreSummaries[0]).toHaveTextContent('15–11, 15–9');
+
+    const winnerRows = screen.getAllByTestId('match-top').filter(
+      (r) => r.getAttribute('data-winner') === 'true',
+    );
+    expect(winnerRows[0]).toHaveTextContent('ชนะ');
+
+    // Match 2 is scheduled: shows no scores
+    const matchCards = screen.getAllByTestId('match-card');
+    const scheduledCards = matchCards.filter(
+      (c) => c.getAttribute('data-status') === 'scheduled',
+    );
+    expect(scheduledCards.length).toBeGreaterThanOrEqual(1);
+    for (const card of scheduledCards) {
+      expect(card.querySelector('[data-testid="match-score-summary"]')).toBeNull();
+      expect(card.querySelector('[data-winner="true"]')).toBeNull();
+    }
+  });
+
+  it('renders third place label when match is marked as third place', () => {
+    const thirdPlaceRounds = [
+      {
+        round: 3,
+        nameTh: 'ชิงที่ 3',
+        matches: [
+          {
+            matchNo: 7,
+            round: 3,
+            top: 'e1',
+            bottom: 'e2',
+            topEntry: { entryId: 'e1', displayName: 'คู่ ก / ข' },
+            bottomEntry: { entryId: 'e2', displayName: 'คู่ ค / ง' },
+            status: 'scheduled' as const,
+            isThirdPlace: true,
+          },
+        ],
+      },
+    ];
+
+    render(<Bracket rounds={thirdPlaceRounds} />);
+
+    const thirdPlaceBadges = screen.getAllByTestId('match-third-place');
+    expect(thirdPlaceBadges.length).toBeGreaterThanOrEqual(1);
+    expect(thirdPlaceBadges[0]).toHaveTextContent('ชิงที่ 3');
+  });
+
+  it('renders placeholders as text when top/bottom are null', () => {
+    const placeholderRounds = [
+      {
+        round: 1,
+        nameTh: 'รอบแรก',
+        matches: [
+          {
+            matchNo: 1,
+            round: 1,
+            top: null,
+            bottom: null,
+            topPlaceholder: 'แชมป์กลุ่ม A',
+            bottomPlaceholder: 'ผู้ชนะคู่ที่ 3',
+            status: 'scheduled' as const,
+          },
+        ],
+      },
+    ];
+
+    render(<Bracket rounds={placeholderRounds} />);
+
+    expect(screen.getAllByText('แชมป์กลุ่ม A').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('ผู้ชนะคู่ที่ 3').length).toBeGreaterThanOrEqual(1);
+  });
 });
+
