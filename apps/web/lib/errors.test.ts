@@ -50,6 +50,9 @@ describe('thaiError', () => {
       'MATCH_ALREADY_CONFIRMED',
       'UMPIRE_NOT_ASSIGNED',
       'UMPIRE_OWN_MATCH',
+      'REVIEWER_CONFLICT_OF_INTEREST',
+      'REVIEWER_NOT_ELIGIBLE',
+      'ASSESSMENT_NOT_ASSIGNABLE',
     ];
 
     codes.forEach((code) => {
