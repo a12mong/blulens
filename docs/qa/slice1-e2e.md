@@ -46,6 +46,7 @@ pnpm exec playwright test --project=setup --project=chromium   # ส่วน UI
 - Step ของ wizard และ publish ต้องผ่านจริง (ห้าม bypass); test จะ **fail** ถ้าหา id จาก response ไม่เจอ ไม่มี fallback เงียบ
 - ผล Committee: หลัง reject/approve แถวหายจากคิว (คิวแสดงเฉพาะ `pending_committee`) — ยืนยันสถานะจริงด้วย step API cross-check
 - รายงานผลแดงให้ระบุ: step, ข้อความ assertion, URL, และ response ของ API (console/network)
+- **ล็อกอินผ่าน API (Dwight, slice 2 gate 2026-10-08):** ตอนรัน API ของตัวเอง ให้ตั้ง `WEB_URL=<origin ของ web ที่ใช้จริง>` (เช่น `WEB_URL=http://localhost:3190`) ไม่งั้น `POST /auth/login` จะได้ `403 ORIGIN_FORBIDDEN` · ถ้าเจอ ให้เช็ค `WEB_URL` และ `NODE_ENV` ก่อนสงสัยโค้ด
 
 ## 5. Mutation ที่ใช้พิสูจน์ว่า test จับได้ (ทำมือ ห้าม commit)
 | การแก้ | step ที่ต้องแดง |
