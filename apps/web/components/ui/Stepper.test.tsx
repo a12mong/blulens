@@ -90,7 +90,7 @@ describe('Stepper', () => {
     expect(screen.getByText(/4\. ทบทวน/)).toBeInTheDocument();
 
     const markers = screen.getAllByTestId('step-marker');
-    expect(markers[0]).toHaveTextContent('✓');
+    expect(markers[0].querySelector('svg')).toBeInTheDocument();
     expect(markers[1]).toHaveTextContent('2');
     expect(markers[2]).toHaveTextContent('3');
     expect(markers[3]).toHaveTextContent('4');
