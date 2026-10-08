@@ -25,7 +25,7 @@ export function useSaveEventUmpires(eventId: string) {
     mutationFn: async (umpires: EventUmpire[]) => {
       return apiFetch<EventUmpire[]>(`/events/${eventId}/umpires`, {
         method: 'PUT',
-        body: JSON.stringify(umpires),
+        body: umpires,
       });
     },
     onSuccess: () => {
@@ -59,7 +59,7 @@ export function useAssignMatch(eventId: string) {
     mutationFn: async (payload: { matchId: string; court?: string | null; umpireId?: string | null }) => {
       return apiFetch<Match>(`/matches/${payload.matchId}/assignment`, {
         method: 'PATCH',
-        body: JSON.stringify({ court: payload.court, umpireId: payload.umpireId }),
+        body: { court: payload.court, umpireId: payload.umpireId },
       });
     },
     onSuccess: () => {
