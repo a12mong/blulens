@@ -30,6 +30,8 @@ tags:
   - name: audit
   - name: format
     description: bl-17 (docs/specs/tournament-format.md) v1 approved
+  - name: notifications
+    description: 'docs/specs/notifications.md (v1 in-app only; WAITING FOR OWNER APPROVAL)'
 
 paths:
   /health:
@@ -221,6 +223,45 @@ paths:
                 reason: { type: string }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/TeamRequest' } } } }
+  /me/notifications:
+    get:
+      tags: [notifications]
+      summary: My notifications, unread first then newest first (cursor paged) + my unread count
+      description: 'Only the caller''s own rows. The web polls ?limit=1 every 60 s (and on navigation/focus) just to read unreadCount for the bell.'
+      x-roles: [Member, Reviewer, Umpire, Committee, Admin]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: unread, in: query, schema: { type: boolean, default: false }, description: 'true = unread only' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationPage' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      summary: Mark one of my notifications read (idempotent)
+      x-roles: [Member, Reviewer, Umpire, Committee, Admin]
+      parameters: [{ name: notificationId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: 'read (already read -> 204, readAt unchanged)' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /me/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark all my unread notifications read
+      x-roles: [Member, Reviewer, Umpire, Committee, Admin]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated]
+                properties:
+                  updated: { type: integer, minimum: 0 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /me/teams:
     post:
       tags: [teams]
@@ -1516,6 +1557,30 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Team' } }
         nextCursor: { type: [string, 'null'] }
+
+    # ---- notifications (docs/specs/notifications.md) ----
+    NotificationType:
+      type: string
+      description: 'stored as text, so new types are additive. review_assigned is BLIND: same text for assessment and calibration tasks, links to /review, never names the subject.'
+      enum: [assessment_approved, assessment_returned, assessment_confirmed, assessment_overridden, review_assigned, match_result_approved, match_result_rejected, umpire_assigned, knockout_published]
+    Notification:
+      type: object
+      required: [id, type, title, body, link, readAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: string, maxLength: 200, description: 'Thai, rendered when created' }
+        body: { type: [string, 'null'], maxLength: 1000 }
+        link: { type: [string, 'null'], description: 'in-app path starting with / (never an external URL)' }
+        readAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    NotificationPage:
+      type: object
+      required: [items, nextCursor, unreadCount]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+        nextCursor: { type: [string, 'null'] }
+        unreadCount: { type: integer, minimum: 0, description: 'all my unread, independent of the page and the unread filter' }
 
     # ---- grading output shape (bad8bit-style; grading.md §6) ----
     GradeKey:
