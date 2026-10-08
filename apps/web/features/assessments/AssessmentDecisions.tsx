@@ -74,7 +74,7 @@ export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
         action: 'approve',
         body: {
           note: approveNote.trim() || undefined,
-          resultVersion: detail.latestResultVersion ?? undefined,
+          resultVersion: latestResult?.version ?? undefined,
         },
       },
       {
@@ -91,7 +91,7 @@ export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
         body: {
           centerKey: overrideCenterKey,
           reason: trimmedReason,
-          resultVersion: detail.latestResultVersion ?? undefined,
+          resultVersion: latestResult?.version ?? undefined,
         },
       },
       {
@@ -234,7 +234,9 @@ export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
             </h2>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs text-muted-foreground">
-                หมายเหตุ (ไม่บังคับ)
+                {status === 'disputed'
+                  ? 'หมายเหตุ (จำเป็นสำหรับผลที่เห็นต่างกัน อย่างน้อย 5 ตัวอักษร)'
+                  : 'หมายเหตุ (ไม่บังคับ)'}
               </label>
               <textarea
                 data-testid="approve-note"
@@ -260,7 +262,7 @@ export function AssessmentDecisions({ detail }: AssessmentDecisionsProps) {
               <button
                 type="button"
                 data-testid="approve-submit"
-                disabled={isPending}
+                disabled={isPending || (status === 'disputed' && approveNote.trim().length < 5)}
                 onClick={handleApprove}
                 className="min-h-[44px] px-4 py-2 text-sm font-medium rounded bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
               >
