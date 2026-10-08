@@ -1,7 +1,7 @@
 'use client';
 
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { UseMutationOptions, UseQueryOptions } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api/client';
 import type { components } from '@/lib/api/schema';
 
@@ -37,3 +37,19 @@ export function useReportResult(
     },
   });
 }
+
+export function useUmpireMatches(
+  status?: 'scheduled' | 'reported' | 'confirmed',
+  options?: Omit<UseQueryOptions<Match[], Error>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery({
+    queryKey: ['umpire', 'matches', status ?? 'all'],
+    queryFn: async () => {
+      return apiFetch<Match[]>('/umpire/matches', {
+        query: status ? { status } : undefined,
+      });
+    },
+    ...options,
+  });
+}
+
