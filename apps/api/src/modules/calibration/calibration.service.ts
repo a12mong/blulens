@@ -345,4 +345,55 @@ export class CalibrationService {
       return this.getSetDetail(setId, tx);
     });
   }
+
+  /**
+   * Bias of each reviewer against the Committee reference grades (grading.md 12.4):
+   * d = overall - (referenceIndex + 0.5) in ladder units; abstained or unscored reviews are skipped.
+   */
+  async getResults(setId: string) {
+    const set = await this.prisma.calibrationSet.findUnique({
+      where: { id: setId },
+      select: { id: true },
+    });
+    if (!set) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        'CALIBRATION_SET_NOT_FOUND',
+        'ไม่พบชุดคลิปปรับมาตรฐาน',
+      );
+    }
+    const reviews = await this.prisma.review.findMany({
+      where: {
+        abstained: false,
+        overall: { not: null },
+        assignment: { kind: 'calibration', calibrationClip: { setId } },
+      },
+      select: {
+        overall: true,
+        assignment: {
+          select: { reviewerId: true, calibrationClip: { select: { referenceIndex: true } } },
+        },
+      },
+    });
+
+    const diffs = new Map<string, number[]>();
+    for (const r of reviews) {
+      const ref = r.assignment.calibrationClip?.referenceIndex;
+      if (ref === undefined || r.overall === null) continue;
+      const list = diffs.get(r.assignment.reviewerId) ?? [];
+      list.push(Number(r.overall) - (ref + 0.5));
+      diffs.set(r.assignment.reviewerId, list);
+    }
+
+    const round3 = (x: number) => Math.round(x * 1000) / 1000;
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    return [...diffs.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([reviewerId, d]) => ({
+        reviewerId,
+        clipsScored: d.length,
+        biasVsReference: round3(mean(d)),
+        meanAbsError: round3(mean(d.map(Math.abs))),
+      }));
+  }
 }
