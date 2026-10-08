@@ -4,7 +4,12 @@ import type { Assessment, AssessmentResult } from '@prisma/client';
 import { GRADE_KEYS, GRADES, gradeIndex, projectGrade, type GradeKey } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { StorageService, assessmentClipKey, type ClipContentType } from '../../common/storage/storage.service';
+import {
+  CLIP_MAX_DURATION_SEC,
+  StorageService,
+  assessmentClipKey,
+  type ClipContentType,
+} from '../../common/storage/storage.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
@@ -1092,5 +1097,68 @@ export class AssessmentsService {
         expiresAt: presign.expiresAt,
       };
     });
+  }
+
+  /** Presign flow step 3: the browser's PUT is done; verify the object and mark the clip playable. */
+  async completeClip(clipId: string, durationSec: number, user: AuthUser) {
+    if (durationSec > CLIP_MAX_DURATION_SEC) {
+      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, 'CLIP_TOO_LONG', 'คลิปยาวได้ไม่เกิน 5 นาที');
+    }
+    const clip = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM clips WHERE id = ${clipId}::uuid FOR UPDATE
+      `;
+      const row =
+        locked.length > 0
+          ? await tx.clip.findUnique({
+              where: { id: clipId },
+              include: { assessment: { select: { subjectUserId: true, status: true } } },
+            })
+          : null;
+      // non-owner or no longer a draft: 404, so clip ids of other members do not leak
+      if (!row || row.assessment.subjectUserId !== user.id || row.assessment.status !== 'draft') {
+        throw ApiException.notFound('ไม่พบคลิปที่ต้องการ', 'CLIP_NOT_FOUND');
+      }
+      if (row.status === 'uploaded') return row;
+      if (row.status === 'rejected') {
+        throw ApiException.conflict('CLIP_REJECTED', 'คลิปนี้ถูกปฏิเสธแล้ว กรุณาอัปโหลดคลิปใหม่');
+      }
+
+      const stored = await this.storage.head(row.objectKey);
+      if (!stored) {
+        throw ApiException.conflict('CLIP_NOT_UPLOADED', 'ยังไม่พบไฟล์คลิปที่อัปโหลด');
+      }
+      if (stored.sizeBytes !== Number(row.sizeBytes) || stored.contentType !== row.contentType) {
+        throw new ApiException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'CLIP_MISMATCH',
+          'ไฟล์ที่อัปโหลดไม่ตรงกับขนาดหรือชนิดที่แจ้งไว้',
+        );
+      }
+
+      const updated = await tx.clip.update({
+        where: { id: clipId },
+        data: { status: 'uploaded', durationSec, uploadExpiresAt: null },
+      });
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'clip.complete',
+          entityType: 'clip',
+          entityId: clipId,
+          before: { status: row.status },
+          after: { status: updated.status, durationSec, sizeBytes: stored.sizeBytes },
+        },
+        tx,
+      );
+      return updated;
+    });
+
+    return {
+      id: clip.id,
+      status: clip.status,
+      viewUrl: await this.storage.viewUrl(clip.status, clip.objectKey),
+      durationSec: clip.durationSec,
+    };
   }
 }
