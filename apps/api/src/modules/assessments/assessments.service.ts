@@ -136,9 +136,37 @@ export class AssessmentsService {
       }
     }
 
+    // Batch-load all assessment results for the page
+    const allResults =
+      pageIds.length > 0
+        ? await this.prisma.assessmentResult.findMany({
+            where: { assessmentId: { in: pageIds } },
+            orderBy: { version: 'desc' },
+            select: { id: true, assessmentId: true, version: true, status: true, score: true, margin: true, lowerIndex: true, centerIndex: true, upperIndex: true, kind: true, label: true },
+          })
+        : [];
+
+    // Group results by assessment and determine visible result for each
+    const resultsByAssessment = new Map<string, typeof allResults>();
+    for (const result of allResults) {
+      if (!resultsByAssessment.has(result.assessmentId)) {
+        resultsByAssessment.set(result.assessmentId, []);
+      }
+      resultsByAssessment.get(result.assessmentId)!.push(result);
+    }
+
+    const visibleResultMap = new Map<string, (typeof allResults)[0] | null>();
+    for (const [assessmentId, results] of resultsByAssessment) {
+      // Staff sees latest any status; Members see latest approved only
+      const visibleResult = isStaff
+        ? results[0] // Latest (highest version)
+        : results.find((r) => r.status === 'approved') || null;
+      visibleResultMap.set(assessmentId, visibleResult);
+    }
+
     return {
       items: items.map((a) =>
-        this.mapAssessment(a, submittedMap.get(a.id) ?? 0, a.reviewsRequired, actor),
+        this.mapAssessment(a, submittedMap.get(a.id) ?? 0, a.reviewsRequired, actor, visibleResultMap.get(a.id) ?? null),
       ),
       nextCursor,
     };
@@ -220,24 +248,30 @@ export class AssessmentsService {
 
     let latestResult = null;
     let reviewerRows: any[] = [];
+    let isVisible = false;
 
     if (latestResultRow) {
-      latestResult = {
-        version: latestResultRow.version,
-        source: latestResultRow.source,
-        status: latestResultRow.status,
-        grade: toGradeView(latestResultRow),
-        nRaters: latestResultRow.nRaters,
-        nExcluded: latestResultRow.nExcluded,
-        spread: latestResultRow.spread !== null ? Number(latestResultRow.spread) : null,
-        flags: latestResultRow.flags,
-        methodVersion: latestResultRow.methodVersion,
-        reason: latestResultRow.reason,
-        computedAt: latestResultRow.computedAt.toISOString(),
-        computedBy: latestResultRow.computedBy,
-      };
+      // Apply visibility: Staff sees any status, Members see only approved
+      isVisible = isStaff || latestResultRow.status === 'approved';
 
-      if (isStaff) {
+      if (isVisible) {
+        latestResult = {
+          version: latestResultRow.version,
+          source: latestResultRow.source,
+          status: latestResultRow.status,
+          grade: toGradeView(latestResultRow),
+          nRaters: latestResultRow.nRaters,
+          nExcluded: latestResultRow.nExcluded,
+          spread: latestResultRow.spread !== null ? Number(latestResultRow.spread) : null,
+          flags: latestResultRow.flags,
+          methodVersion: latestResultRow.methodVersion,
+          reason: latestResultRow.reason,
+          computedAt: latestResultRow.computedAt.toISOString(),
+          computedBy: latestResultRow.computedBy,
+        };
+      }
+
+      if (isStaff && isVisible) {
         const inputs = (latestResultRow.inputs as any) ?? {};
         const reviewIds: string[] = Array.isArray(inputs.reviewIds) ? inputs.reviewIds : [];
         const scores: (number | null)[] = Array.isArray(inputs.scores) ? inputs.scores : [];
@@ -311,7 +345,7 @@ export class AssessmentsService {
     }
 
     return {
-      ...this.mapAssessment(assessment, reviewsSubmitted, assessment.reviewsRequired, actor),
+      ...this.mapAssessment(assessment, reviewsSubmitted, assessment.reviewsRequired, actor, isVisible ? latestResultRow : undefined),
       clips,
       latestResult,
       reviewerRows,
@@ -974,7 +1008,7 @@ export class AssessmentsService {
     return this.getDetail(assessmentId, actor);
   }
 
-  private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number, actor?: AuthUser) {
+  private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number, actor?: AuthUser, visibleResult?: any) {
     const isStaff = actor ? actor.roles.some((r) => r === 'Committee' || r === 'Admin') : false;
 
     const clubNames = assessment.subject?.memberships
@@ -1009,6 +1043,10 @@ export class AssessmentsService {
           }))
         : [];
 
+    // Calculate latestGrade and latestResultVersion based on visible result
+    const latestGrade = visibleResult ? toGradeView(visibleResult) : null;
+    const latestResultVersion = visibleResult?.version ?? null;
+
     return {
       id: assessment.id,
       subjectUserId: assessment.subjectUserId,
@@ -1020,6 +1058,8 @@ export class AssessmentsService {
       reviewsSubmitted,
       reviewsRequired,
       ...(assessment.assignments ? { assignments } : {}),
+      latestGrade,
+      latestResultVersion,
       createdAt: assessment.createdAt,
       updatedAt: assessment.updatedAt,
     };
