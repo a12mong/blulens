@@ -1,5 +1,6 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { CalibrationSet, CalibrationClip, Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { GRADES, gradeIndex, type GradeKey } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -12,6 +13,22 @@ import {
 } from '../../common/storage/storage.service';
 import { ApiException } from '../../common/errors/api.exception';
 import type { AuthUser } from '../../common/auth/auth.types';
+
+const assignCalibrationSetSchema = z.object({
+  reviewerIds: z
+    .array(z.string().uuid())
+    .min(1, 'At least one reviewer required')
+    .max(50)
+    .refine((ids) => new Set(ids).size === ids.length, 'Duplicate reviewer IDs'),
+  dueAt: z
+    .string()
+    .datetime()
+    .optional()
+    .transform((val) => (val ? new Date(val) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)))
+    .refine((date) => date > new Date(), 'Due date must be in the future'),
+});
+
+export type AssignCalibrationSetInput = z.infer<typeof assignCalibrationSetSchema>;
 
 export interface CalibrationSetDto {
   id: string;
@@ -187,6 +204,138 @@ export class CalibrationService {
       clipDetails,
       reviewers,
     };
+  }
+
+  async assignCalibrationSet(setId: string, input: unknown, user: AuthUser): Promise<void> {
+    // Validate input
+    const parseResult = assignCalibrationSetSchema.safeParse(input);
+    if (!parseResult.success) {
+      const issue = parseResult.error.issues[0];
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        'VALIDATION_FAILED',
+        issue?.message ?? 'Invalid request',
+      );
+    }
+
+    const { reviewerIds, dueAt } = parseResult.data;
+
+    // Transaction with FOR UPDATE lock
+    await this.prisma.$transaction(async (tx) => {
+      // Lock the set row (concurrent assigns and clip edits serialise on it)
+      await tx.$queryRaw`SELECT id FROM calibration_sets WHERE id = ${setId}::uuid FOR UPDATE`;
+      const set = await tx.calibrationSet.findUnique({
+        where: { id: setId },
+        include: { clips: true },
+      });
+
+      if (!set) {
+        throw new ApiException(
+          HttpStatus.NOT_FOUND,
+          'CALIBRATION_SET_NOT_FOUND',
+          'ไม่พบชุดการสอบเทียม',
+        );
+      }
+
+      // Check all clips are uploaded
+      if (set.clips.length === 0) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'CALIBRATION_CLIPS_NOT_READY',
+          'ชุดการสอบเทียมไม่มีคลิปหรือคลิปยังไม่พร้อม',
+        );
+      }
+
+      for (const clip of set.clips) {
+        if (clip.status !== 'uploaded') {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'CALIBRATION_CLIPS_NOT_READY',
+            'ชุดการสอบเทียมไม่มีคลิปหรือคลิปยังไม่พร้อม',
+          );
+        }
+      }
+
+      // Fetch and validate reviewers
+      const reviewers = await tx.user.findMany({
+        where: { id: { in: reviewerIds } },
+        select: { id: true, status: true, roles: { select: { role: true } } },
+      });
+
+      if (reviewers.length !== reviewerIds.length) {
+        // Find missing user
+        const foundIds = new Set(reviewers.map((r) => r.id));
+        const missingId = reviewerIds.find((id) => !foundIds.has(id));
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'REVIEWER_NOT_ELIGIBLE',
+          'ผู้ประเมินไม่พบหรือไม่มีสิทธิ์',
+          { userId: missingId },
+        );
+      }
+
+      // Check all reviewers have Reviewer role and are enabled
+      for (const reviewer of reviewers) {
+        if (reviewer.status === 'disabled') {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'REVIEWER_NOT_ELIGIBLE',
+            'ผู้ประเมินไม่พบหรือไม่มีสิทธิ์',
+            { userId: reviewer.id },
+          );
+        }
+
+        const hasReviewerRole = reviewer.roles.some((r) => r.role === 'Reviewer');
+        if (!hasReviewerRole) {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'REVIEWER_NOT_ELIGIBLE',
+            'ผู้ประเมินไม่พบหรือไม่มีสิทธิ์',
+            { userId: reviewer.id },
+          );
+        }
+      }
+
+      // Create assignments for each reviewer-clip pair
+      const assignments = set.clips.flatMap((clip) =>
+        reviewerIds.map((reviewerId) => ({
+          kind: 'calibration' as const,
+          calibrationClipId: clip.id,
+          reviewerId,
+          dueAt,
+          state: 'open' as const,
+        })),
+      );
+
+      await tx.reviewAssignment.createMany({
+        data: assignments,
+        skipDuplicates: true,
+      });
+
+      // Set assignedAt if not already set
+      if (!set.assignedAt) {
+        await tx.calibrationSet.update({
+          where: { id: setId },
+          data: { assignedAt: new Date() },
+        });
+      }
+
+      // Audit
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'calibration_set.assign',
+          entityType: 'calibration_set',
+          entityId: setId,
+          after: {
+            reviewerIds,
+            clipCount: set.clips.length,
+            dueAt: dueAt.toISOString(),
+          },
+        },
+        tx,
+      );
+    });
   }
 
   /** Locks the set; its clips can change only while it is not yet assigned. */
