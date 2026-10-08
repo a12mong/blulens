@@ -1510,6 +1510,8 @@ components:
         state: { type: string, enum: [open, submitted, expired, declined] }
         dueAt: { type: string, format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time }
+        clipCount: { type: integer, minimum: 0, description: 'clips with status uploaded (queue card "N คลิป"); blind-safe' }
+        totalDurationSec: { type: [integer, 'null'], description: 'sum of durationSec of those clips; null when any of them has no duration. Calibration tasks fill both fields the same way from their clip, so the card never tells them apart' }
     ReviewAssignmentDetail:
       allOf:
         - { $ref: '#/components/schemas/ReviewAssignment' }
