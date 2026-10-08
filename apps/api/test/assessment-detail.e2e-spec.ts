@@ -314,7 +314,7 @@ describe('GET /api/v1/assessments/:assessmentId (bl-26-2 detail)', () => {
     expect(row2.criteria).toHaveLength(6);
   });
 
-  it('subject Member gets 200 with reviewerRows []', async () => {
+  it('subject Member gets 200 with latestResult null (pending_approval not visible)', async () => {
     const res = await http()
       .get(`/api/v1/assessments/${assessmentId}`)
       .set('Cookie', subjectCookie)
@@ -324,8 +324,7 @@ describe('GET /api/v1/assessments/:assessmentId (bl-26-2 detail)', () => {
     const data = res.body.data;
     expect(data.id).toBe(assessmentId);
     expect(data.clips).toHaveLength(2);
-    expect(data.latestResult).not.toBeNull();
-    expect(data.latestResult.version).toBe(1);
+    expect(data.latestResult).toBeNull();
     expect(data.reviewerRows).toEqual([]);
   });
 

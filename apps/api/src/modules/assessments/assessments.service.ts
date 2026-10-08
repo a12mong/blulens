@@ -91,10 +91,7 @@ export class AssessmentsService {
             displayName: true,
             memberships: {
               where: {
-                OR: [
-                  { validTo: null },
-                  { validTo: { gt: new Date() } },
-                ],
+                OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
               },
               select: {
                 team: { select: { name: true } },
@@ -140,9 +137,24 @@ export class AssessmentsService {
     const allResults =
       pageIds.length > 0
         ? await this.prisma.assessmentResult.findMany({
-            where: { assessmentId: { in: pageIds } },
+            where: {
+              assessmentId: { in: pageIds },
+              ...(isStaff ? {} : { status: 'approved' }),
+            },
             orderBy: { version: 'desc' },
-            select: { id: true, assessmentId: true, version: true, status: true, score: true, margin: true, lowerIndex: true, centerIndex: true, upperIndex: true, kind: true, label: true },
+            select: {
+              id: true,
+              assessmentId: true,
+              version: true,
+              status: true,
+              score: true,
+              margin: true,
+              lowerIndex: true,
+              centerIndex: true,
+              upperIndex: true,
+              kind: true,
+              label: true,
+            },
           })
         : [];
 
@@ -159,14 +171,20 @@ export class AssessmentsService {
     for (const [assessmentId, results] of resultsByAssessment) {
       // Staff sees latest any status; Members see latest approved only
       const visibleResult = isStaff
-        ? results[0] // Latest (highest version)
+        ? (results[0] ?? null)
         : results.find((r) => r.status === 'approved') || null;
       visibleResultMap.set(assessmentId, visibleResult);
     }
 
     return {
       items: items.map((a) =>
-        this.mapAssessment(a, submittedMap.get(a.id) ?? 0, a.reviewsRequired, actor, visibleResultMap.get(a.id) ?? null),
+        this.mapAssessment(
+          a,
+          submittedMap.get(a.id) ?? 0,
+          a.reviewsRequired,
+          actor,
+          visibleResultMap.get(a.id) ?? null,
+        ),
       ),
       nextCursor,
     };
@@ -187,10 +205,7 @@ export class AssessmentsService {
             displayName: true,
             memberships: {
               where: {
-                OR: [
-                  { validTo: null },
-                  { validTo: { gt: new Date() } },
-                ],
+                OR: [{ validTo: null }, { validTo: { gt: new Date() } }],
               },
               select: {
                 team: { select: { name: true } },
@@ -241,38 +256,35 @@ export class AssessmentsService {
       durationSec: c.durationSec,
     }));
 
-    const latestResultRow = await this.prisma.assessmentResult.findFirst({
-      where: { assessmentId },
+    const visibleResultRow = await this.prisma.assessmentResult.findFirst({
+      where: {
+        assessmentId,
+        ...(isStaff ? {} : { status: 'approved' }),
+      },
       orderBy: { version: 'desc' },
     });
 
     let latestResult = null;
     let reviewerRows: any[] = [];
-    let isVisible = false;
 
-    if (latestResultRow) {
-      // Apply visibility: Staff sees any status, Members see only approved
-      isVisible = isStaff || latestResultRow.status === 'approved';
+    if (visibleResultRow) {
+      latestResult = {
+        version: visibleResultRow.version,
+        source: visibleResultRow.source,
+        status: visibleResultRow.status,
+        grade: toGradeView(visibleResultRow),
+        nRaters: visibleResultRow.nRaters,
+        nExcluded: visibleResultRow.nExcluded,
+        spread: visibleResultRow.spread !== null ? Number(visibleResultRow.spread) : null,
+        flags: visibleResultRow.flags,
+        methodVersion: visibleResultRow.methodVersion,
+        reason: visibleResultRow.reason,
+        computedAt: visibleResultRow.computedAt.toISOString(),
+        computedBy: visibleResultRow.computedBy,
+      };
 
-      if (isVisible) {
-        latestResult = {
-          version: latestResultRow.version,
-          source: latestResultRow.source,
-          status: latestResultRow.status,
-          grade: toGradeView(latestResultRow),
-          nRaters: latestResultRow.nRaters,
-          nExcluded: latestResultRow.nExcluded,
-          spread: latestResultRow.spread !== null ? Number(latestResultRow.spread) : null,
-          flags: latestResultRow.flags,
-          methodVersion: latestResultRow.methodVersion,
-          reason: latestResultRow.reason,
-          computedAt: latestResultRow.computedAt.toISOString(),
-          computedBy: latestResultRow.computedBy,
-        };
-      }
-
-      if (isStaff && isVisible) {
-        const inputs = (latestResultRow.inputs as any) ?? {};
+      if (isStaff) {
+        const inputs = (visibleResultRow.inputs as any) ?? {};
         const reviewIds: string[] = Array.isArray(inputs.reviewIds) ? inputs.reviewIds : [];
         const scores: (number | null)[] = Array.isArray(inputs.scores) ? inputs.scores : [];
         const excludedIndexes: number[] = Array.isArray(inputs.excludedIndexes)
@@ -345,7 +357,13 @@ export class AssessmentsService {
     }
 
     return {
-      ...this.mapAssessment(assessment, reviewsSubmitted, assessment.reviewsRequired, actor, isVisible ? latestResultRow : undefined),
+      ...this.mapAssessment(
+        assessment,
+        reviewsSubmitted,
+        assessment.reviewsRequired,
+        actor,
+        visibleResultRow ?? null,
+      ),
       clips,
       latestResult,
       reviewerRows,
@@ -1008,7 +1026,13 @@ export class AssessmentsService {
     return this.getDetail(assessmentId, actor);
   }
 
-  private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number, actor?: AuthUser, visibleResult?: any) {
+  private mapAssessment(
+    assessment: any,
+    reviewsSubmitted: number,
+    reviewsRequired: number,
+    actor?: AuthUser,
+    visibleResult?: any,
+  ) {
     const isStaff = actor ? actor.roles.some((r) => r === 'Committee' || r === 'Admin') : false;
 
     const clubNames = assessment.subject?.memberships
