@@ -76,3 +76,23 @@ export function useAssessmentAction(
   });
 }
 
+
+type RaterStats = components['schemas']['RaterStats'];
+
+export const raterStatsKey = (window?: string) =>
+  ['rater-stats', window ?? '90d'] as const;
+
+export function useRaterStats(
+  window?: '30d' | '90d' | '365d' | 'all',
+  options?: Omit<UseQueryOptions<RaterStats>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: raterStatsKey(window),
+    queryFn: async () => {
+      const query: Record<string, string | undefined> = {};
+      if (window) query.window = window;
+      return apiFetch<RaterStats>('/rater-stats', { query: query as any });
+    },
+    ...options,
+  });
+}
