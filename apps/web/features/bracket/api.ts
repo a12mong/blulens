@@ -4,6 +4,7 @@ import type { components } from '@/lib/api/schema';
 
 export type Bracket = components['schemas']['Bracket'];
 export type GroupStanding = components['schemas']['GroupStanding'];
+export type Match = components['schemas']['Match'];
 
 export const BRACKET_REFETCH_INTERVAL = 30_000;
 
@@ -21,6 +22,16 @@ export function useStandings(eventId: string) {
   return useQuery<GroupStanding[]>({
     queryKey: ['events', eventId, 'standings'],
     queryFn: async () => apiFetch(`/events/${eventId}/standings`),
+    enabled: Boolean(eventId),
+    refetchInterval: BRACKET_REFETCH_INTERVAL,
+    retry: false,
+  });
+}
+
+export function useEventMatches(eventId: string) {
+  return useQuery<Match[]>({
+    queryKey: ['events', eventId, 'matches'],
+    queryFn: async () => apiFetch(`/events/${eventId}/matches`),
     enabled: Boolean(eventId),
     refetchInterval: BRACKET_REFETCH_INTERVAL,
     retry: false,
