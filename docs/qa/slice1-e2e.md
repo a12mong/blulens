@@ -74,6 +74,8 @@ pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ขอ�
 | API jest | `<DB ใน DATABASE_URL>_test` (override ด้วย `TEST_DATABASE_URL`) เช่น `blulens_demo_test` | สร้าง/migrate/seed (admin + rubric) อัตโนมัติ (bl-21-9) |
 
 **กฎ API jest (ใช้กับ QA ทุกคน):** ต้องรันบน DB `*_test` ใหม่เอี่ยมต่อการรันแต่ละครั้ง (ตั้ง `TEST_DATABASE_URL` เป็นชื่อใหม่ เช่น `blulens_<ชื่อ>_test_<เวลา>` หรือ drop แล้วสร้างใหม่ก่อนรัน) ห้ามใช้ `blulens_test` ร่วมกันซ้ำ เพราะตาราง results เป็น append-only จึงโตขึ้นเรื่อย ๆ จน `rater-stats` timeout (ต้นเหตุตาม Kevin; แก้คู่กับลำดับ list-assessments ที่ dev/bl-30-test-isolation b5af8ea) ถ้าเจอ red ให้รันซ้ำบน DB ใหม่ก่อนรายงานว่า flaky
+
+**ข้อกำหนดเพิ่ม (StorageService 9440c3c):** API e2e ต้องมี MinIO รันอยู่ (`docker compose up -d minio`) ชุดทดสอบใช้ bucket `<S3_BUCKET>-test` แยกจาก bucket จริง · แผน: เพิ่มขั้น e2e อัปโหลดคลิปของสมาชิก 1 ขั้น (bl-36-2/3) ด้วย `apps/web/public/e2e/sample.mp4` (21 KB): `POST /assessments/{id}/clips/upload-url` → PUT ไฟล์ไป `uploadUrl` ด้วย Content-Type ตรงกับที่ประกาศเป๊ะ (ชนิดอื่น → 403) → `POST /clips/{clipId}/complete {durationSec}` → clip เป็น `uploaded` พร้อม `viewUrl` แบบ presigned
 | Playwright e2e | `blulens_e2e` (seed ด้วย `SEED_DEMO=1`) | ตามข้อ 6 |
 ก่อนรัน e2e ให้ตรวจ `DATABASE_URL` ของ API process ที่ใช้: ต้องลงท้าย `/blulens_e2e` เท่านั้น
 
