@@ -137,6 +137,13 @@ function MyResultCard({ item }: { item: Assessment }) {
           )}
         </div>
       )}
+      <Link
+        href={`/me/assessments/${item.id}`}
+        data-testid="myresult-open"
+        className="inline-flex items-center justify-center self-start min-h-[44px] px-4 py-2 border border-border rounded-md text-sm font-medium hover:bg-muted"
+      >
+        ดูรายละเอียด
+      </Link>
     </article>
   );
 }
