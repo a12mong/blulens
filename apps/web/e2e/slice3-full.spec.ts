@@ -223,4 +223,19 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
     await expect(page.getByTestId('standings-provisional'), 'locked standings are not provisional').toHaveCount(0);
     await ctx.close();
   });
+
+  test('F10 public standings page (guest) renders the night theme (bl-32): bg #1c1926, pixel font on the lock badge', async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
+    const page: Page = await ctx.newPage();
+    await page.goto(`/events/${eventId}/standings`);
+    const main = page.getByTestId('standings-page');
+    await expect(page.getByTestId('standings-lock')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('standings-lock')).toHaveAttribute('data-locked', 'true');
+    const bg = await main.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const font = await page.getByTestId('standings-lock').evaluate((el) => getComputedStyle(el).fontFamily);
+    console.log('standings computed: bg=', bg, 'lock font=', font);
+    expect(bg, 'main background is night #1c1926').toBe('rgb(28, 25, 38)');
+    expect(font, 'lock badge uses the pixel font').toMatch(/Press Start 2P|monospace/);
+    await ctx.close();
+  });
 });
