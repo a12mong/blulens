@@ -259,4 +259,18 @@ describe('GradePicker', () => {
     const tierBtn = screen.getByTestId('gp-tier-Standard');
     expect(tierBtn).toHaveClass('min-h-[44px]', 'min-w-[44px]');
   });
+
+  it('sub-step buttons and tier buttons have min-h-11 class', () => {
+    const onChangeMock = vi.fn();
+    render(
+      <GradePicker value="S" onChange={onChangeMock} variant="tiered" allowNA />
+    );
+
+    expect(screen.getByTestId('gp-tier-Standard')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('gp-key-S-')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('gp-key-S')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('gp-key-S+')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('gp-clear')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('gp-na')).toHaveClass('min-h-11');
+  });
 });
