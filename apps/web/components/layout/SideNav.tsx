@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { navFor } from '@/lib/nav';
 import type { Role } from '@/lib/roles';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { notificationsEnabled } from '@/features/notifications/api';
 
 export type SideNavProps = {
   roles: readonly Role[];
@@ -47,6 +49,7 @@ export function SideNav({ roles, pathname, isLoading = false }: SideNavProps) {
           </Link>
         );
       })}
+      {notificationsEnabled() && roles.length > 0 && <NotificationBell pathname={pathname} />}
     </nav>
   );
 }
