@@ -18,6 +18,24 @@ export interface RubricItemCardProps {
   readOnly?: boolean;
 }
 
+const GRADE_LABELS: Record<GradeKey, string> = {
+  RK1: 'มือใหม่ (RK1)',
+  RK2: 'มือใหม่ (RK2)',
+  RK3: 'มือใหม่ (RK3)',
+  BG1: 'เริ่มต้น (BG1)',
+  BG2: 'เริ่มต้น (BG2)',
+  BG3: 'เริ่มต้น (BG3)',
+  'S-': 'มาตรฐาน (S-)',
+  S: 'มาตรฐาน (S)',
+  'S+': 'มาตรฐาน (S+)',
+  'N-': 'กลาง (N-)',
+  N: 'กลาง (N)',
+  'N+': 'กลาง (N+)',
+  'P-': 'มืออาชีพ (P-)',
+  P: 'มืออาชีพ (P)',
+  'P+': 'มืออาชีพ (P+)',
+};
+
 export function RubricItemCard({
   index,
   criterion,
@@ -32,10 +50,11 @@ export function RubricItemCard({
     if (value === null) {
       return 'ประเมินไม่ได้';
     }
-    return `ให้ ${value}`;
+    return GRADE_LABELS[value] ?? value;
   };
 
   const isAnswered = value !== undefined;
+  const displayIndex = index <= 0 ? 1 : index;
 
   return (
     <section
@@ -47,7 +66,7 @@ export function RubricItemCard({
       {/* Title and Weight */}
       <div>
         <h3 className="font-medium">
-          {index}. {criterion.nameTh}
+          {displayIndex}. {criterion.nameTh}
         </h3>
         <p className="text-sm text-muted-foreground">น้ำหนัก ×{criterion.weight}</p>
       </div>
