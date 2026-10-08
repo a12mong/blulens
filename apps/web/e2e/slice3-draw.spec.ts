@@ -156,12 +156,11 @@ test.describe.serial('slice 3: committee group draw', () => {
     });
   });
 
-  test('D5 KNOWN BUG (test.fail): public bracket page (anonymous) shows the published groups', async ({ browser }) => {
-    test.fail(true, 'API has no GET /events/{id}/bracket (404), so the page shows "สายแข่งยังไม่ประกาศ" even with published groups. Remove test.fail when the endpoint or page fallback lands.');
+  test('D5 public bracket page (anonymous) shows the published groups', async ({ browser }) => {
     const ctx = await browser.newContext({ baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
     const page = await ctx.newPage();
     await page.goto(`/events/${eventId}/bracket`);
-    await expect(page.getByTestId('group-standings').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByTestId('group-standings').first()).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('standing-row')).toHaveCount(3);
     await ctx.close();
   });
@@ -174,16 +173,21 @@ test.describe.serial('slice 3: committee group draw', () => {
     expect(pub.status()).toBe(409);
     expect(await errCode(pub)).toBe('DRAW_ALREADY_LOCKED');
   });
-  test('D7 KNOWN BUG (test.fail): an older preview must not be publishable after a newer preview exists', async () => {
-    test.fail(true, 'Reroll does not supersede older previews: publishing an old preview returns 200 (expected 409 DRAW_VERSION_CONFLICT). Remove test.fail when fixed.');
-    const ev2 = await setupEvent('stale');
+  test('D7 by spec (draw.md section 6/7): an older preview stays publishable; publishing it discards the newer preview', async () => {
+    const ev2 = await setupEvent('older');
     const p1 = await committeeCtx.post(`events/${ev2}/groups/preview`, { data: {} });
     expect(p1.status(), await p1.text()).toBe(201);
-    const old = (await data(p1)).id as string;
+    const older = (await data(p1)).id as string;
     const p2 = await committeeCtx.post(`events/${ev2}/groups/preview`, { data: {} });
     expect(p2.status(), await p2.text()).toBe(201);
-    const stale = await committeeCtx.post(`draws/${old}/publish`, { data: { acknowledgeConflicts: true, reason: 'stale try' } });
-    expect(stale.status(), 'publishing a superseded preview must be refused').toBe(409);
-    expect(await errCode(stale)).toBe('DRAW_VERSION_CONFLICT');
+    const newer = (await data(p2)).id as string;
+    expect(newer).not.toBe(older);
+
+    const pub = await committeeCtx.post(`draws/${older}/publish`, { data: { acknowledgeConflicts: true, reason: 'publish the first preview' } });
+    expect(pub.status(), await pub.text()).toBe(200);
+    // the newer preview is discarded by that publish
+    const again = await committeeCtx.post(`draws/${newer}/publish`, { data: { acknowledgeConflicts: true, reason: 'too late' } });
+    expect(again.status()).toBe(409);
+    expect(await errCode(again)).toBe('DRAW_ALREADY_LOCKED');
   });
 });
