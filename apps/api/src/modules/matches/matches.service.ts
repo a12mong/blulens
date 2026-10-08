@@ -5,6 +5,10 @@ import type { AuthUser } from '../../common/auth/auth.types';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  NotificationsService,
+  type NotificationItem,
+} from '../../common/notifications/notifications.service';
 import { nextSlot } from '../draws/bracket';
 import {
   bracketOrder,
@@ -120,6 +124,7 @@ export class MatchesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async loadEntryMap(
@@ -1002,6 +1007,8 @@ export class MatchesService {
       updateData: Prisma.MatchUpdateInput;
       auditAction: string;
       reason?: string;
+      /** notifications.md N6/N7: emitted in this transaction after the update */
+      notify?: NotificationItem[];
     },
   ) {
     return this.prisma.$transaction(async (tx) => {
@@ -1134,7 +1141,10 @@ export class MatchesService {
         games: currentGames,
         playerIds: playerUserIds,
         playerTeamIds,
-        umpireId: eventUmpire && eventUmpire.courts.length === 0 && match.umpireId === null ? caller.id : match.umpireId,
+        umpireId:
+          eventUmpire && eventUmpire.courts.length === 0 && match.umpireId === null
+            ? caller.id
+            : match.umpireId,
         court: match.court,
         reportedBy: match.reportedBy,
         version: match.resultVersion,
@@ -1143,7 +1153,7 @@ export class MatchesService {
       };
 
       // 8. Execute action-specific handler
-      const { updateData, auditAction, reason } = executeAction({
+      const { updateData, auditAction, reason, notify } = executeAction({
         match,
         format,
         entryIds,
@@ -1158,6 +1168,10 @@ export class MatchesService {
         where: { id: matchId },
         data: updateData,
       });
+
+      if (notify?.length) {
+        await this.notifications.emit(tx, caller.id, notify);
+      }
 
       // 9b. A confirmed knockout result moves the winner (and a semi-final loser) forward (bl-33-4)
       await this.advanceKnockout(tx, match, updated);
@@ -1222,7 +1236,9 @@ export class MatchesService {
     });
     const knockout = bracket.filter((m) => m.stage === 'knockout');
     const finalRound = Math.max(...knockout.map((m) => m.round));
-    const index = knockout.filter((m) => m.round === after.round).findIndex((m) => m.id === after.id);
+    const index = knockout
+      .filter((m) => m.round === after.round)
+      .findIndex((m) => m.id === after.id);
     const slot = nextSlot(after.round, index);
 
     const loserEntryId =
@@ -1374,6 +1390,16 @@ export class MatchesService {
         return {
           updateData,
           auditAction: 'match.result.approve',
+          notify: match.reportedBy
+            ? [
+                {
+                  recipientUserId: match.reportedBy,
+                  type: 'match_result_approved',
+                  title: 'ผลแมตช์ที่คุณรายงานได้รับการยืนยันแล้ว',
+                  link: `/umpire/matches/${match.id}`,
+                },
+              ]
+            : [],
         };
       },
     );
@@ -1416,6 +1442,18 @@ export class MatchesService {
           updateData,
           auditAction: 'match.result.reject',
           reason,
+          // `match` is the row before this update, so reportedBy is still set here
+          notify: match.reportedBy
+            ? [
+                {
+                  recipientUserId: match.reportedBy,
+                  type: 'match_result_rejected',
+                  title: 'ผลแมตช์ถูกส่งกลับ',
+                  body: reason,
+                  link: `/umpire/matches/${match.id}`,
+                },
+              ]
+            : [],
         };
       },
     );
@@ -1522,6 +1560,17 @@ export class MatchesService {
       });
 
       // 6. Record audit log
+      if (updated.umpireId && updated.umpireId !== match.umpireId) {
+        await this.notifications.emit(tx, caller.id, [
+          {
+            recipientUserId: updated.umpireId,
+            type: 'umpire_assigned',
+            title: 'คุณได้รับมอบหมายแมตช์ใหม่',
+            link: `/umpire/matches/${updated.id}`,
+          },
+        ]);
+      }
+
       await this.audit.record(
         {
           actorId: caller.id,
@@ -1618,7 +1667,10 @@ export class MatchesService {
 
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) {
-      throw ApiException.badRequest('VALIDATION_FAILED', parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
+      throw ApiException.badRequest(
+        'VALIDATION_FAILED',
+        parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง',
+      );
     }
 
     const newUmpires = parsed.data;
@@ -1660,9 +1712,14 @@ export class MatchesService {
       }
 
       if (userWithRole.status === 'disabled') {
-        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่สามารถใช้ได้', {
-          userId: umpire.userId,
-        });
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'UMPIRE_NOT_ELIGIBLE',
+          'ผู้ตัดสินไม่สามารถใช้ได้',
+          {
+            userId: umpire.userId,
+          },
+        );
       }
 
       const hasUmpireRole = userWithRole.roles.some((r: any) => r.role === 'Umpire');
@@ -1816,7 +1873,9 @@ export class MatchesService {
         return feeder ? `ผู้ชนะคู่ที่ ${feeder}` : null;
       };
       const seedNo = (offset: 1 | 2) =>
-        m.stage === 'knockout' && m.round === 1 ? (seedByPosition.get(2 * index + offset) ?? null) : null;
+        m.stage === 'knockout' && m.round === 1
+          ? (seedByPosition.get(2 * index + offset) ?? null)
+          : null;
       const games = Array.isArray(m.games) ? (m.games as Array<{ a: number; b: number }>) : [];
       const nx = m.stage === 'knockout' ? next.get(m.matchNo) : undefined;
       return {
@@ -1832,7 +1891,9 @@ export class MatchesService {
         bottomSeedNo: seedNo(2),
         bottomPlaceholder: placeholder('bottom'),
         winner:
-          m.status === 'confirmed' || m.status === 'walkover' || m.status === 'bye' ? m.winnerEntryId : null,
+          m.status === 'confirmed' || m.status === 'walkover' || m.status === 'bye'
+            ? m.winnerEntryId
+            : null,
         status: m.status,
         games: games.map((g) => ({ a: g.a, b: g.b })),
         court: m.court,

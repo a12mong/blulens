@@ -12,6 +12,7 @@ import {
   type ClipContentType,
 } from '../../common/storage/storage.service';
 import { ApiException } from '../../common/errors/api.exception';
+import { NotificationsService } from '../../common/notifications/notifications.service';
 import type { AuthUser } from '../../common/auth/auth.types';
 
 const assignCalibrationSetSchema = z.object({
@@ -62,6 +63,7 @@ export class CalibrationService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   toCalibrationSet(set: CalibrationSet & { clips: CalibrationClip[] }): CalibrationSetDto {
@@ -307,10 +309,34 @@ export class CalibrationService {
         })),
       );
 
+      const existing = await tx.reviewAssignment.findMany({
+        where: { kind: 'calibration', calibrationClip: { setId }, reviewerId: { in: reviewerIds } },
+        select: { reviewerId: true, calibrationClipId: true },
+      });
+      const had = new Set(existing.map((a) => `${a.reviewerId}|${a.calibrationClipId}`));
+      const newTasks = new Map<string, number>();
+      for (const a of assignments) {
+        if (!had.has(`${a.reviewerId}|${a.calibrationClipId}`)) {
+          newTasks.set(a.reviewerId, (newTasks.get(a.reviewerId) ?? 0) + 1);
+        }
+      }
+
       await tx.reviewAssignment.createMany({
         data: assignments,
         skipDuplicates: true,
       });
+
+      // N5 review_assigned: blind (no subject, set or clip named), links to the queue
+      await this.notifications.emit(
+        tx,
+        user.id,
+        [...newTasks].map(([reviewerId, n]) => ({
+          recipientUserId: reviewerId,
+          type: 'review_assigned' as const,
+          title: `มีงานประเมินใหม่ ${n} งาน`,
+          link: '/review',
+        })),
+      );
 
       // Set assignedAt if not already set
       if (!set.assignedAt) {
