@@ -123,7 +123,8 @@ describe('GroupStandingsTable', () => {
     // Four qualification badges
     const badges = screen.getAllByTestId('qual-badge');
     expect(badges).toHaveLength(4);
-    expect(badges[0]).toHaveTextContent('เข้ารอบ ✓');
+    expect(badges[0]).toHaveTextContent('เข้ารอบ');
+    expect(badges[0].querySelector('svg')).toBeInTheDocument();
     expect(badges[1]).toHaveTextContent('เข้ารอบ (อันดับ 3 ที่ดีที่สุด)');
     expect(badges[2]).toHaveTextContent('ลุ้นอันดับ 3');
     expect(badges[3]).toHaveTextContent('ตกรอบ');

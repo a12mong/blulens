@@ -1,4 +1,5 @@
 import React from 'react';
+import { CheckIcon } from '@/components/ui/Icon';
 
 export type QualificationStatus =
   | 'qualified'
@@ -19,7 +20,8 @@ export function QualificationBadge({ q }: QualificationBadgeProps) {
           data-q={q}
           className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400"
         >
-          เข้ารอบ ✓
+          <span>เข้ารอบ</span>
+          <CheckIcon className="w-4 h-4" />
         </span>
       );
     case 'best_third':
