@@ -102,4 +102,18 @@ describe('middleware', () => {
 
     expect(response.status).toBe(200);
   });
+
+  it('allows /events/:id/bracket without bl_session', () => {
+    const request = new NextRequest('http://localhost:3100/events/evt-123/bracket');
+    const response = middleware(request);
+
+    expect(response.status).toBe(200);
+  });
+
+  it('allows /events/:id/standings without bl_session', () => {
+    const request = new NextRequest('http://localhost:3100/events/evt-123/standings');
+    const response = middleware(request);
+
+    expect(response.status).toBe(200);
+  });
 });
