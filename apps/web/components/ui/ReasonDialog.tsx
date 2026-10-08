@@ -76,7 +76,7 @@ export function ReasonDialog({
         </p>
 
         {error && (
-          <p role="alert" data-testid="reason-error" className="text-red-600 text-sm mb-4">
+          <p role="alert" data-testid="reason-error" className="text-destructive text-sm mb-4">
             {error}
           </p>
         )}

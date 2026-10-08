@@ -127,13 +127,13 @@ export function CreateTournamentForm({ onCreated }: CreateTournamentFormProps) {
       </div>
 
       {validationError && (
-        <p role="alert" data-testid="tournament-error" className="text-red-600">
+        <p role="alert" data-testid="tournament-error" className="text-destructive">
           {validationError}
         </p>
       )}
 
       {formError && (
-        <p role="alert" data-testid="tournament-error" className="text-red-600">
+        <p role="alert" data-testid="tournament-error" className="text-destructive">
           {formError}
         </p>
       )}
@@ -142,7 +142,7 @@ export function CreateTournamentForm({ onCreated }: CreateTournamentFormProps) {
         type="submit"
         data-testid="tournament-submit"
         disabled={isPending}
-        className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+        className="px-4 py-2 bg-primary text-primary-foreground rounded disabled:opacity-50"
       >
         สร้างการแข่งขัน
       </button>
