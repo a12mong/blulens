@@ -35,4 +35,15 @@ export class CalibrationController {
   getSetDetail(@Param('setId', new ParseUUIDPipe()) setId: string) {
     return this.service.getSetDetail(setId);
   }
+
+  @Post(':setId/assign')
+  @HttpCode(204)
+  @Roles('Committee', 'Admin')
+  assignCalibrationSet(
+    @Param('setId', new ParseUUIDPipe()) setId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.assignCalibrationSet(setId, body, user);
+  }
 }
