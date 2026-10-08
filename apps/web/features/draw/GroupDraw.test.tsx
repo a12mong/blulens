@@ -671,5 +671,37 @@ describe('GroupDraw', () => {
 
     expect(screen.queryByTestId('draw-not-groups')).toBeNull();
   });
+
+  it('format null -> draw-not-groups with unconfigured text', () => {
+    vi.mocked(eventsApi.useEvent).mockReturnValue({
+      data: {
+        id: 'e-null',
+        tournamentId: 't1',
+        discipline: 'MS',
+        gradeMin: 'RK1',
+        gradeMax: 'P+',
+        requiresFreshAssessment: false,
+        minReviewers: 2,
+        format: null,
+      } as unknown as eventsApi.Event,
+      isLoading: false,
+    } as unknown as ReturnType<typeof eventsApi.useEvent>);
+
+    vi.mocked(entriesApi.useEntries).mockReturnValue({
+      data: [
+        { id: 'en1', eventId: 'e-null', status: 'approved', players: [] },
+      ] as unknown as entriesApi.Entry[],
+      isLoading: false,
+    } as unknown as ReturnType<typeof entriesApi.useEntries>);
+
+    render(<GroupDraw eventId="e-null" />);
+
+    expect(screen.getByTestId('draw-precheck')).toHaveTextContent(
+      'ผู้สมัครอนุมัติแล้ว 1 คู่ · รูปแบบ: ยังไม่ได้ตั้งค่า',
+    );
+    const notGroupsEl = screen.getByTestId('draw-not-groups');
+    expect(notGroupsEl).toHaveTextContent('ยังไม่ได้ตั้งค่ารูปแบบแบ่งกลุ่ม');
+    expect(screen.queryByTestId('draw-preview')).toBeNull();
+  });
 });
 
