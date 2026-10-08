@@ -63,3 +63,8 @@ Mutation ที่พิสูจน์แล้ว (ทำมือ ไม่ c
 
 ### C8 — ส่งกลับแล้วมอบหมายกรรมการเพิ่ม (develop b322b35)
 งาน B (disputed → ส่งกลับ → `in_review`, assignment เดิมยัง `submitted` ตามที่ออกแบบ): Committee เปิดหน้า detail → **มอบหมาย** (`assign-open`) → ค้น `reviewer3` → เลือก → `assign-submit` (`POST /assessments/{id}/assign` = 200) → reviewer3 ส่งผล (API) → ระบบคำนวณใหม่ (result version +1), `n_raters = 3`, สถานะ `pending_approval` หรือ `disputed`. Mutation: เปลี่ยน testid `assign-submit` → C8 แดง. รวม `slice2` = 19 passed (setup 4 + 7 + 8).
+
+### C9 — วงจรเต็ม: ส่งกลับ → มอบหมาย (COI) → reviewer3 ให้คะแนนใน UI → 3 raters → อนุมัติ
+งานใหม่ (S,S → `pending_approval`) → Committee **ส่งกลับ** (เหตุผล ≥ 5) → `in_review` → **มอบหมาย**: เลือกผู้ประเมินที่อยู่ทีมเดียวกับผู้ถูกประเมิน (`reviewer-coi@blulens.local`, สร้างด้วย SQL บน `blulens_e2e` เท่านั้น) → กดมอบหมาย → ข้อความ COI แสดงในแถว (`assign-conflict`), ไม่มี assignment ถูกสร้าง → ลบ → เลือก reviewer3 → 200 → reviewer3 ล็อกอินผ่านหน้าเว็บ เห็นงานใน `/review`, ให้คะแนนใน UI (หมวด มาตรฐาน/S) และส่ง → คำนวณใหม่ `n_raters = 3`, `pending_approval`, หน้า detail มี `detail-reviewer-row` 3 แถว → อนุมัติ → `approved`. Mutation: เปลี่ยน testid `assign-conflict` → C9 แดง. รวม `slice2` = **20 passed** (setup 4 + 7 + 9).
+
+**เส้นทางสำหรับ STATUS (Jim) — มอบหมายกรรมการเพิ่ม:** Committee เปิด `/committee/assessments/[id]` ของงานที่ส่งกลับ → กด **มอบหมาย** → พิมพ์ชื่อกรรมการ → เลือก (ถ้าอยู่ทีมเดียวกับผู้เล่นจะขึ้นข้อความสังกัดทีมเดียวกัน ให้เลือกคนอื่น) → กด **มอบหมาย** → กรรมการใหม่เห็นงานใน `/review` และเมื่อส่งครบ ผลจะคำนวณใหม่เป็น 3 คน → Committee อนุมัติได้
