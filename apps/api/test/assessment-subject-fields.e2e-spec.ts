@@ -170,15 +170,21 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
 
   afterAll(async () => {
     await app.close();
-    await prisma.reviewAssignment.deleteMany({ where: { assessmentId } });
+    // Delete children before parents (reviews before review assignments)
+    await prisma.reviewScore.deleteMany({
+      where: { review: { assignment: { assessmentId } } },
+    });
     await prisma.review.deleteMany({ where: { assignment: { assessmentId } } });
+    await prisma.reviewAssignment.deleteMany({ where: { assessmentId } });
+    // Assessment results and transitions are append-only; disable users instead
     await prisma.assessment.deleteMany({ where: { id: assessmentId } });
     await prisma.event.deleteMany({ where: { id: eventId } });
     await prisma.tournament.deleteMany({ where: { id: tournamentId } });
     await prisma.teamMembership.deleteMany({ where: { userId: subjectId } });
     await prisma.team.deleteMany({ where: { id: { in: [team1Id, team2Id] } } });
-    await prisma.user.deleteMany({
+    await prisma.user.updateMany({
       where: { id: { in: [subjectId, committeeId, reviewer1Id, reviewer2Id] } },
+      data: { status: 'disabled' },
     });
   });
 
@@ -189,7 +195,8 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
         .set('Cookie', committeeCookie)
         .expect(200);
 
-      const item = res.body.items.find((a: any) => a.id === assessmentId);
+      const items = res.body.data.items as Array<any>;
+      const item = items.find((a: any) => a.id === assessmentId);
       expect(item).toBeDefined();
       expect(item.subject).toBeDefined();
       expect(item.subject.userId).toBe(subjectId);
@@ -203,7 +210,8 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
         .set('Cookie', committeeCookie)
         .expect(200);
 
-      const item = res.body.items.find((a: any) => a.id === assessmentId);
+      const items = res.body.data.items as Array<any>;
+      const item = items.find((a: any) => a.id === assessmentId);
       expect(item.event).toBeDefined();
       expect(item.event.id).toBe(eventId);
       expect(item.event.discipline).toBe('MD');
@@ -218,11 +226,12 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
         .set('Cookie', committeeCookie)
         .expect(200);
 
-      expect(res.body.assignments).toBeDefined();
-      expect(res.body.assignments.length).toBe(2);
+      const data = res.body.data;
+      expect(data.assignments).toBeDefined();
+      expect(data.assignments.length).toBe(2);
 
       // First assignment (open)
-      const open = res.body.assignments.find((a: any) => a.id === assignment1Id);
+      const open = data.assignments.find((a: any) => a.id === assignment1Id);
       expect(open).toBeDefined();
       expect(open.state).toBe('open');
       expect(open.submittedAt).toBeNull();
@@ -230,7 +239,7 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
       expect(open.reviewerName).toBe(`${tag} Reviewer 1`);
 
       // Second assignment (submitted)
-      const submitted = res.body.assignments.find((a: any) => a.id === assignment2Id);
+      const submitted = data.assignments.find((a: any) => a.id === assignment2Id);
       expect(submitted).toBeDefined();
       expect(submitted.state).toBe('submitted');
       expect(submitted.submittedAt).toBeDefined();
@@ -244,8 +253,9 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
         .set('Cookie', subjectCookie)
         .expect(200);
 
-      expect(res.body.assignments).toBeDefined();
-      expect(res.body.assignments.length).toBe(0);
+      const data = res.body.data;
+      expect(data.assignments).toBeDefined();
+      expect(data.assignments.length).toBe(0);
     });
 
     it('Subject sees subject and event fields', async () => {
@@ -254,12 +264,13 @@ describe('GET /api/v1/assessments - subject/event/assignment fields (bl-26-6)', 
         .set('Cookie', subjectCookie)
         .expect(200);
 
-      expect(res.body.subject).toBeDefined();
-      expect(res.body.subject.displayName).toBe(`${tag} Assessment Subject`);
-      expect(res.body.subject.clubNames).toEqual([`${tag} Team A`]);
+      const data = res.body.data;
+      expect(data.subject).toBeDefined();
+      expect(data.subject.displayName).toBe(`${tag} Assessment Subject`);
+      expect(data.subject.clubNames).toEqual([`${tag} Team A`]);
 
-      expect(res.body.event).toBeDefined();
-      expect(res.body.event.tournamentName).toBe(`${tag} Tournament`);
+      expect(data.event).toBeDefined();
+      expect(data.event.tournamentName).toBe(`${tag} Tournament`);
     });
   });
 });
