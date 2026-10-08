@@ -1,11 +1,43 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import { AssessmentStatus, Prisma } from '@prisma/client';
+import { AssessmentStatus, ResultStatus, ResultSource, GradeKind, Prisma } from '@prisma/client';
+import type { Assessment, AssessmentResult } from '@prisma/client';
 import { GRADE_KEYS } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
+
+export interface DecideOptions {
+  allowedFrom: AssessmentStatus[];
+  toStatus: AssessmentStatus;
+  reason?: string;
+  resultVersion?: number;
+  newResult?: {
+    status: ResultStatus;
+    source: ResultSource;
+    score?: Prisma.Decimal | number | null;
+    margin?: Prisma.Decimal | number | null;
+    lowerIndex?: number | null;
+    centerIndex?: number | null;
+    upperIndex?: number | null;
+    kind?: GradeKind | null;
+    label?: string | null;
+    nRaters?: number;
+    nExcluded?: number;
+    spread?: Prisma.Decimal | number | null;
+    flags?: string[];
+    methodVersion?: string;
+    inputs?: Prisma.InputJsonValue;
+  };
+  action: 'assessment.approve' | 'assessment.return' | 'assessment.confirm' | 'assessment.override';
+  validateBeforeTransition?: (
+    assessment: Assessment,
+    latestResult: AssessmentResult | null,
+  ) => void | Promise<void>;
+  auditBefore?: Prisma.InputJsonValue;
+  auditAfter?: Prisma.InputJsonValue;
+}
 
 const DEFAULT_MIN_REVIEWERS = 2; // system default (G3'); becomes a system setting later
 
@@ -543,6 +575,205 @@ export class AssessmentsService {
     });
 
     return this.mapAssessment(updated, 0, updated.reviewsRequired);
+  }
+
+  async approve(
+    assessmentId: string,
+    actor: AuthUser,
+    body: { resultVersion?: number; note?: string },
+  ) {
+    const trimmedNote = body?.note?.trim();
+    return this.decide(assessmentId, actor, {
+      allowedFrom: [AssessmentStatus.pending_approval, AssessmentStatus.disputed],
+      toStatus: AssessmentStatus.approved,
+      reason: trimmedNote || undefined,
+      resultVersion: body?.resultVersion,
+      newResult: {
+        status: ResultStatus.approved,
+        source: ResultSource.computed,
+      },
+      action: 'assessment.approve',
+      validateBeforeTransition: (assessment) => {
+        if (assessment.status === AssessmentStatus.disputed) {
+          if (!trimmedNote || trimmedNote.length < 5) {
+            throw new ApiException(
+              HttpStatus.UNPROCESSABLE_ENTITY,
+              'ASSESSMENT_APPROVE_NOTE_REQUIRED',
+              'ต้องระบุเหตุผลในการอนุมัติผลที่ข้อพิพาทอย่างน้อย 5 ตัวอักษร',
+            );
+          }
+        }
+      },
+    });
+  }
+
+  async return(
+    assessmentId: string,
+    actor: AuthUser,
+    body: { reason?: string; resultVersion?: number },
+  ) {
+    const trimmedReason = (body?.reason ?? '').trim();
+    if (trimmedReason.length < 5 || trimmedReason.length > 2000) {
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'REASON_REQUIRED',
+        'ต้องระบุเหตุผลความยาวระหว่าง 5 ถึง 2,000 ตัวอักษร',
+      );
+    }
+
+    return this.decide(assessmentId, actor, {
+      allowedFrom: [AssessmentStatus.pending_approval, AssessmentStatus.disputed],
+      toStatus: AssessmentStatus.in_review,
+      reason: trimmedReason,
+      resultVersion: body?.resultVersion,
+      action: 'assessment.return',
+    });
+  }
+
+  private async decide(assessmentId: string, actor: AuthUser, opts: DecideOptions) {
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Load the assessment + latest result (highest version). Not found -> 404 ASSESSMENT_NOT_FOUND.
+      const assessment = await tx.assessment.findUnique({
+        where: { id: assessmentId },
+      });
+      if (!assessment) {
+        throw ApiException.notFound('ไม่พบคำขอประเมิน', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      const latest = await tx.assessmentResult.findFirst({
+        where: { assessmentId },
+        orderBy: { version: 'desc' },
+      });
+
+      // 2. status not in allowedFrom -> 409 ASSESSMENT_INVALID_TRANSITION { from, allowed }.
+      if (!opts.allowedFrom.includes(assessment.status)) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'ASSESSMENT_INVALID_TRANSITION',
+          'สถานะไม่อยู่ในเงื่อนไขที่เปลี่ยนได้',
+          { from: assessment.status, allowed: opts.allowedFrom },
+        );
+      }
+
+      if (opts.validateBeforeTransition) {
+        await opts.validateBeforeTransition(assessment, latest);
+      }
+
+      // 3. resultVersion given and != latest.version -> 409 RESULT_VERSION_STALE { latest }.
+      if (opts.resultVersion !== undefined && latest && latest.version !== opts.resultVersion) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'RESULT_VERSION_STALE',
+          'ผลการประเมินมีการเปลี่ยนแปลงแล้ว',
+          { latest: latest.version },
+        );
+      }
+
+      // 4. updateMany optimistic locking
+      const updateRes = await tx.assessment.updateMany({
+        where: {
+          id: assessmentId,
+          status: assessment.status,
+          version: assessment.version,
+        },
+        data: {
+          status: opts.toStatus,
+          version: { increment: 1 },
+        },
+      });
+
+      if (updateRes.count === 0) {
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          'ASSESSMENT_STATE_CHANGED',
+          'สถานะการประเมินถูกเปลี่ยนไปก่อนหน้าแล้ว',
+        );
+      }
+
+      // 5. If newResult: insert AssessmentResult version = latest.version + 1
+      let newResultVersion = latest?.version ?? null;
+      if (opts.newResult) {
+        if (!latest) {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'ASSESSMENT_RESULT_MISSING',
+            'ไม่พบผลการประเมินเดิมเพื่อต่อยอด',
+          );
+        }
+        newResultVersion = latest.version + 1;
+        await tx.assessmentResult.create({
+          data: {
+            assessmentId,
+            version: newResultVersion,
+            source: opts.newResult.source,
+            status: opts.newResult.status,
+            score: opts.newResult.score !== undefined ? opts.newResult.score : latest.score,
+            margin: opts.newResult.margin !== undefined ? opts.newResult.margin : latest.margin,
+            lowerIndex:
+              opts.newResult.lowerIndex !== undefined
+                ? opts.newResult.lowerIndex
+                : latest.lowerIndex,
+            centerIndex:
+              opts.newResult.centerIndex !== undefined
+                ? opts.newResult.centerIndex
+                : latest.centerIndex,
+            upperIndex:
+              opts.newResult.upperIndex !== undefined
+                ? opts.newResult.upperIndex
+                : latest.upperIndex,
+            kind: opts.newResult.kind !== undefined ? opts.newResult.kind : latest.kind,
+            label: opts.newResult.label !== undefined ? opts.newResult.label : latest.label,
+            nRaters: opts.newResult.nRaters !== undefined ? opts.newResult.nRaters : latest.nRaters,
+            nExcluded:
+              opts.newResult.nExcluded !== undefined ? opts.newResult.nExcluded : latest.nExcluded,
+            spread: opts.newResult.spread !== undefined ? opts.newResult.spread : latest.spread,
+            flags: opts.newResult.flags !== undefined ? opts.newResult.flags : latest.flags,
+            methodVersion:
+              opts.newResult.methodVersion !== undefined
+                ? opts.newResult.methodVersion
+                : latest.methodVersion,
+            inputs:
+              opts.newResult.inputs !== undefined
+                ? (opts.newResult.inputs as Prisma.InputJsonValue)
+                : (latest.inputs as Prisma.InputJsonValue),
+            reason: opts.reason ?? null,
+            computedBy: actor.id,
+          },
+        });
+      }
+
+      // 6. Insert AssessmentTransition + AuditService.record
+      await tx.assessmentTransition.create({
+        data: {
+          assessmentId,
+          fromStatus: assessment.status,
+          toStatus: opts.toStatus,
+          actorId: actor.id,
+          reason: opts.reason ?? null,
+        },
+      });
+
+      await this.audit.record(
+        {
+          actorId: actor.id,
+          action: opts.action,
+          entityType: 'assessment',
+          entityId: assessmentId,
+          before: opts.auditBefore ?? {
+            status: assessment.status,
+            resultVersion: latest?.version ?? null,
+          },
+          after: opts.auditAfter ?? {
+            status: opts.toStatus,
+            resultVersion: newResultVersion,
+          },
+          reason: opts.reason ?? undefined,
+        },
+        tx,
+      );
+    });
+
+    return this.getDetail(assessmentId, actor);
   }
 
   private mapAssessment(assessment: any, reviewsSubmitted: number, reviewsRequired: number) {
