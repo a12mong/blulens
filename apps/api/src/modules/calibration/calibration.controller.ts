@@ -47,6 +47,12 @@ export class CalibrationController {
     return this.service.createCalibrationSet(body.name, body.period, user);
   }
 
+  @Get(':setId/results')
+  @Roles('Committee', 'Admin')
+  results(@Param('setId', uuid) setId: string) {
+    return this.service.getResults(setId);
+  }
+
   @Get(':setId')
   @Roles('Committee', 'Admin')
   getSetDetail(@Param('setId', new ParseUUIDPipe()) setId: string) {
