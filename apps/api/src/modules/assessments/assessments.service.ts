@@ -214,12 +214,14 @@ export class AssessmentsService {
       },
     });
 
-    const clips = assessment.clips.map((c) => ({
-      id: c.id,
-      status: c.status,
-      viewUrl: this.computeViewUrl(c.status, c.objectKey),
-      durationSec: c.durationSec,
-    }));
+    const clips = await Promise.all(
+      assessment.clips.map(async (c) => ({
+        id: c.id,
+        status: c.status,
+        viewUrl: await this.storage.viewUrl(c.status, c.objectKey),
+        durationSec: c.durationSec,
+      })),
+    );
 
     const latestResultRow = await this.prisma.assessmentResult.findFirst({
       where: { assessmentId },
@@ -326,19 +328,6 @@ export class AssessmentsService {
     };
   }
 
-  private computeViewUrl(status: string, objectKey: string): string | null {
-    if (status !== 'uploaded') {
-      return null;
-    }
-    if (
-      objectKey.startsWith('/') ||
-      objectKey.startsWith('http://') ||
-      objectKey.startsWith('https://')
-    ) {
-      return objectKey;
-    }
-    return null;
-  }
   async create(
     actor: AuthUser,
     body: {
@@ -1160,5 +1149,30 @@ export class AssessmentsService {
       viewUrl: await this.storage.viewUrl(clip.status, clip.objectKey),
       durationSec: clip.durationSec,
     };
+  }
+
+  /** Fresh 15-min presigned GET for a member clip: owner, an assigned reviewer, or Committee/Admin. */
+  async clipPlaybackUrl(clipId: string, user: AuthUser) {
+    const clip = await this.prisma.clip.findUnique({
+      where: { id: clipId },
+      include: { assessment: { select: { subjectUserId: true } } },
+    });
+    if (!clip) {
+      throw ApiException.notFound('ไม่พบคลิปที่ต้องการ', 'CLIP_NOT_FOUND');
+    }
+    const isStaff = user.roles.some((r) => r === 'Committee' || r === 'Admin');
+    const allowed =
+      isStaff ||
+      clip.assessment.subjectUserId === user.id ||
+      (await this.prisma.reviewAssignment.count({
+        where: { assessmentId: clip.assessmentId, reviewerId: user.id, kind: 'assessment' },
+      })) > 0;
+    if (!allowed) {
+      throw ApiException.forbidden('ไม่มีสิทธิ์ดูคลิปนี้', 'CLIP_FORBIDDEN');
+    }
+    if (clip.status !== 'uploaded') {
+      throw ApiException.conflict('CLIP_NOT_UPLOADED', 'คลิปนี้ยังอัปโหลดไม่เสร็จ');
+    }
+    return this.storage.presignGet(clip.objectKey);
   }
 }
