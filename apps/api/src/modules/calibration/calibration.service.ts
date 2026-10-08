@@ -1,10 +1,16 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { CalibrationSet, CalibrationClip, Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { GRADES } from '@blulens/shared';
+import { GRADES, gradeIndex, type GradeKey } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
-import { StorageService } from '../../common/storage/storage.service';
+import {
+  CLIP_MAX_DURATION_SEC,
+  StorageService,
+  calibrationClipKey,
+  type ClipContentType,
+} from '../../common/storage/storage.service';
 import { ApiException } from '../../common/errors/api.exception';
 import type { AuthUser } from '../../common/auth/auth.types';
 
@@ -202,6 +208,77 @@ export class CalibrationService {
     };
   }
 
+  /** Locks the set; its clips can change only while it is not yet assigned. */
+  private async lockUnassignedSet(tx: Prisma.TransactionClient, setId: string) {
+    const rows = await tx.$queryRaw<Array<{ assigned_at: Date | null }>>`
+      SELECT assigned_at FROM calibration_sets WHERE id = ${setId}::uuid FOR UPDATE
+    `;
+    const row = rows[0];
+    if (!row) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        'CALIBRATION_SET_NOT_FOUND',
+        'ไม่พบชุดคลิปปรับมาตรฐาน',
+      );
+    }
+    if (row.assigned_at) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'CALIBRATION_SET_ASSIGNED',
+        'ชุดนี้มอบหมายผู้ประเมินแล้ว แก้ไขคลิปไม่ได้',
+      );
+    }
+  }
+
+  private async clipOfSet(tx: Prisma.TransactionClient, setId: string, clipId: string) {
+    const clip = await tx.calibrationClip.findUnique({ where: { id: clipId } });
+    if (!clip || clip.setId !== setId) {
+      throw new ApiException(HttpStatus.NOT_FOUND, 'CLIP_NOT_FOUND', 'ไม่พบคลิปในชุดนี้');
+    }
+    return clip;
+  }
+
+  async updateClipReference(setId: string, clipId: string, referenceKey: GradeKey, user: AuthUser) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockUnassignedSet(tx, setId);
+      const clip = await this.clipOfSet(tx, setId, clipId);
+      await tx.calibrationClip.update({
+        where: { id: clipId },
+        data: { referenceIndex: gradeIndex(referenceKey) },
+      });
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'calibration_clip.update',
+          entityType: 'calibration_clip',
+          entityId: clipId,
+          before: { referenceKey: GRADES[clip.referenceIndex] },
+          after: { referenceKey },
+        },
+        tx,
+      );
+      return this.getSetDetail(setId, tx);
+    });
+  }
+
+  async deleteClip(setId: string, clipId: string, user: AuthUser): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockUnassignedSet(tx, setId);
+      const clip = await this.clipOfSet(tx, setId, clipId);
+      await tx.calibrationClip.delete({ where: { id: clipId } });
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'calibration_clip.delete',
+          entityType: 'calibration_clip',
+          entityId: clipId,
+          before: { referenceKey: GRADES[clip.referenceIndex], objectKey: clip.objectKey },
+        },
+        tx,
+      );
+    });
+  }
+
   async assignCalibrationSet(
     setId: string,
     input: unknown,
@@ -330,6 +407,92 @@ export class CalibrationService {
         },
         tx,
       );
+    });
+  }
+
+  /** Presign flow step 1 for a calibration clip (same storage rules as member clips). */
+  async createClipUpload(
+    setId: string,
+    body: { contentType: ClipContentType; sizeBytes: number; referenceKey: GradeKey },
+    user: AuthUser,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockUnassignedSet(tx, setId);
+      const clipId = randomUUID();
+      const objectKey = calibrationClipKey(setId, clipId, body.contentType);
+      const presign = await this.storage.presignPut(objectKey, body.contentType);
+      await tx.calibrationClip.create({
+        data: {
+          id: clipId,
+          setId,
+          objectKey,
+          referenceIndex: gradeIndex(body.referenceKey),
+          status: 'pending_upload',
+          contentType: body.contentType,
+          sizeBytes: BigInt(body.sizeBytes),
+        },
+      });
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'calibration_clip.create',
+          entityType: 'calibration_clip',
+          entityId: clipId,
+          after: { setId, referenceKey: body.referenceKey, objectKey },
+        },
+        tx,
+      );
+      return { clipId, uploadUrl: presign.url, expiresAt: presign.expiresAt };
+    });
+  }
+
+  /** Presign flow step 3: verify the object and mark the clip uploaded. Idempotent. */
+  async completeClip(setId: string, clipId: string, durationSec: number, user: AuthUser) {
+    if (durationSec > CLIP_MAX_DURATION_SEC) {
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'CLIP_TOO_LONG',
+        'คลิปยาวได้ไม่เกิน 5 นาที',
+      );
+    }
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockUnassignedSet(tx, setId);
+      const clip = await this.clipOfSet(tx, setId, clipId);
+      if (clip.status !== 'uploaded') {
+        const stored = await this.storage.head(clip.objectKey);
+        if (!stored) {
+          throw new ApiException(
+            HttpStatus.CONFLICT,
+            'CLIP_NOT_UPLOADED',
+            'ยังไม่พบไฟล์คลิปที่อัปโหลด',
+          );
+        }
+        if (
+          stored.sizeBytes !== Number(clip.sizeBytes) ||
+          stored.contentType !== clip.contentType
+        ) {
+          throw new ApiException(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'CLIP_MISMATCH',
+            'ไฟล์ที่อัปโหลดไม่ตรงกับขนาดหรือชนิดที่แจ้งไว้',
+          );
+        }
+        await tx.calibrationClip.update({
+          where: { id: clipId },
+          data: { status: 'uploaded', durationSec },
+        });
+        await this.audit.record(
+          {
+            actorId: user.id,
+            action: 'calibration_clip.complete',
+            entityType: 'calibration_clip',
+            entityId: clipId,
+            after: { status: 'uploaded', durationSec, sizeBytes: stored.sizeBytes },
+          },
+          tx,
+        );
+      }
+      return this.getSetDetail(setId, tx);
     });
   }
 }
