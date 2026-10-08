@@ -82,7 +82,7 @@ export function RaterPanel({ window: initialWindow = '90d' }: RaterPanelProps) {
             {raterStats?.panel?.fleissKappaTier ? (
               <div className="flex items-center gap-2">
                 <AgreementBadge value={raterStats.panel.fleissKappaTier} />
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-muted-foreground">
                   n={raterStats.panel.fleissKappaTier.n}
                 </span>
               </div>
@@ -134,7 +134,7 @@ export function RaterPanel({ window: initialWindow = '90d' }: RaterPanelProps) {
                     <td>{rater.outlierRate !== undefined ? `${Math.round(rater.outlierRate * 100)}%` : '—'}</td>
                     <td>
                       {rater.flagged && (
-                        <span className="inline-block rounded bg-yellow-100 px-2 py-1 text-sm">
+                        <span className="inline-block rounded bg-warning text-warning-foreground px-2 py-1 text-sm">
                           ควรทบทวน
                         </span>
                       )}
