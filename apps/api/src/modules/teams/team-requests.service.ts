@@ -129,11 +129,45 @@ export class TeamRequestsService {
     });
     const userMap = new Map(users.map((u) => [u.id, u.displayName]));
 
-    // Load all active teams with their aliases in one query
-    const teams = await this.prisma.team.findMany({
-      where: { status: 'active' },
-      include: { aliases: true },
+    // Load ONLY candidate teams that match request keys
+    // a) Forward: nameKey contains or has aliases with aliasKey contains
+    const forwardTeams = await this.prisma.team.findMany({
+      where: {
+        status: 'active',
+        OR: requestTextKeys.flatMap((k) => [
+          { nameKey: { contains: k } },
+          { aliases: { some: { aliasKey: { contains: k } } } },
+        ]),
+      },
+      select: { id: true, name: true, nameKey: true, aliases: { select: { aliasKey: true } } },
     });
+
+    // b) Reverse: request key contains team key (via raw SQL)
+    const reverseIds =
+      requestTextKeys.length > 0
+        ? await this.prisma.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM teams WHERE status = 'active' AND EXISTS (
+            SELECT 1 FROM unnest(${requestTextKeys}::text[]) AS k WHERE position(name_key in k) > 0
+          )
+        `
+        : [];
+
+    const reverseIdSet = new Set(reverseIds.map((r) => r.id));
+    const forwardIdSet = new Set(forwardTeams.map((t) => t.id));
+
+    // Load reverse teams (exclude already loaded forward teams)
+    const reverseTeams =
+      reverseIdSet.size > reverseIds.filter((r) => !forwardIdSet.has(r.id)).length
+        ? await this.prisma.team.findMany({
+            where: {
+              id: { in: reverseIds.map((r) => r.id).filter((id) => !forwardIdSet.has(id)) },
+            },
+            select: { id: true, name: true, nameKey: true, aliases: { select: { aliasKey: true } } },
+          })
+        : [];
+
+    // Combine forward and reverse teams
+    const teams = [...forwardTeams, ...reverseTeams];
 
     // Find similar teams for each request (in memory)
     const similarTeamsMap = this.computeSimilarTeams(requestTextKeys, teams);
