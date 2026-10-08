@@ -33,6 +33,9 @@ describe('thaiError', () => {
     expect(
       thaiError(new ApiRequestError(409, 'STAGE_CONFIRMED', 'Stage confirmed')),
     ).toBe('รอบนี้ยืนยันแล้ว แก้ไขไม่ได้');
+    expect(
+      thaiError(new ApiRequestError(409, 'GROUP_STAGE_NOT_CONFIRMED', 'Group stage not confirmed')),
+    ).toBe('ต้องยืนยันผลรอบกลุ่มก่อนจัดสายน็อกเอาต์');
   });
 
   it('every listed code has a non-empty Thai text', () => {
@@ -76,6 +79,7 @@ describe('thaiError', () => {
       'DRAW_KIND_NOT_SUPPORTED',
       'GROUP_MATCHES_INCOMPLETE',
       'NO_PUBLISHED_GROUP_DRAW',
+      'GROUP_STAGE_NOT_CONFIRMED',
     ];
 
     codes.forEach((code) => {

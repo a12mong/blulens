@@ -46,6 +46,7 @@ const MESSAGES: Record<string, string> = {
   DRAW_KIND_NOT_SUPPORTED: 'ยังไม่รองรับรูปแบบนี้',
   GROUP_MATCHES_INCOMPLETE: 'ยังมีแมตช์รอบกลุ่มที่ยังไม่ยืนยัน',
   NO_PUBLISHED_GROUP_DRAW: 'ยังไม่ได้เผยแพร่การจับกลุ่ม',
+  GROUP_STAGE_NOT_CONFIRMED: 'ต้องยืนยันผลรอบกลุ่มก่อนจัดสายน็อกเอาต์',
 };
 
 function hasThai(text: string): boolean {
