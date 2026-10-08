@@ -22,6 +22,7 @@ export const COMMITTEE_AUTH_FILE = path.join(AUTH_DIR, 'committee.json');
 export const MEMBER_AUTH_FILE = path.join(AUTH_DIR, 'member1.json');
 
 export const REVIEWER_AUTH_FILE = path.join(AUTH_DIR, 'reviewer1.json');
+export const UMPIRE_AUTH_FILE = path.join(AUTH_DIR, 'umpire1.json');
 
 export const SELECTORS = {
   // --- Auth / Login ---
@@ -126,11 +127,40 @@ export const SELECTORS = {
     cancel: 'reason-cancel',
     error: 'reason-error',
   },
+
+  // --- Umpire (apps/web/features/umpire) ---
+  umpire: {
+    match: 'umpire-match',
+    matchStatus: 'umpire-match-status',
+    matchAction: 'umpire-match-action',
+    stepper: 'game-stepper',
+    scoreA: 'score-a',
+    scoreB: 'score-b',
+    stepAPlus: 'step-a-plus',
+    stepAMinus: 'step-a-minus',
+    stepBPlus: 'step-b-plus',
+    stepBMinus: 'step-b-minus',
+    resultSummary: 'result-summary',
+    resultSubmit: 'result-submit',
+    resultWalkover: 'result-walkover',
+    resultConfirm: 'result-confirm',
+    resultCancel: 'result-cancel',
+    resultReported: 'result-reported',
+    resultConfirmed: 'result-confirmed',
+    resultError: 'result-error',
+    gameError: 'game-error',
+    teamConflict: 'umpire-team-conflict',
+    matchMissing: 'umpire-match-missing',
+    skeleton: 'umpire-skeleton',
+    error: 'umpire-error',
+  },
 } as const;
 
 export const ROUTES = {
   reviewQueue: '/review',
   reviewTask: (id: string) => `/review/tasks/${id}`,
+  umpire: '/umpire',
+  umpireMatch: (id: string) => `/umpire/matches/${id}`,
   login: '/login',
   events: '/events',
   eventsNew: '/events/new',
@@ -140,3 +170,4 @@ export const ROUTES = {
   publicEntries: (eventId: string) => `/events/${eventId}/entries`,
   forbidden: '/403',
 } as const;
+
