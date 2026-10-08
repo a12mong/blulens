@@ -27,6 +27,7 @@ const MESSAGES: Record<string, string> = {
   REVIEW_ALREADY_SUBMITTED: 'ส่งผลประเมินไปแล้ว แก้ไขไม่ได้',
   ASSIGNMENT_EXPIRED: 'งานนี้หมดเวลาแล้ว',
   MATCH_SCORE_INVALID: 'คะแนนไม่ถูกต้องตามกติกา',
+  CALIBRATION_CLIPS_NOT_READY: 'ชุดยังไม่พร้อม: มีคลิปที่ยังอัปโหลดไม่เสร็จ',
   STAGE_CONFIRMED: 'รอบนี้ยืนยันแล้ว แก้ไขไม่ได้',
   NOTIFICATION_NOT_FOUND: 'ไม่พบการแจ้งเตือนนี้',
   NEXT_MATCH_ALREADY_PLAYED: 'แมตช์รอบถัดไปแข่งไปแล้ว แก้ผลนี้ไม่ได้ (ไม่มีอะไรถูกเปลี่ยน)',

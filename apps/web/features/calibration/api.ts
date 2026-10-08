@@ -204,3 +204,43 @@ export function useDeleteCalibrationClip(
     },
   });
 }
+
+export type CalibrationResult = {
+  reviewerId: string;
+  clipsScored: number;
+  biasVsReference: number;
+  meanAbsError: number;
+};
+
+export function useCalibrationResults(
+  setId: string,
+  options?: Omit<UseQueryOptions<CalibrationResult[], ApiRequestError>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery({
+    queryKey: ['calibration-sets', setId, 'results'],
+    queryFn: async () => {
+      const data = await apiFetch<CalibrationResult[]>(`/calibration-sets/${setId}/results`);
+      return data ?? [];
+    },
+    ...options,
+  });
+}
+
+export function useAssignCalibration(setId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { reviewerIds: string[]; dueAt?: string }) => {
+      await apiFetch<void>(`/calibration-sets/${setId}/assign`, {
+        method: 'POST',
+        body: {
+          reviewerIds: input.reviewerIds,
+          ...(input.dueAt ? { dueAt: input.dueAt } : {}),
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calibration-sets', setId] });
+      queryClient.invalidateQueries({ queryKey: ['calibration-sets'] });
+    },
+  });
+}

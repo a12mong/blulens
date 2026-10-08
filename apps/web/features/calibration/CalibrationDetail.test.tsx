@@ -8,6 +8,8 @@ import { ApiRequestError } from '@/lib/api/client';
 
 vi.mock('./api');
 vi.mock('@/features/clips/uploadApi');
+vi.mock('./CalibrationAssign', () => ({ CalibrationAssign: () => null }));
+vi.mock('./CalibrationResults', () => ({ CalibrationResults: () => <div data-testid="calib-results-stub" /> }));
 vi.mock('@/components/ui/ClipPlayer', () => ({
   ClipPlayer: () => <div>ClipPlayer</div>,
 }));

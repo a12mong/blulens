@@ -5,6 +5,8 @@ import { GradePicker } from '@/components/ui/GradePicker';
 import type { GradeKey } from '@/components/ui/GradeBand';
 import { ClipPlayer } from '@/components/ui/ClipPlayer';
 import { thaiError } from '@/lib/errors';
+import { CalibrationAssign } from './CalibrationAssign';
+import { CalibrationResults } from './CalibrationResults';
 import { putFileWithProgress, readVideoDuration, validateClipFile } from '@/features/clips/uploadApi';
 import {
   useCalibrationSet,
@@ -341,6 +343,19 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {(detail.clipDetails ?? []).some((c) => c.status === 'uploaded') && (
+        <CalibrationAssign setId={setId} alreadyAssigned={isAssigned} />
+      )}
+
+      {isAssigned && (
+        <CalibrationResults
+          setId={setId}
+          names={Object.fromEntries(
+            (detail.reviewers ?? []).map((r) => [r.reviewerId, r.reviewerName]),
+          )}
+        />
       )}
 
       {/* Delete Confirm Dialog */}
