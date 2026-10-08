@@ -27,13 +27,15 @@ COPY packages/shared packages/shared
 COPY apps/api apps/api
 RUN pnpm --filter @blulens/shared build \
   && pnpm --filter @blulens/api exec prisma generate \
-  && pnpm --filter @blulens/api build
+  && pnpm --filter @blulens/api build \
+  && pnpm --filter @blulens/api exec tsc -p tsconfig.seed.json
 # สร้างชุด production ที่ /out: ไฟล์ของ package (dist/prisma) + node_modules เฉพาะ prod deps
 # แล้ว generate prisma client ซ้ำใน /out (pnpm deploy ติดตั้ง node_modules ใหม่ client เดิมไม่ติดมา)
 # --legacy: pnpm v10 บังคับเลือกโหมด — โหมด legacy ก็อป workspace deps (@blulens/shared
 # พร้อม dist ที่ build แล้ว) เข้า node_modules ตรง ๆ ซึ่งคือสิ่งที่ต้องการพอดี
 RUN pnpm --filter @blulens/api deploy --prod --legacy /out \
-  && pnpm --filter @blulens/api exec prisma generate --schema=/out/prisma/schema.prisma
+  && pnpm --filter @blulens/api exec prisma generate --schema=/out/prisma/schema.prisma \
+  && cp -r apps/api/dist-seed /out/dist-seed
 
 # ---- runtime ----
 FROM base AS runtime
@@ -43,7 +45,10 @@ WORKDIR /app
 # @prisma/client ใน apps/api/package.json จะได้ resolve เป็นรุ่นใกล้เคียงกัน
 RUN npm install -g "prisma@^6.6.0" && npm cache clean --force
 COPY --from=build /out ./
+# migrate deploy -> optional seed (SEED_ON_BOOT=1) -> API (bl-13)
+COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.API_PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "dist/main.js"]
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.API_PORT||3001)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["docker-entrypoint.sh"]

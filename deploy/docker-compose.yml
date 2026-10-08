@@ -82,6 +82,12 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET: ${S3_BUCKET:-clips}
       S3_REGION: ${S3_REGION:-us-east-1}
+      # entrypoint: migrate deploy always; the idempotent seed only when SEED_ON_BOOT=1 (bl-13)
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-0}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_DEMO: ${SEED_DEMO:-}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,9 +118,11 @@ services:
       - "443:443"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
-      DEV_SITE_ADDRESS: ${DEV_SITE_ADDRESS:-}
+      # Caddy's {$VAR:default} only applies to UNSET vars; compose passes an empty one as "" and Caddy then
+      # sees a block without an address and refuses to start. So the "disabled" defaults live here.
+      DEV_SITE_ADDRESS: ${DEV_SITE_ADDRESS:-http://dev-disabled.localhost}
       FILES_ADDRESS: ${FILES_ADDRESS}
-      DEV_FILES_ADDRESS: ${DEV_FILES_ADDRESS:-}
+      DEV_FILES_ADDRESS: ${DEV_FILES_ADDRESS:-http://files-dev-disabled.localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

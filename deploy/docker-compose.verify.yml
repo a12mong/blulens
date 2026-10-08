@@ -1,0 +1,28 @@
+# Local production-mode verification ONLY (bl-13), used by deploy/verify-local.sh.
+# Builds the two images from this checkout instead of pulling ghcr.io, keeps every host port off the
+# owner's dev stack (3100/3101/5442/6389/9100), serves plain HTTP on *.localhost, and uses a private
+# edge network so nothing outside this project is touched.
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:${VERIFY_DB_PORT:-15432}:5432"
+
+  api:
+    image: blulens-api:verify
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+
+  web:
+    image: blulens-web:verify
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+
+  caddy:
+    ports: !override
+      - "127.0.0.1:${VERIFY_HTTP_PORT:-18080}:80"
+
+networks:
+  edge: !override
+    name: blulens-verify-edge
