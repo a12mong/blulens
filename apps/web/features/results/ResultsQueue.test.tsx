@@ -256,4 +256,170 @@ describe('ResultsQueue', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('รอบนี้ยืนยันแล้ว แก้ไขไม่ได้')).toBeInTheDocument();
   });
+
+  it('shows when it was reported and restates the match in both dialogs', () => {
+    const matchWithMeta: Match = {
+      id: 'm-detail',
+      stage: 'group',
+      round: 1,
+      court: '1',
+      status: 'reported',
+      reportedAt: '2026-10-08T10:30:00.000Z',
+      reportedBy: 'usr-raw-id-999',
+      // @ts-expect-error reportedByName optional extension
+      reportedByName: 'สมปอง ผู้ตัดสิน',
+      result: 'a_win',
+      flags: ['UMPIRE_TEAM_CONFLICT', 'CORRECTED'],
+      aEntry: {
+        entryId: 'e1',
+        displayName: 'คู่เอก / สมชาย',
+      },
+      bEntry: {
+        entryId: 'e2',
+        displayName: 'คู่วิชัย / ชัยวัฒน์',
+      },
+      games: [
+        { a: 21, b: 15 },
+        { a: 19, b: 21 },
+        { a: 21, b: 18 },
+      ],
+    };
+
+    mockUseReportedMatches.mockReturnValue({
+      data: [matchWithMeta],
+      isLoading: false,
+      isError: false,
+      refetch: refetchMock,
+    });
+
+    render(<ResultsQueue eventId="ev1" />);
+
+    // 1. row shows result-meta and result-outcome
+    const metaEl = screen.getByTestId('result-meta');
+    expect(metaEl).toHaveTextContent('รายงานเมื่อ');
+    expect(metaEl).toHaveTextContent('โดย สมปอง ผู้ตัดสิน');
+    // raw id must never be shown
+    expect(metaEl).not.toHaveTextContent('usr-raw-id-999');
+
+    const outcomeEl = screen.getByTestId('result-outcome');
+    expect(outcomeEl).toHaveTextContent('ชนะ: คู่เอก / สมชาย');
+
+    // Flags render text
+    const flagEls = screen.getAllByTestId('result-flag');
+    expect(flagEls).toHaveLength(2);
+    expect(flagEls[0]).toHaveTextContent('ผู้ตัดสินเกี่ยวข้องกับทีมในแมตช์');
+    expect(flagEls[1]).toHaveTextContent('แก้ไขผล');
+
+    // 2. opening approve dialog shows result-dialog-match with pair names and game scores
+    fireEvent.click(screen.getByTestId('result-approve'));
+
+    const approveDialog = screen.getByRole('dialog');
+    expect(approveDialog).toBeInTheDocument();
+
+    const approveDialogMatch = screen.getByTestId('result-dialog-match');
+    expect(approveDialogMatch).toHaveTextContent('คู่เอก / สมชาย พบ คู่วิชัย / ชัยวัฒน์');
+    expect(approveDialogMatch).toHaveTextContent('1: 21–15');
+    expect(approveDialogMatch).toHaveTextContent('2: 19–21');
+    expect(approveDialogMatch).toHaveTextContent('3: 21–18');
+
+    // Close approve dialog
+    fireEvent.click(screen.getByText('ยกเลิก'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // 3. opening reject dialog shows result-dialog-match with pair names and game scores
+    fireEvent.click(screen.getByTestId('result-reject'));
+
+    const rejectDialog = screen.getByRole('dialog');
+    expect(rejectDialog).toBeInTheDocument();
+
+    const rejectDialogMatch = screen.getByTestId('result-dialog-match');
+    expect(rejectDialogMatch).toHaveTextContent('คู่เอก / สมชาย พบ คู่วิชัย / ชัยวัฒน์');
+    expect(rejectDialogMatch).toHaveTextContent('1: 21–15');
+    expect(rejectDialogMatch).toHaveTextContent('2: 19–21');
+    expect(rejectDialogMatch).toHaveTextContent('3: 21–18');
+  });
+
+  it('renders result-meta without reportedByName when field is absent, never showing raw reportedBy id', () => {
+    const matchWithoutName: Match = {
+      id: 'm-noname',
+      stage: 'group',
+      round: 1,
+      status: 'reported',
+      reportedAt: '2026-10-08T09:00:00.000Z',
+      reportedBy: 'secret-uuid-12345',
+      result: 'b_win',
+      flags: ['COMMITTEE_DIRECT_ENTRY'],
+      aEntry: { entryId: 'e1', displayName: 'ฝ่าย ก' },
+      bEntry: { entryId: 'e2', displayName: 'ฝ่าย ข' },
+      games: [{ a: 10, b: 21 }, { a: 12, b: 21 }],
+    };
+
+    mockUseReportedMatches.mockReturnValue({
+      data: [matchWithoutName],
+      isLoading: false,
+      isError: false,
+      refetch: refetchMock,
+    });
+
+    render(<ResultsQueue eventId="ev1" />);
+
+    const metaEl = screen.getByTestId('result-meta');
+    expect(metaEl).toHaveTextContent('รายงานเมื่อ');
+    expect(metaEl).not.toHaveTextContent('โดย');
+    expect(metaEl).not.toHaveTextContent('secret-uuid-12345');
+
+    const outcomeEl = screen.getByTestId('result-outcome');
+    expect(outcomeEl).toHaveTextContent('ชนะ: ฝ่าย ข');
+
+    const flagEl = screen.getByTestId('result-flag');
+    expect(flagEl).toHaveTextContent('คณะกรรมการกรอกเอง');
+  });
+
+  it('renders draw outcome when result is draw', () => {
+    const matchDraw: Match = {
+      id: 'm-draw',
+      stage: 'group',
+      round: 1,
+      status: 'reported',
+      result: 'draw',
+      aEntry: { entryId: 'e1', displayName: 'ทีม A' },
+      bEntry: { entryId: 'e2', displayName: 'ทีม B' },
+      games: [{ a: 15, b: 15 }],
+    };
+
+    mockUseReportedMatches.mockReturnValue({
+      data: [matchDraw],
+      isLoading: false,
+      isError: false,
+      refetch: refetchMock,
+    });
+
+    render(<ResultsQueue eventId="ev1" />);
+
+    expect(screen.getByTestId('result-outcome')).toHaveTextContent('เสมอ');
+  });
+
+  it('renders walkover outcome with pair name', () => {
+    const matchWo: Match = {
+      id: 'm-wo',
+      stage: 'group',
+      round: 1,
+      status: 'reported',
+      result: 'walkover_a',
+      aEntry: { entryId: 'e1', displayName: 'ทีมชนะบาย' },
+      bEntry: { entryId: 'e2', displayName: 'ทีมสละสิทธิ์' },
+      games: [],
+    };
+
+    mockUseReportedMatches.mockReturnValue({
+      data: [matchWo],
+      isLoading: false,
+      isError: false,
+      refetch: refetchMock,
+    });
+
+    render(<ResultsQueue eventId="ev1" />);
+
+    expect(screen.getByTestId('result-outcome')).toHaveTextContent('ชนะโดยไม่ลงแข่ง: ทีมชนะบาย');
+  });
 });
