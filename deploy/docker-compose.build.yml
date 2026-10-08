@@ -1,0 +1,16 @@
+# Build the images on the Droplet from this checkout instead of pulling ghcr.io (bl-13).
+# Used until CI pushes images; see docs/ops/runbook.md:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+# IMAGE_TAG names the local images (e.g. the git tag being deployed) so a rollback can re-run an older tag.
+services:
+  api:
+    image: blulens-api:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+
+  web:
+    image: blulens-web:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
