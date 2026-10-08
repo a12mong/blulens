@@ -100,6 +100,12 @@ export class MatchesController {
     return this.matches.getEventGroups(eventId, query, user);
   }
 
+  @Public()
+  @Get('events/:eventId/bracket')
+  getBracket(@Param('eventId', uuid) eventId: string, @CurrentUser() user?: AuthUser) {
+    return this.matches.getBracket(eventId, user);
+  }
+
   @Roles('Committee', 'Admin')
   @HttpCode(HttpStatus.OK)
   @Post('events/:eventId/groups/confirm')
