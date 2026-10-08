@@ -1,4 +1,5 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
+import { AssessmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
@@ -6,12 +7,76 @@ import type { AuthUser } from '../../common/auth/auth.types';
 
 const DEFAULT_MIN_REVIEWERS = 2; // system default (G3'); becomes a system setting later
 
+export interface ListAssessmentsParams {
+  cursor?: string;
+  limit: number;
+  status?: AssessmentStatus;
+  subjectUserId?: string;
+  sort?: string;
+}
+
 @Injectable()
 export class AssessmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
+
+  async list(actor: AuthUser, query: ListAssessmentsParams) {
+    const isStaff = actor.roles.some((r) => r === 'Committee' || r === 'Admin');
+    const where: Prisma.AssessmentWhereInput = {
+      subjectUserId: isStaff ? query.subjectUserId : actor.id,
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    const sort = query.sort || 'createdAt:desc';
+    const [sortField, dir] = sort.split(':') as [
+      'createdAt' | 'updatedAt' | 'status',
+      'asc' | 'desc',
+    ];
+    const orderBy: Prisma.AssessmentOrderByWithRelationInput[] = [
+      { [sortField]: dir },
+      { id: dir },
+    ];
+
+    const rows = await this.prisma.assessment.findMany({
+      where,
+      orderBy,
+      take: query.limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+
+    const hasMore = rows.length > query.limit;
+    const items = hasMore ? rows.slice(0, query.limit) : rows;
+    const nextCursor = hasMore ? items[items.length - 1]!.id : null;
+
+    const pageIds = items.map((a) => a.id);
+    const submittedCounts =
+      pageIds.length > 0
+        ? await this.prisma.reviewAssignment.groupBy({
+            by: ['assessmentId'],
+            where: {
+              assessmentId: { in: pageIds },
+              state: 'submitted',
+            },
+            _count: { _all: true },
+          })
+        : [];
+
+    const submittedMap = new Map<string, number>();
+    for (const c of submittedCounts) {
+      if (c.assessmentId) {
+        submittedMap.set(c.assessmentId, c._count._all);
+      }
+    }
+
+    return {
+      items: items.map((a) =>
+        this.mapAssessment(a, submittedMap.get(a.id) ?? 0, a.reviewsRequired),
+      ),
+      nextCursor,
+    };
+  }
 
   async create(
     actor: AuthUser,
@@ -93,11 +158,7 @@ export class AssessmentsService {
     });
 
     if (!activeRubric) {
-      throw new ApiException(
-        HttpStatus.CONFLICT,
-        'RUBRIC_MISSING',
-        'ไม่พบแบบประเมิน',
-      );
+      throw new ApiException(HttpStatus.CONFLICT, 'RUBRIC_MISSING', 'ไม่พบแบบประเมิน');
     }
 
     // Get reviewsRequired from event or default
