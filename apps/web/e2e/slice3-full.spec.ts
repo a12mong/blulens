@@ -119,10 +119,8 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
       expect(ms.length, 'one group of 3 = 3 matches').toBe(3);
       expect(ms.every((m) => m.status === 'scheduled')).toBe(true);
       matchIds = ms.map((m) => m.id);
-      // WORKAROUND (product gap, reported to Kevin): published-draw matches have no court and there is no API to set one;
-      // an EventUmpire with empty courts is then 'not assigned'. Give the matches a court by SQL so the loop can continue.
+      // freshly published matches have no court; an EventUmpire with courts [] must still be able to report them (bl-25-15)
       expect(ms.every((m) => !m.court), 'matches start without a court').toBe(true);
-      sql(`update matches set court='e2e-full' where event_id='${eventId}' and stage='group'`);
 
       const early = await committeeCtx.post(`events/${eventId}/groups/confirm`);
       expect(early.status()).toBe(409);
