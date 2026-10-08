@@ -39,6 +39,18 @@ describe('MyAssessmentDetail', () => {
     for (const w of ['provisional', 'disputed', 'OUTLIER', 'HIGH_DISAGREEMENT', 'ผู้ตรวจ']) expect(text).not.toContain(w);
   });
 
+  it('does not show the grade while the result is pending_approval', () => {
+    mock({
+      ...base,
+      status: 'pending_approval',
+      latestResult: { version: 1, source: 'computed', status: 'pending_approval', grade, nRaters: 2, nExcluded: 0, methodVersion: 'v1', computedAt: '2026-10-05T00:00:00Z' },
+    });
+    render(<MyAssessmentDetail id="a1" />);
+    expect(screen.getByTestId('myassess-status')).toHaveTextContent('อยู่ระหว่างตรวจ');
+    expect(screen.queryByTestId('myassess-grade')).toBeNull();
+    expect(screen.getByTestId('myassess-pending')).toBeInTheDocument();
+  });
+
   it('shows pending wording when there is no published result', () => {
     mock({ ...base, status: 'in_review', latestResult: null, clips: [] });
     render(<MyAssessmentDetail id="a1" />);

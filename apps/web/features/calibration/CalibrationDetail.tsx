@@ -114,7 +114,8 @@ export function CalibrationDetail({ setId }: CalibrationDetailProps) {
         durationSec: durationSecRef.current,
       });
 
-      setUploadState('done');
+      setUploadState('idle');
+      setUploadProgress(0);
       setAddGrade(null);
     } catch (e) {
       if (e instanceof Error && e.message === 'UPLOAD_ABORTED') {

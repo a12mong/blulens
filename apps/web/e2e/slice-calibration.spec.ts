@@ -11,7 +11,7 @@ import { COMMITTEE_AUTH_FILE } from './selectors';
 const API_BASE = (process.env.API_URL ?? 'http://localhost:3191').replace(/\/+$/, '') + '/api/v1/';
 const SAMPLE = join(__dirname, '..', 'public', 'e2e', 'sample.mp4');
 
-async function data<T = any>(res: APIResponse): Promise<T> {
+async function data<T = any>(res: Pick<APIResponse, "json">): Promise<T> {
   const json = await res.json();
   return (json && typeof json === 'object' && 'data' in json ? json.data : json) as T;
 }

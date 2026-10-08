@@ -59,7 +59,12 @@ export function MyAssessmentDetail({ id }: MyAssessmentDetailProps) {
   }
 
   const result = data.latestResult;
-  const published = Boolean(result && result.status !== 'pending' && result.status !== 'superseded');
+  // Only an approved result is the member's grade; pending_approval / pending / superseded are not.
+  const published = Boolean(
+    result &&
+      (result.status === 'approved' ||
+        (result.status === undefined && (data.status === 'approved' || data.status === 'overridden'))),
+  );
   const grade = published ? result?.grade : null;
   const clips = (data.clips ?? []).filter((c) => c.id);
 
