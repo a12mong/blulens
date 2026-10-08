@@ -176,4 +176,42 @@ test.describe.serial('umpire assignment screen', () => {
     expect(r.status()).toBe(403);
     expect((await m.put(`events/${eventId}/umpires`, { data: [] })).status()).toBe(403);
   });
+
+  test('A8 umpire sees only matches assigned to them: courts [E2] -> only the E2 match; court-null rule: courts [] -> all of the event', async ({ playwright }) => {
+    const u = await playwright.request.newContext({ baseURL: API_BASE });
+    await login(u, 'umpire1@blulens.local', process.env.SEED_DEMO_PASSWORD!);
+    const mine = async () => {
+      const r = await u.get('umpire/matches');
+      expect(r.status(), await r.text()).toBe(200);
+      return rowsOf(await data(r)).filter((m) => matchIds.includes(m.id)).map((m) => m.id as string);
+    };
+    const put = async (courts: string[]) => {
+      const r = await committeeCtx.put(`events/${eventId}/umpires`, { data: [{ userId: umpire1Id, courts }, { userId: playerId, courts: [] }] });
+      expect(r.status(), await r.text()).toBe(200);
+    };
+    await put(['E2']);
+    expect(await mine(), 'only the match on court E2 (A5)').toEqual([otherMatchId]);
+    const third = matchIds.find((id) => id !== otherMatchId && id !== playerMatchId)!;
+    const p1 = await committeeCtx.patch(`matches/${third}/assignment`, { data: { court: 'Z9' } });
+    expect(p1.status(), await p1.text()).toBe(200);
+    expect(await mine(), 'court Z9 is not umpire1 court').toEqual([otherMatchId]);
+    const p2 = await committeeCtx.patch(`matches/${third}/assignment`, { data: { umpireId: umpire1Id } });
+    expect(p2.status(), await p2.text()).toBe(200);
+    expect((await mine()).sort(), 'directly assigned match is visible whatever the court').toEqual([otherMatchId, third].sort());
+    await put([]);
+    expect((await mine()).sort(), 'courts [] = every court, court-null match included (04daa20)').toEqual(
+      [...matchIds].sort(),
+    );
+  });
+
+  test('A9 PUT umpires with a bad body -> 400 VALIDATION_FAILED, list unchanged', async () => {
+    const before = JSON.stringify(await data(await committeeCtx.get(`events/${eventId}/umpires`)));
+    for (const body of [[{ userId: 'not-a-uuid', courts: [] }], [{ userId: umpire1Id, courts: [''] }], [{ userId: umpire1Id }, { userId: umpire1Id }]]) {
+      const r = await committeeCtx.put(`events/${eventId}/umpires`, { data: body });
+      expect(r.status(), JSON.stringify(body)).toBe(400);
+      const j = await r.json();
+      expect((j?.error ?? j)?.code).toBe('VALIDATION_FAILED');
+    }
+    expect(JSON.stringify(await data(await committeeCtx.get(`events/${eventId}/umpires`)))).toBe(before);
+  });
 });
