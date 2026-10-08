@@ -72,6 +72,8 @@ pnpm db:deploy && SEED_DEMO=1 pnpm db:seed      # ก่อน start API ขอ�
 |---|---|---|
 | เดโมของเจ้าของ | `blulens_demo` (ใหม่; `.env.example` ตั้งเป็นค่าเริ่มต้น, card bl-26) | ข้อมูลเก่าใน DB `blulens` ไม่ถูกลบ |
 | API jest | `<DB ใน DATABASE_URL>_test` (override ด้วย `TEST_DATABASE_URL`) เช่น `blulens_demo_test` | สร้าง/migrate/seed (admin + rubric) อัตโนมัติ (bl-21-9) |
+
+**กฎ API jest (ใช้กับ QA ทุกคน):** ต้องรันบน DB `*_test` ใหม่เอี่ยมต่อการรันแต่ละครั้ง (ตั้ง `TEST_DATABASE_URL` เป็นชื่อใหม่ เช่น `blulens_<ชื่อ>_test_<เวลา>` หรือ drop แล้วสร้างใหม่ก่อนรัน) ห้ามใช้ `blulens_test` ร่วมกันซ้ำ เพราะตาราง results เป็น append-only จึงโตขึ้นเรื่อย ๆ จน `rater-stats` timeout (ต้นเหตุตาม Kevin; แก้คู่กับลำดับ list-assessments ที่ dev/bl-30-test-isolation b5af8ea) ถ้าเจอ red ให้รันซ้ำบน DB ใหม่ก่อนรายงานว่า flaky
 | Playwright e2e | `blulens_e2e` (seed ด้วย `SEED_DEMO=1`) | ตามข้อ 6 |
 ก่อนรัน e2e ให้ตรวจ `DATABASE_URL` ของ API process ที่ใช้: ต้องลงท้าย `/blulens_e2e` เท่านั้น
 
