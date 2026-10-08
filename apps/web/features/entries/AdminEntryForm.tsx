@@ -141,7 +141,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
             type="button"
             data-testid="entry-add-another"
             onClick={resetForm}
-            className="px-4 py-2 border border-border bg-background hover:bg-muted text-foreground rounded text-sm font-medium transition-colors"
+            className="px-4 py-2 border border-border bg-background hover:bg-muted text-foreground rounded text-sm font-medium transition-colors min-h-[44px]"
           >
             เพิ่มคู่ใหม่
           </button>
@@ -149,7 +149,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
             type="button"
             data-testid="entry-done"
             onClick={() => onDone?.(forwardedEntry)}
-            className="px-4 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded text-sm font-medium transition-opacity"
+            className="px-4 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded text-sm font-medium transition-opacity min-h-[44px]"
           >
             กลับไปรายการ
           </button>
@@ -159,43 +159,81 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
   }
 
   return (
-    <div className="space-y-4 p-4">
-      <div data-testid="entry-player-1" className="space-y-2">
-        <label className="block font-medium">ผู้เล่นคนที่ 1</label>
-        <PlayerPicker
-          value={player1}
-          onChange={setPlayer1}
-          excludeUserIds={player2 ? [player2.userId] : []}
-        />
+    <div className="space-y-6">
+      {/* Player 1 Card */}
+      <div className="border border-border rounded-lg bg-card text-card-foreground p-4 space-y-4">
+        <h2 className="font-semibold text-base text-foreground">ผู้เล่นที่ 1</h2>
+        <div data-testid="entry-player-1" className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            เลือกผู้เล่น
+          </label>
+          <PlayerPicker
+            value={player1}
+            onChange={setPlayer1}
+            excludeUserIds={player2 ? [player2.userId] : []}
+          />
+        </div>
+
+        <div data-testid="entry-team-1" className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            {player1?.displayName ? `สโมสรของ ${player1.displayName}` : 'สโมสร'}
+          </label>
+          {player1 ? (
+            <TeamCombobox value={team1} onChange={setTeam1} />
+          ) : (
+            <div className="space-y-1">
+              <input
+                type="text"
+                disabled
+                placeholder="เลือกผู้เล่นก่อน"
+                className="w-full border border-input bg-muted text-muted-foreground rounded px-3 py-2 text-sm cursor-not-allowed opacity-60 min-h-[44px]"
+              />
+              <p className="text-xs text-muted-foreground">เลือกผู้เล่นก่อน</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div data-testid="entry-team-1" className="space-y-2">
-        <label className="block font-medium">สโมสร</label>
-        <TeamCombobox value={team1} onChange={setTeam1} />
-        <p className="text-sm text-muted-foreground">
-          ควรเลือกสโมสร เพราะกติกาจับสายใช้ทีม
-        </p>
+      {/* Player 2 Card */}
+      <div className="border border-border rounded-lg bg-card text-card-foreground p-4 space-y-4">
+        <h2 className="font-semibold text-base text-foreground">ผู้เล่นที่ 2</h2>
+        <div data-testid="entry-player-2" className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            เลือกผู้เล่น
+          </label>
+          <PlayerPicker
+            value={player2}
+            onChange={setPlayer2}
+            excludeUserIds={player1 ? [player1.userId] : []}
+          />
+        </div>
+
+        <div data-testid="entry-team-2" className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            {player2?.displayName ? `สโมสรของ ${player2.displayName}` : 'สโมสร'}
+          </label>
+          {player2 ? (
+            <TeamCombobox value={team2} onChange={setTeam2} />
+          ) : (
+            <div className="space-y-1">
+              <input
+                type="text"
+                disabled
+                placeholder="เลือกผู้เล่นก่อน"
+                className="w-full border border-input bg-muted text-muted-foreground rounded px-3 py-2 text-sm cursor-not-allowed opacity-60 min-h-[44px]"
+              />
+              <p className="text-xs text-muted-foreground">เลือกผู้เล่นก่อน</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div data-testid="entry-player-2" className="space-y-2">
-        <label className="block font-medium">ผู้เล่นคนที่ 2</label>
-        <PlayerPicker
-          value={player2}
-          onChange={setPlayer2}
-          excludeUserIds={player1 ? [player1.userId] : []}
-        />
-      </div>
-
-      <div data-testid="entry-team-2" className="space-y-2">
-        <label className="block font-medium">สโมสร</label>
-        <TeamCombobox value={team2} onChange={setTeam2} />
-        <p className="text-sm text-muted-foreground">
-          ควรเลือกสโมสร เพราะกติกาจับสายใช้ทีม
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        ควรเลือกสโมสร เพราะกติกาจับสายใช้ทีม
+      </p>
 
       <div className="space-y-2">
-        <label className="block font-medium">
+        <label className="block text-sm font-medium text-foreground">
           ชื่อคู่ <span className="text-muted-foreground">(ไม่บังคับ)</span>
         </label>
         <input
@@ -205,7 +243,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={isLoading}
-          className="w-full border border-input bg-background text-foreground rounded px-3 py-2 disabled:opacity-50"
+          className="w-full border border-input bg-background text-foreground rounded px-3 py-2 text-sm disabled:opacity-50 min-h-[44px]"
           placeholder="ชื่อคู่"
         />
       </div>
@@ -214,7 +252,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
         <div
           data-testid="entry-error"
           role="alert"
-          className="bg-destructive/10 text-destructive border border-destructive/20 p-3 rounded"
+          className="bg-destructive/10 text-destructive border border-destructive/20 p-3 rounded text-sm"
         >
           เลือกผู้เล่นซ้ำกัน
         </div>
@@ -224,7 +262,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
         <div
           data-testid="entry-error"
           role="alert"
-          className="bg-destructive/10 text-destructive border border-destructive/20 p-3 rounded"
+          className="bg-destructive/10 text-destructive border border-destructive/20 p-3 rounded text-sm"
         >
           {error}
         </div>
@@ -249,7 +287,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
           data-testid="entry-save-draft"
           onClick={handleSaveDraft}
           disabled={!canSubmit || isDuplicatePlayer || isLoading}
-          className="px-4 py-2 border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded disabled:opacity-50 font-medium transition-colors"
+          className="px-4 py-2 border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded disabled:opacity-50 font-medium transition-colors min-h-[44px]"
         >
           บันทึกร่าง
         </button>
@@ -258,7 +296,7 @@ export function AdminEntryForm({ eventId, onDone }: AdminEntryFormProps) {
           data-testid="entry-forward"
           onClick={handleForward}
           disabled={!canSubmit || isDuplicatePlayer || isLoading}
-          className="px-4 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded disabled:opacity-50 font-medium transition-opacity"
+          className="px-4 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded disabled:opacity-50 font-medium transition-opacity min-h-[44px]"
         >
           ส่งให้คณะกรรมการ
         </button>

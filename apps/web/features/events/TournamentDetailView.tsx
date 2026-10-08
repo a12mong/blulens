@@ -105,7 +105,7 @@ export function TournamentDetailView({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {roles.includes('Admin') && (
                   <Link
                     data-testid="event-entries-admin"
@@ -116,13 +116,29 @@ export function TournamentDetailView({
                   </Link>
                 )}
                 {roles.includes('Committee') && (
-                  <Link
-                    data-testid="event-entries-committee"
-                    href={`/committee/events/${e.id}/entries`}
-                    className="inline-flex min-h-[44px] items-center rounded border border-border bg-card text-card-foreground px-4 text-sm font-medium hover:bg-muted transition-colors"
-                  >
-                    คิวอนุมัติ
-                  </Link>
+                  <>
+                    <Link
+                      data-testid="event-entries-committee"
+                      href={`/committee/events/${e.id}/entries`}
+                      className="inline-flex min-h-[44px] items-center rounded border border-border bg-card text-card-foreground px-4 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      คิวอนุมัติ
+                    </Link>
+                    <Link
+                      data-testid="event-results-committee"
+                      href={`/committee/events/${e.id}/results`}
+                      className="inline-flex min-h-[44px] items-center rounded border border-border bg-card text-card-foreground px-4 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      ผลที่รอยืนยัน
+                    </Link>
+                    <Link
+                      data-testid="event-groups-committee"
+                      href={`/committee/events/${e.id}/groups`}
+                      className="inline-flex min-h-[44px] items-center rounded border border-border bg-card text-card-foreground px-4 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      จัดกลุ่ม
+                    </Link>
+                  </>
                 )}
               </div>
             </li>

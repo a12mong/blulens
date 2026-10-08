@@ -7,6 +7,8 @@ import { GradeBand, type GradeKey } from '@/components/ui/GradeBand';
 import { thaiError } from '@/lib/errors';
 import { AssessmentStatusBadge } from './AssessmentStatusBadge';
 import { AssessmentDecisions } from './AssessmentDecisions';
+import { AssignReviewers } from './AssignReviewers';
+import { ReviewerProgress, formatEventLabel } from './ReviewerProgress';
 import { useAssessmentDetail } from './api';
 
 export const FLAG_LABELS: Record<string, string> = {
@@ -90,10 +92,25 @@ export function AssessmentDetailView({ id }: AssessmentDetailViewProps) {
       </div>
 
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-foreground">
-          {subject?.displayName ?? 'ไม่ระบุ'}
-        </h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h1 className="text-2xl font-bold text-foreground">
+              {subject?.displayName?.trim() ? subject.displayName : 'ไม่ระบุ'}
+            </h1>
+            {subject?.clubNames && subject.clubNames.length > 0 ? (
+              <span className="text-sm text-muted-foreground">
+                {subject.clubNames.join(', ')}
+              </span>
+            ) : null}
+          </div>
+          <div
+            className="text-sm text-muted-foreground"
+            data-testid="detail-event"
+          >
+            {formatEventLabel(data.event)}
+          </div>
+        </div>
         <AssessmentStatusBadge status={status} />
       </div>
 
@@ -136,6 +153,9 @@ export function AssessmentDetailView({ id }: AssessmentDetailViewProps) {
       {/* Decisions */}
       <AssessmentDecisions detail={data} />
 
+      {/* Assign Reviewers */}
+      <AssignReviewers detail={data} />
+
       {/* Flags */}
       <div data-testid="detail-flags" className="flex flex-col gap-2">
         {latestResult?.flags && latestResult.flags.length > 0 ? (
@@ -174,6 +194,9 @@ export function AssessmentDetailView({ id }: AssessmentDetailViewProps) {
           <p className="text-sm text-muted-foreground">ยังไม่มีคลิป</p>
         )}
       </section>
+
+      {/* Reviewer progress */}
+      <ReviewerProgress assignments={data.assignments} />
 
       {/* Reviewer rows table */}
       {reviewerRows && reviewerRows.length > 0 ? (

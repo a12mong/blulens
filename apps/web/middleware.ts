@@ -14,10 +14,10 @@ export function middleware(req: NextRequest) {
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
   // Check if path is protected (match segment boundary to avoid /membership being treated as /me)
-  // Public exception: /events/:id/bracket is a public page (demo-slice-3 B1)
-  const isBracketPath = /^\/events\/[^/]+\/bracket(?:\/.*)?$/.test(pathname);
+  // Public exception: /events/:id/bracket and /events/:id/standings are public pages
+  const isPublicEventSubpage = /^\/events\/[^/]+\/(?:bracket|standings)(?:\/.*)?$/.test(pathname);
   const isProtected =
-    !isBracketPath &&
+    !isPublicEventSubpage &&
     PROTECTED_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(prefix + '/'),
     );

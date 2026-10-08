@@ -114,4 +114,20 @@ describe('ClipPlayer', () => {
     fireEvent.keyDown(container, { key: 'ArrowLeft' });
     fireEvent.keyDown(container, { key: 'ArrowRight' });
   });
+
+  it('rewind, refresh, retry and speed buttons have min-h-11 class', () => {
+    const { rerender } = render(
+      <ClipPlayer clips={[{ id: 'c1', status: 'ready', viewUrl: 'url1', durationSec: 60 }]} />
+    );
+
+    expect(screen.getByTestId('clip-rewind')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('clip-speed-0.5')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('clip-speed-1')).toHaveClass('min-h-11');
+    expect(screen.getByTestId('clip-speed-1.5')).toHaveClass('min-h-11');
+
+    rerender(
+      <ClipPlayer clips={[{ id: 'c1', status: 'pending', viewUrl: null }]} />
+    );
+    expect(screen.getByTestId('clip-refresh')).toHaveClass('min-h-11');
+  });
 });

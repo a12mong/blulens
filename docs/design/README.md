@@ -25,7 +25,7 @@
 | `review-slice-2nd-pass.md` | ตรวจซ้ำ slice 1 + ข้อพบ N1–N5 (merged แล้ว) |
 | `review-slice-2.md` | **ตรวจ slice 2 บน develop e820b10 (เส้นทางผู้ตรวจ + Committee) — ข้อพบ R1–R10** |
 | `fe-polish-packets.md` | packet FE สำหรับ #5, #6, #7, #10 (ส่ง Andy แล้ว) |
-| `stitch/PROMPTS.md`, `stitch/auth/` | prompt pack + export Stitch (ดูหัวข้อ Stitch ด้านล่าง) |
+| `stitch/auth/` | export Stitch หน้า auth หน้าเดียว เก็บไว้ตามเดิม (Stitch ยกเลิกแล้ว) |
 
 ## สถานะการส่งมอบ (อัปเดต 2026-10-08)
 
@@ -35,12 +35,11 @@
 | demo-slice-1 / 2 / 3 | เจ้าของอนุมัติแล้ว (slice 2, 3 ตามที่ god แจ้ง) — Dev ทำตามได้ |
 | review-slice-1 → 2nd pass → review-slice-2 | ส่งแล้ว ; R1/R2 ต้องมี BE (subject/event name, รายการผู้ตรวจต่องาน) |
 | mock ผลประเมิน | ส่งแล้ว |
-| Stitch | **ทำเสร็จ 1 จาก 6 หน้า** — ดูด้านล่าง |
+| Stitch | ยกเลิกตามคำตัดสินเจ้าของ 2026-10-08 |
 
-## Stitch: status + what is needed
+## Stitch
 
-เครื่องมือ Stitch มองเห็นแล้วใน session นี้ (project `8500438046980559617`, design system "blulens daylight") ; สร้างหน้า `auth` สำเร็จและส่งออกแล้วที่ `stitch/auth/` (`index.html` + `screenshot.png` 780×1768 ; ใช้ URL รูปแบบ `=w780` จึงได้ภาพเต็ม ไม่ใช่ thumbnail 226px). หน้าถัดไป (`event-create`) หมดเวลา 2 ครั้งติดกัน (ต่างพรอมต์) และ `list_screens` ยังคืนค่าว่างแม้หน้าที่สำเร็จ จึงหยุดตามกติกา 60 นาที/2 timeout. เหลือ 5 หน้า: event-create, registration, review-scoring, committee-dashboard, bracket (pixel night). **เจ้าของตัดสินที่ bl-30**: (ก) ให้ Stitch อยู่ใน scope ต่อ (ต้องสร้างครั้งละหน้า รอผลด้วย `get_screen`) หรือ (ข) ถือว่า `docs/design/mock` + สเปก S-ไฟล์ + ภาพ export 1 หน้านี้พอ — คำแนะนำ Pam: (ข) เพราะ Dev ใช้ `components.md` และ `globals.css` เป็นแหล่งจริง ; ผล export ไม่ใช่ข้อกำหนดของ slice 1–3.
-
+ยกเลิกตามคำตัดสินเจ้าของ 2026-10-08; สเปก markdown เป็นต้นฉบับ (`screens/`, `components.md`, `mock/`). เก็บ export หน้า auth ไว้ที่ `stitch/auth/` ตามเดิม ไม่สร้างเพิ่ม
 ## บทบาท (5 บทบาท)
 
 | บทบาท | คือใคร | สิ่งที่ทำได้ (สรุป) |

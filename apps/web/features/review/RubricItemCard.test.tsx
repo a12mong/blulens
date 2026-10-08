@@ -36,8 +36,8 @@ describe('RubricItemCard', () => {
     expect(screen.getByTestId('rubric-item-status')).toHaveTextContent('ยังไม่เลือก');
   });
 
-  it('shows graded status when value is a GradeKey', () => {
-    render(
+  it('shows graded status with grade meaning when value is a GradeKey', () => {
+    const { rerender } = render(
       <RubricItemCard
         index={1}
         criterion={mockCriterion}
@@ -46,8 +46,29 @@ describe('RubricItemCard', () => {
       />
     );
 
-    expect(screen.getByTestId('rubric-item-status')).toHaveTextContent('ให้ S');
+    expect(screen.getByTestId('rubric-item-status')).toHaveTextContent('มาตรฐาน (S)');
     expect(screen.getByTestId('rubric-item')).toHaveAttribute('data-answered', 'true');
+
+    // Test RK1 and P+ meanings
+    rerender(
+      <RubricItemCard
+        index={1}
+        criterion={mockCriterion}
+        value="RK1"
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('rubric-item-status')).toHaveTextContent('มือใหม่ (RK1)');
+
+    rerender(
+      <RubricItemCard
+        index={1}
+        criterion={mockCriterion}
+        value="P+"
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('rubric-item-status')).toHaveTextContent('มืออาชีพ (P+)');
   });
 
   it('shows cannot-assess status when value is null', () => {
@@ -64,10 +85,10 @@ describe('RubricItemCard', () => {
     expect(screen.getByTestId('rubric-item')).toHaveAttribute('data-answered', 'true');
   });
 
-  it('renders weight text', () => {
-    render(
+  it('renders weight text and 1-based index in title', () => {
+    const { rerender } = render(
       <RubricItemCard
-        index={2}
+        index={1}
         criterion={mockCriterion}
         value={undefined}
         onChange={vi.fn()}
@@ -75,5 +96,17 @@ describe('RubricItemCard', () => {
     );
 
     expect(screen.getByText(/น้ำหนัก ×2/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('1. ความชัดเจนในการเล่น');
+
+    // If 0 is passed, normalizes to 1
+    rerender(
+      <RubricItemCard
+        index={0}
+        criterion={mockCriterion}
+        value={undefined}
+        onChange={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('1. ความชัดเจนในการเล่น');
   });
 });

@@ -50,6 +50,7 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
   let memberCtx: APIRequestContext;
   let committeeCtx: APIRequestContext;
   let reviewerCtx: APIRequestContext[] = [];
+  let reviewer3Ctx: APIRequestContext;
   let reviewerIds: string[] = [];
   let criteria: string[] = [];
   const ids = {} as Record<Kind, string>;
@@ -110,6 +111,8 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
     await login(committeeCtx, 'committee@blulens.local', pw);
     await login(reviewerCtx[0], 'reviewer1@blulens.local', pw);
     await login(reviewerCtx[1], 'reviewer2@blulens.local', pw);
+    reviewer3Ctx = await mk();
+    await login(reviewer3Ctx, 'reviewer3@blulens.local', pw);
     reviewerIds = [
       sqlE2e("select id from users where email='reviewer1@blulens.local'"),
       sqlE2e("select id from users where email='reviewer2@blulens.local'"),
@@ -130,7 +133,7 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
       data: {
         name: `QA Tourney committee ${Date.now()}`,
         venue: 'e2e',
-        startsOn: '2099-01-01',
+        startsOn: '2097-01-01', // below slice1's far-future dates so /events page 1 stays free for slice1
         entriesCloseAt: '2098-12-20T23:59:00.000Z',
       },
     });
@@ -283,6 +286,118 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
       const again = await committeeCtx.post(`assessments/${ids.A}/approve`, { data: {} });
       expect(again.status()).toBe(409);
       expect(await errCode(again)).toBe('ASSESSMENT_INVALID_TRANSITION');
+    });
+    test('C8 returned B: Committee assigns reviewer3 in the UI, third review -> re-aggregated over 3 raters', async ({ page }) => {
+      expect(status(ids.B)).toBe('in_review'); // from C4 (return)
+      const before = latestVersion(ids.B);
+      await decide(page, ids.B);
+      await page.getByTestId('assign-open').click();
+      await page.getByTestId('assign-search').fill('reviewer3');
+      await page.getByTestId('assign-option').first().click();
+      await expect(page.getByTestId('assign-picked')).toHaveCount(1);
+      const post = page.waitForResponse(
+        (r) => r.url().includes(`/assessments/${ids.B}/assign`) && r.request().method() === 'POST',
+      );
+      await page.getByTestId('assign-submit').click();
+      const res = await post;
+      expect(res.status(), await res.text()).toBe(200);
+
+      const r3 = sqlE2e("select id from users where email='reviewer3@blulens.local'");
+      const assignmentId = sqlE2e(
+        `select id from review_assignments where assessment_id='${ids.B}' and reviewer_id='${r3}' and state='open'`,
+      );
+      expect(assignmentId, 'reviewer3 open assignment').toMatch(/^[0-9a-f-]{36}$/);
+      const put = await reviewer3Ctx.put(`reviews/assignments/${assignmentId}`, {
+        data: { scores: criteria.map((criterion) => ({ criterion, gradeKey: 'BG1' })) },
+      });
+      expect(put.status(), await put.text()).toBe(200);
+
+      expect(latestVersion(ids.B), 'last submit re-aggregates: new result version').toBe(before + 1);
+      expect(status(ids.B)).toMatch(/^(pending_approval|disputed)$/);
+      expect(
+        sqlE2e(`select n_raters from assessment_results where assessment_id='${ids.B}' order by version desc limit 1`),
+        'all 3 valid reviews counted',
+      ).toBe('3');
+    });
+    test('C9 full loop: return -> assign (COI inline error, then reviewer3) -> reviewer3 scores in UI -> 3 raters -> approve', async ({ page, browser }) => {
+      test.setTimeout(120000);
+      // reviewer sharing a team with member1 (the subject): created on blulens_e2e only
+      sqlE2e(
+        `insert into users (id,email,password_hash,display_name,status,created_at,updated_at) ` +
+          `select gen_random_uuid(),'reviewer-coi@blulens.local',password_hash,'Reviewer COI (e2e)','active',now(),now() ` +
+          `from users where email='member1@blulens.local' on conflict (email) do nothing`,
+      );
+      sqlE2e(
+        `insert into user_roles (user_id,role,created_at) select id,'Reviewer',now() from users where email='reviewer-coi@blulens.local' on conflict do nothing`,
+      );
+      sqlE2e(
+        `insert into team_memberships (id,user_id,team_id,valid_from) ` +
+          `select gen_random_uuid(), c.id, m.team_id, now() - interval '1 day' from users c, team_memberships m, users s ` +
+          `where c.email='reviewer-coi@blulens.local' and s.email='member1@blulens.local' and m.user_id=s.id and m.valid_to is null ` +
+          `and not exists (select 1 from team_memberships x where x.user_id=c.id and x.team_id=m.team_id and x.valid_to is null) limit 1`,
+      );
+
+      const id = await prepare({ grades: ['S', 'S'] });
+      expect(status(id)).toBe('pending_approval');
+
+      // 1. return (reason >= 5)
+      await decide(page, id);
+      await page.getByTestId('decide-return').click();
+      await page.getByTestId('reason-input').fill('ขอกรรมการเพิ่มอีกหนึ่งท่าน');
+      await page.getByTestId('reason-submit').click();
+      await expect.poll(() => status(id)).toBe('in_review');
+
+      // 2. assign: same-team reviewer -> inline COI error, nothing assigned
+      await page.reload();
+      await page.getByTestId('assign-open').click();
+      await page.getByTestId('assign-search').fill('Reviewer');
+      await page.getByTestId('assign-option').filter({ hasText: 'Reviewer COI' }).click();
+      await page.getByTestId('assign-submit').click();
+      await expect(page.getByTestId('assign-conflict')).toBeVisible({ timeout: 20000 });
+      expect(
+        sqlE2e(`select count(*) from review_assignments ra join users u on u.id=ra.reviewer_id where ra.assessment_id='${id}' and u.email='reviewer-coi@blulens.local'`),
+        'COI reviewer must not be assigned',
+      ).toBe('0');
+
+      // 3. remove the COI pick, assign reviewer3
+      await page.getByTestId('assign-remove').click();
+      await page.getByTestId('assign-search').fill('reviewer3');
+      await page.getByTestId('assign-option').first().click();
+      const post = page.waitForResponse(
+        (r) => r.url().includes(`/assessments/${id}/assign`) && r.request().method() === 'POST',
+      );
+      await page.getByTestId('assign-submit').click();
+      expect((await post).status()).toBe(200);
+
+      // 4. reviewer3 logs in through the UI, sees the task, scores and locks
+      const r3Ctx = await browser.newContext({ baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
+      const r3 = await r3Ctx.newPage();
+      expect((await r3Ctx.request.post(API_BASE + 'auth/login', { data: { identifier: 'reviewer3@blulens.local', password: process.env.SEED_DEMO_PASSWORD! } })).status()).toBe(200); // cookies are per host, shared by the web page
+      const r3User = sqlE2e("select id from users where email='reviewer3@blulens.local'");
+      const assignmentId = sqlE2e(`select id from review_assignments where assessment_id='${id}' and reviewer_id='${r3User}' and state='open'`);
+      await r3.goto('/review');
+      await expect(r3.locator(`a[data-testid="review-card-action"][href="/review/tasks/${assignmentId}"]`)).toBeVisible({ timeout: 20000 });
+      await r3.goto(`/review/tasks/${assignmentId}`);
+      const items = r3.getByTestId('rubric-item');
+      await expect(items.first()).toBeVisible({ timeout: 20000 });
+      for (let i = 0; i < (await items.count()); i++) {
+        const card = items.nth(i);
+        await card.getByTestId('gp-tier-Standard').click();
+        await card.getByTestId('gp-key-S').click();
+      }
+      await r3.getByTestId('scoring-submit').click();
+      await r3.getByTestId('scoring-confirm').click();
+      await expect(r3).toHaveURL(/\/review$/, { timeout: 20000 });
+      await r3Ctx.close();
+
+      // 5. recomputed over 3 raters; committee detail shows 3 reviewer rows; approve
+      await expect.poll(() => status(id)).toBe('pending_approval');
+      expect(sqlE2e(`select n_raters from assessment_results where assessment_id='${id}' order by version desc limit 1`)).toBe('3');
+      await decide(page, id);
+      await expect(page.getByTestId('detail-reviewer-row')).toHaveCount(3);
+      await page.getByTestId('decide-approve').click();
+      await page.getByTestId('approve-submit').click();
+      await expect.poll(() => status(id)).toBe('approved');
     });
   });
 });

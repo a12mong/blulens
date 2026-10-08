@@ -10,7 +10,7 @@ import { AppShell } from './AppShell';
 export function AuthedShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: me, isSuccess } = useMe();
+  const { data: me, isSuccess, isLoading } = useMe();
   const logout = useLogout({ onSettled: () => router.replace('/login') });
   const cleared = useRef(false);
 
@@ -29,6 +29,7 @@ export function AuthedShell({ children }: { children: ReactNode }) {
       displayName={me?.displayName}
       pathname={pathname}
       onLogout={() => logout.mutate()}
+      isLoading={isLoading || !isSuccess}
     >
       {children}
     </AppShell>

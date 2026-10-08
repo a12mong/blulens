@@ -2841,7 +2841,10 @@ export interface paths {
         /** Groups with members and the round-robin schedule */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description which group draw to read: published (everyone) or the current unpublished preview (Committee/Admin only) */
+                    draw?: "published" | "preview";
+                };
                 header?: never;
                 path: {
                     eventId: components["parameters"]["EventId"];
@@ -2857,6 +2860,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["Group"][];
+                    };
+                };
+                /** @description draw=preview by a non-staff caller (FORBIDDEN) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
                     };
                 };
             };
@@ -3580,12 +3592,25 @@ export interface components {
              */
             eventId?: string | null;
             status: components["schemas"]["AssessmentStatus"];
-            /** @description who is assessed (never sent to reviewers, who only get blind ReviewAssignment) */
+            /** @description who is assessed: ALWAYS filled in list + detail (never sent to reviewers, who only get blind ReviewAssignment) */
             subject?: {
                 /** Format: uuid */
-                userId?: string;
-                displayName?: string;
+                userId: string;
+                displayName: string;
+                /** @description names of the active team memberships, de-duplicated and sorted */
+                clubNames: string[];
             };
+            /** @description the event an A13 fresh assessment is bound to; null for a standalone request (web shows "ประเมินทั่วไป") */
+            event?: {
+                /** Format: uuid */
+                id: string;
+                /**
+                 * @description an event has no name of its own; the web labels it "<tournamentName> · <discipline in Thai>"
+                 * @enum {string}
+                 */
+                discipline: "MS" | "WS" | "MD" | "WD" | "XD";
+                tournamentName: string;
+            } | null;
             /** @description grade of the latest result version (list rows show its label without loading the detail) */
             latestGrade?: components["schemas"]["GradeView"] | null;
             latestResultVersion?: number | null;
@@ -3629,6 +3654,22 @@ export interface components {
              */
             computedBy?: string | null;
         };
+        AssignmentProgressRow: {
+            /**
+             * Format: uuid
+             * @description assignment id
+             */
+            id: string;
+            /** Format: uuid */
+            reviewerId: string;
+            reviewerName: string;
+            /** @enum {string} */
+            state: "open" | "submitted" | "expired" | "declined";
+            /** Format: date-time */
+            dueAt: string;
+            /** Format: date-time */
+            submittedAt?: string | null;
+        };
         /** @description Committee-only view of one reviewer's contribution */
         ReviewerScoreRow: {
             /** Format: uuid */
@@ -3649,6 +3690,8 @@ export interface components {
             latestResult?: components["schemas"]["AssessmentResult"] | null;
             /** @description Committee only */
             reviewerRows?: components["schemas"]["ReviewerScoreRow"][];
+            /** @description Committee/Admin only ([] for the subject Member): who is assigned and whether they have submitted, so an in_review request shows progress. NO scores here (scores appear in reviewerRows only after aggregation), so the panel stays independent. Ordered by the assignment createdAt. */
+            assignments?: components["schemas"]["AssignmentProgressRow"][];
         };
         Clip: {
             /** Format: uuid */
@@ -3713,6 +3756,10 @@ export interface components {
             dueAt: string;
             /** Format: date-time */
             submittedAt?: string | null;
+            /** @description clips with status uploaded (queue card "N คลิป"); blind-safe */
+            clipCount?: number;
+            /** @description sum of durationSec of those clips; null when any of them has no duration. Calibration tasks fill both fields the same way from their clip, so the card never tells them apart */
+            totalDurationSec?: number | null;
         };
         ReviewAssignmentDetail: components["schemas"]["ReviewAssignment"] & {
             clips: components["schemas"]["Clip"][];
@@ -4067,6 +4114,8 @@ export interface components {
                 entryId?: string;
                 seedInGroup?: number;
                 pot?: number;
+                /** @description display label of the entry (names, clubs; grade only when visible per A14), so group cards need no extra lookup */
+                readonly entry?: components["schemas"]["EntryRef"];
             }[];
             matches?: components["schemas"]["Match"][];
         };

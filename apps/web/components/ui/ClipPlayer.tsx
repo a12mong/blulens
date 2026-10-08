@@ -96,7 +96,11 @@ export function ClipPlayer({ clips, onRefreshNeeded, onTimeUpdate }: ClipPlayerP
               aria-selected={selectedIdx === i}
               data-testid={`clip-tab-${i}`}
               onClick={() => setSelectedIdx(i)}
-              className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+              className={`px-3 py-1 rounded min-h-11 min-h-[44px] transition-colors ${
+                selectedIdx === i
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
             >
               คลิป {i + 1}
             </button>
@@ -106,13 +110,13 @@ export function ClipPlayer({ clips, onRefreshNeeded, onTimeUpdate }: ClipPlayerP
 
       {!isReady ? (
         <div className="space-y-2">
-          <p role="status" data-testid="clip-not-ready" className="text-sm text-gray-600">
+          <p role="status" data-testid="clip-not-ready" className="text-sm text-muted-foreground">
             คลิปยังไม่พร้อม
           </p>
           <button
             data-testid="clip-refresh"
             onClick={() => onRefreshNeeded?.()}
-            className="px-3 py-1 rounded bg-blue-500 text-white text-sm"
+            className="px-3 py-1 rounded bg-primary text-primary-foreground text-sm min-h-11 min-h-[44px] hover:opacity-90 transition-opacity"
           >
             รีเฟรช
           </button>
@@ -143,7 +147,7 @@ export function ClipPlayer({ clips, onRefreshNeeded, onTimeUpdate }: ClipPlayerP
                   videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 5);
                 }
               }}
-              className="px-3 py-1 rounded bg-gray-200 text-sm"
+              className="px-3 py-1 rounded bg-muted text-foreground text-sm min-h-11 min-h-[44px] hover:bg-muted/80 transition-colors"
             >
               ย้อน 5 วิ
             </button>
@@ -157,7 +161,11 @@ export function ClipPlayer({ clips, onRefreshNeeded, onTimeUpdate }: ClipPlayerP
                   setPlaybackRate(rate);
                   if (videoRef.current) videoRef.current.playbackRate = rate;
                 }}
-                className={`px-3 py-1 rounded text-sm ${playbackRate === rate ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                className={`px-3 py-1 rounded text-sm min-h-11 min-h-[44px] transition-colors ${
+                  playbackRate === rate
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-foreground hover:bg-muted/80'
+                }`}
               >
                 {rate}x
               </button>
@@ -166,13 +174,13 @@ export function ClipPlayer({ clips, onRefreshNeeded, onTimeUpdate }: ClipPlayerP
 
           {refreshCalled.has(`${clip.id}-${clip.viewUrl}`) && (
             <div className="space-y-2">
-              <p role="alert" data-testid="clip-error" className="text-sm text-red-600">
+              <p role="alert" data-testid="clip-error" className="text-sm text-destructive">
                 เล่นคลิปไม่ได้
               </p>
               <button
                 data-testid="clip-retry"
                 onClick={() => onRefreshNeeded?.()}
-                className="px-3 py-1 rounded bg-red-500 text-white text-sm"
+                className="px-3 py-1 rounded bg-destructive text-destructive-foreground text-sm min-h-11 min-h-[44px] hover:opacity-90 transition-opacity"
               >
                 ลองใหม่
               </button>
