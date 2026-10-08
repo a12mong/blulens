@@ -1637,7 +1637,7 @@ components:
                 tournamentName: { type: string }
             - { type: 'null' }
           description: 'the event an A13 fresh assessment is bound to; null for a standalone request (web shows "ประเมินทั่วไป")'
-        latestGrade: { oneOf: [{ $ref: '#/components/schemas/GradeView' }, { type: 'null' }], description: 'grade of the latest result version (list rows show its label without loading the detail)' }
+        latestGrade: { oneOf: [{ $ref: '#/components/schemas/GradeView' }, { type: 'null' }], description: 'grade of the latest result version (list rows show its label without loading the detail). Same rule as AssessmentDetail.latestResult: for the subject Member it is null unless that row status is approved | overridden | provisional.' }
         latestResultVersion: { type: [integer, 'null'] }
         reviewsSubmitted: { type: integer }
         reviewsRequired: { type: integer }
