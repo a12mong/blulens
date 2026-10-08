@@ -110,4 +110,48 @@ describe('ReviewCard', () => {
     expect(text).not.toContain('secret-assessment-id-12345');
     expect(text).not.toContain('assessmentId');
   });
+
+  it('shows clip count and an overdue badge (proving test)', () => {
+    const now = new Date('2026-10-08T12:00:00Z');
+    const pastDueAt = '2026-10-07T12:00:00Z'; // past due
+
+    const assignment = {
+      id: 'aaaa-bbbb-0001',
+      state: 'open' as const,
+      dueAt: pastDueAt,
+      submittedAt: null,
+      clips: [
+        { id: 'clip-1', durationSec: 45 },
+        { id: 'clip-2', durationSec: 45 },
+      ],
+    };
+
+    render(<ReviewCard assignment={assignment} now={now} />);
+
+    const clipsEl = screen.getByTestId('review-card-clips');
+    expect(clipsEl).toHaveTextContent('2 คลิป');
+    expect(clipsEl).toHaveTextContent('ยาวรวม 01:30');
+
+    const dueEl = screen.getByTestId('review-card-due');
+    expect(dueEl).toHaveTextContent('เกินกำหนด');
+  });
+
+  it('shows future due badge with remaining days', () => {
+    const now = new Date('2026-10-08T12:00:00Z');
+    const futureDueAt = '2026-10-10T12:00:00Z'; // 2 days in the future
+
+    const assignment = {
+      id: 'aaaa-bbbb-0002',
+      state: 'open' as const,
+      dueAt: futureDueAt,
+      submittedAt: null,
+      clips: [{ id: 'clip-1' }],
+    };
+
+    render(<ReviewCard assignment={assignment} now={now} />);
+
+    const dueEl = screen.getByTestId('review-card-due');
+    expect(dueEl).toHaveTextContent('เหลือ');
+    expect(dueEl).toHaveTextContent('เหลือ 2 วัน');
+  });
 });
