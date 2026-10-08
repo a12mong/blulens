@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CommitteeHome, COMMITTEE_HUB_ITEMS } from './CommitteeHome';
 
@@ -45,5 +45,18 @@ describe('CommitteeHome', () => {
     expect(grid).toHaveClass('grid');
     expect(grid).toHaveClass('grid-cols-1');
     expect(grid).toHaveClass('md:grid-cols-2');
+  });
+});
+
+describe('CommitteeHome calibration flag', () => {
+  it('shows the calibration card only when NEXT_PUBLIC_CALIBRATION_UI is 1', () => {
+    vi.stubEnv('NEXT_PUBLIC_CALIBRATION_UI', '1');
+    const { unmount } = render(<CommitteeHome />);
+    expect(screen.getByTestId('committee-link-calibration')).toHaveAttribute('href', '/committee/calibration');
+    unmount();
+    vi.stubEnv('NEXT_PUBLIC_CALIBRATION_UI', '');
+    render(<CommitteeHome />);
+    expect(screen.queryByTestId('committee-link-calibration')).toBeNull();
+    vi.unstubAllEnvs();
   });
 });

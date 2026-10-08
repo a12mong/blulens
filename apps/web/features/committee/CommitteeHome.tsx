@@ -33,10 +33,22 @@ export const COMMITTEE_HUB_ITEMS: readonly CommitteeHubItem[] = [
   },
 ];
 
+const CALIBRATION_ITEM: CommitteeHubItem = {
+  id: 'calibration',
+  testId: 'committee-link-calibration',
+  title: 'ชุดคลิปมาตรฐาน',
+  description: 'สร้างชุดคลิปและดูความลำเอียงของผู้ตรวจ',
+  href: '/committee/calibration',
+};
+
 export function CommitteeHome() {
+  const items =
+    process.env.NEXT_PUBLIC_CALIBRATION_UI === '1'
+      ? [...COMMITTEE_HUB_ITEMS, CALIBRATION_ITEM]
+      : COMMITTEE_HUB_ITEMS;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {COMMITTEE_HUB_ITEMS.map((item) => (
+      {items.map((item) => (
         <Link
           key={item.id}
           data-testid={item.testId}
