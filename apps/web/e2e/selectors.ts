@@ -21,6 +21,8 @@ export const ADMIN_AUTH_FILE = path.join(AUTH_DIR, 'admin.json');
 export const COMMITTEE_AUTH_FILE = path.join(AUTH_DIR, 'committee.json');
 export const MEMBER_AUTH_FILE = path.join(AUTH_DIR, 'member1.json');
 
+export const REVIEWER_AUTH_FILE = path.join(AUTH_DIR, 'reviewer1.json');
+
 export const SELECTORS = {
   // --- Auth / Login ---
   login: {
@@ -127,6 +129,8 @@ export const SELECTORS = {
 } as const;
 
 export const ROUTES = {
+  reviewQueue: '/review',
+  reviewTask: (id: string) => `/review/tasks/${id}`,
   login: '/login',
   events: '/events',
   eventsNew: '/events/new',
