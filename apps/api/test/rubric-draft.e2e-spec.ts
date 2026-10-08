@@ -102,7 +102,7 @@ describe('PUT/DELETE /rubrics/{id} (bl-34-2)', () => {
 
       // Verify GET shows the updated criteria
       const getRes = await http().get('/api/v1/rubrics').set('Cookie', committeeCookie).expect(200);
-      const updated = getRes.body.data.find((r: any) => r.id === draftRubricId);
+      const updated = getRes.body.data.find((r: { id: string }) => r.id === draftRubricId);
       expect(updated.criteria).toEqual(newCriteria);
     });
 
@@ -211,7 +211,7 @@ describe('PUT/DELETE /rubrics/{id} (bl-34-2)', () => {
 
       // Verify draft is gone
       const getRes = await http().get('/api/v1/rubrics').set('Cookie', committeeCookie).expect(200);
-      const deleted = getRes.body.data.find((r: any) => r.id === draftRubricId);
+      const deleted = getRes.body.data.find((r: { id: string }) => r.id === draftRubricId);
       expect(deleted).toBeUndefined();
     });
 
