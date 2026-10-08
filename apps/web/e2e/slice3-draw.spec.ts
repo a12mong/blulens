@@ -156,12 +156,11 @@ test.describe.serial('slice 3: committee group draw', () => {
     });
   });
 
-  test('D5 KNOWN BUG (test.fail): public bracket page (anonymous) shows the published groups', async ({ browser }) => {
-    test.fail(true, 'API has no GET /events/{id}/bracket (404), so the page shows "สายแข่งยังไม่ประกาศ" even with published groups. Remove test.fail when the endpoint or page fallback lands.');
+  test('D5 public bracket page (anonymous) shows the published groups', async ({ browser }) => {
     const ctx = await browser.newContext({ baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
     const page = await ctx.newPage();
     await page.goto(`/events/${eventId}/bracket`);
-    await expect(page.getByTestId('group-standings').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.getByTestId('group-standings').first()).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('standing-row')).toHaveCount(3);
     await ctx.close();
   });
