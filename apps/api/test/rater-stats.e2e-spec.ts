@@ -195,32 +195,9 @@ describe('rater-stats (bl-26-5 API)', () => {
   });
 
   afterAll(async () => {
-    // Get all assessments created by this test (where subjectUserId is the test subject)
-    const assessments = await prisma.assessment.findMany({
-      where: { subjectUserId: subjectId },
-      select: { id: true },
-    });
-    const assessmentIds = assessments.map((a) => a.id);
-
-    // Delete children before parents (reviews before review assignments)
-    if (assessmentIds.length > 0) {
-      await prisma.reviewScore.deleteMany({
-        where: { review: { assignment: { assessmentId: { in: assessmentIds } } } },
-      });
-      await prisma.review.deleteMany({
-        where: { assignment: { assessmentId: { in: assessmentIds } } },
-      });
-      await prisma.reviewAssignment.deleteMany({
-        where: { assessmentId: { in: assessmentIds } },
-      });
-      // Assessment results/transitions are append-only; don't delete
-      await prisma.clip.deleteMany({
-        where: { assessmentId: { in: assessmentIds } },
-      });
-      await prisma.assessment.deleteMany({
-        where: { id: { in: assessmentIds } },
-      });
-    }
+    // The fixture assessments cannot be deleted: assessment_results is append-only (DB trigger)
+    // and references them. Assertions therefore filter by this run's reviewer ids, and the
+    // merge gate runs every suite on a fresh test database (TEST_DATABASE_URL).
 
     // Disable test users
     await prisma.user.updateMany({
