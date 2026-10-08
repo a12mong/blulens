@@ -1,7 +1,7 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { AssessmentStatus, ResultStatus, ResultSource, GradeKind, Prisma } from '@prisma/client';
 import type { Assessment, AssessmentResult } from '@prisma/client';
-import { GRADE_KEYS } from '@blulens/shared';
+import { GRADE_KEYS, GRADES, gradeIndex, projectGrade, type GradeKey } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
@@ -35,6 +35,12 @@ export interface DecideOptions {
     assessment: Assessment,
     latestResult: AssessmentResult | null,
   ) => void | Promise<void>;
+  computeInputs?: (latestInputs: Prisma.JsonValue, latestVersion: number) => Prisma.InputJsonValue;
+  buildAuditPayloads?: (
+    assessment: Assessment,
+    latestResult: AssessmentResult | null,
+    newResultVersion: number | null,
+  ) => { before: Prisma.InputJsonValue; after: Prisma.InputJsonValue };
   auditBefore?: Prisma.InputJsonValue;
   auditAfter?: Prisma.InputJsonValue;
 }
@@ -459,44 +465,13 @@ export class AssessmentsService {
       }
 
       // Check for conflict of interest
-      if (reviewerId === assessment.subjectUserId) {
+      const conflict = await this.hasConflict(reviewerId, assessment.subjectUserId);
+      if (conflict.hasConflict) {
         throw new ApiException(
           HttpStatus.CONFLICT,
           'REVIEWER_CONFLICT_OF_INTEREST',
           'กรรมการติดส่วนได้เสียกับผู้เล่น',
-          { reviewerId, teamIds: [] },
-        );
-      }
-
-      // Check shared teams (current memberships)
-      const now = new Date();
-      const sharedTeams = await this.prisma.teamMembership.findMany({
-        where: {
-          teamId: {
-            in: (
-              await this.prisma.teamMembership.findMany({
-                where: {
-                  userId: assessment.subjectUserId,
-                  validFrom: { lte: now },
-                  OR: [{ validTo: null }, { validTo: { gt: now } }],
-                },
-                select: { teamId: true },
-              })
-            ).map((m) => m.teamId),
-          },
-          userId: reviewerId,
-          validFrom: { lte: now },
-          OR: [{ validTo: null }, { validTo: { gt: now } }],
-        },
-        select: { teamId: true },
-      });
-
-      if (sharedTeams.length > 0) {
-        throw new ApiException(
-          HttpStatus.CONFLICT,
-          'REVIEWER_CONFLICT_OF_INTEREST',
-          'กรรมการติดส่วนได้เสียกับผู้เล่น',
-          { reviewerId, teamIds: sharedTeams.map((t) => t.teamId) },
+          { reviewerId, teamIds: conflict.teamIds },
         );
       }
     }
@@ -577,6 +552,43 @@ export class AssessmentsService {
     return this.mapAssessment(updated, 0, updated.reviewsRequired);
   }
 
+  private async hasConflict(
+    userId: string,
+    subjectUserId: string,
+  ): Promise<{ hasConflict: boolean; teamIds: string[] }> {
+    if (userId === subjectUserId) {
+      return { hasConflict: true, teamIds: [] };
+    }
+
+    const now = new Date();
+    const sharedTeams = await this.prisma.teamMembership.findMany({
+      where: {
+        teamId: {
+          in: (
+            await this.prisma.teamMembership.findMany({
+              where: {
+                userId: subjectUserId,
+                validFrom: { lte: now },
+                OR: [{ validTo: null }, { validTo: { gt: now } }],
+              },
+              select: { teamId: true },
+            })
+          ).map((m) => m.teamId),
+        },
+        userId,
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gt: now } }],
+      },
+      select: { teamId: true },
+    });
+
+    if (sharedTeams.length > 0) {
+      return { hasConflict: true, teamIds: sharedTeams.map((t) => t.teamId) };
+    }
+
+    return { hasConflict: false, teamIds: [] };
+  }
+
   async approve(
     assessmentId: string,
     actor: AuthUser,
@@ -627,6 +639,120 @@ export class AssessmentsService {
       reason: trimmedReason,
       resultVersion: body?.resultVersion,
       action: 'assessment.return',
+    });
+  }
+
+  async confirm(
+    assessmentId: string,
+    actor: AuthUser,
+    body: { resultVersion?: number; note?: string },
+  ) {
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+    });
+    if (!assessment) {
+      throw ApiException.notFound('ไม่พบคำขอประเมิน', 'ASSESSMENT_NOT_FOUND');
+    }
+
+    if (assessment.status !== AssessmentStatus.provisional) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'ASSESSMENT_NOT_PROVISIONAL',
+        'ยืนยันได้เฉพาะผลการประเมินชั่วคราว',
+      );
+    }
+
+    const trimmedNote = body?.note?.trim();
+    return this.decide(assessmentId, actor, {
+      allowedFrom: [AssessmentStatus.provisional],
+      toStatus: AssessmentStatus.approved,
+      reason: trimmedNote || undefined,
+      resultVersion: body?.resultVersion,
+      newResult: {
+        status: ResultStatus.approved,
+        source: ResultSource.computed,
+      },
+      action: 'assessment.confirm',
+    });
+  }
+
+  async override(
+    assessmentId: string,
+    actor: AuthUser,
+    body: { centerKey: GradeKey; reason?: string; resultVersion?: number },
+  ) {
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+    });
+    if (!assessment) {
+      throw ApiException.notFound('ไม่พบคำขอประเมิน', 'ASSESSMENT_NOT_FOUND');
+    }
+
+    const conflict = await this.hasConflict(actor.id, assessment.subjectUserId);
+    if (conflict.hasConflict) {
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        'OVERRIDE_CONFLICT_OF_INTEREST',
+        'กรรมการติดส่วนได้เสียกับผู้เล่น ไม่สามารถกำหนดเกรดเองได้',
+        { teamIds: conflict.teamIds },
+      );
+    }
+
+    const trimmedReason = (body?.reason ?? '').trim();
+    if (trimmedReason.length < 20 || trimmedReason.length > 2000) {
+      throw new ApiException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'REASON_TOO_SHORT',
+        'ต้องระบุเหตุผลความยาวระหว่าง 20 ถึง 2,000 ตัวอักษร',
+      );
+    }
+
+    const idx = gradeIndex(body.centerKey);
+    const score = idx + 0.5;
+    const margin = 0;
+    const gradeView = projectGrade(score, margin);
+
+    // TODO(bl-10 jobs): notify all Committee (G7)
+
+    return this.decide(assessmentId, actor, {
+      allowedFrom: [
+        AssessmentStatus.pending_approval,
+        AssessmentStatus.disputed,
+        AssessmentStatus.approved,
+        AssessmentStatus.provisional,
+      ],
+      toStatus: AssessmentStatus.overridden,
+      reason: trimmedReason,
+      resultVersion: body.resultVersion,
+      newResult: {
+        status: ResultStatus.overridden,
+        source: ResultSource.override,
+        score,
+        margin,
+        lowerIndex: idx,
+        centerIndex: idx,
+        upperIndex: idx,
+        kind: 'exact',
+        label: gradeView.label,
+        flags: ['OVERRIDE'],
+      },
+      action: 'assessment.override',
+      computeInputs: (latestInputs, latestVersion) => ({
+        ...(latestInputs as any),
+        overrideOf: latestVersion,
+      }),
+      buildAuditPayloads: (assess, latest, newResultVersion) => ({
+        before: {
+          status: assess.status,
+          label: latest?.label ?? null,
+          version: latest?.version ?? null,
+        },
+        after: {
+          status: AssessmentStatus.overridden,
+          label: gradeView.label,
+          version: newResultVersion,
+        },
+      }),
     });
   }
 
@@ -733,9 +859,11 @@ export class AssessmentsService {
                 ? opts.newResult.methodVersion
                 : latest.methodVersion,
             inputs:
-              opts.newResult.inputs !== undefined
-                ? (opts.newResult.inputs as Prisma.InputJsonValue)
-                : (latest.inputs as Prisma.InputJsonValue),
+              opts.computeInputs && latest
+                ? opts.computeInputs(latest.inputs, latest.version)
+                : opts.newResult.inputs !== undefined
+                  ? (opts.newResult.inputs as Prisma.InputJsonValue)
+                  : (latest.inputs as Prisma.InputJsonValue),
             reason: opts.reason ?? null,
             computedBy: actor.id,
           },
@@ -753,20 +881,29 @@ export class AssessmentsService {
         },
       });
 
+      let auditBefore: Prisma.InputJsonValue = opts.auditBefore ?? {
+        status: assessment.status,
+        resultVersion: latest?.version ?? null,
+      };
+      let auditAfter: Prisma.InputJsonValue = opts.auditAfter ?? {
+        status: opts.toStatus,
+        resultVersion: newResultVersion,
+      };
+
+      if (opts.buildAuditPayloads) {
+        const custom = opts.buildAuditPayloads(assessment, latest, newResultVersion);
+        auditBefore = custom.before;
+        auditAfter = custom.after;
+      }
+
       await this.audit.record(
         {
           actorId: actor.id,
           action: opts.action,
           entityType: 'assessment',
           entityId: assessmentId,
-          before: opts.auditBefore ?? {
-            status: assessment.status,
-            resultVersion: latest?.version ?? null,
-          },
-          after: opts.auditAfter ?? {
-            status: opts.toStatus,
-            resultVersion: newResultVersion,
-          },
+          before: auditBefore,
+          after: auditAfter,
           reason: opts.reason ?? undefined,
         },
         tx,
