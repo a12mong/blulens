@@ -7,6 +7,7 @@ import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { nextSlot } from '../draws/bracket';
 import {
+  bracketOrder,
   computeGroupStandings,
   eventFormatSchema,
   matchResultTransition,
@@ -1726,4 +1727,244 @@ export class MatchesService {
 
     return result.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
+
+  async getBracket(eventId: string, user?: AuthUser): Promise<Bracket> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { tournament: { select: { status: true } } },
+    });
+    if (!event || (event.tournament.status === 'draft' && !isStaff(user))) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    const knockoutDraw = await this.prisma.draw.findFirst({
+      where: { eventId, kind: 'knockout', status: { in: ['published', 'locked'] } },
+      orderBy: { version: 'desc' },
+      include: { slots: true },
+    });
+    if (knockoutDraw) {
+      return this.buildKnockoutBracket(eventId, knockoutDraw);
+    }
+
+    const parsed = eventFormatSchema.safeParse(event.format);
+    if (parsed.success && parsed.data.type === 'groups_knockout') {
+      const groupDraw = await this.prisma.draw.findFirst({
+        where: { eventId, kind: 'group', status: { in: ['published', 'locked'] } },
+        orderBy: { version: 'desc' },
+        include: { groups: { select: { label: true }, orderBy: { label: 'asc' } } },
+      });
+      if (groupDraw) {
+        return this.buildProvisionalBracket(
+          eventId,
+          groupDraw.groups.map((g) => g.label),
+          parsed.data.advancePerGroup ?? 2,
+          parsed.data.bestThirds ?? 0,
+        );
+      }
+    }
+
+    throw ApiException.notFound('ยังไม่มีสายการแข่งรอบน็อกเอาต์', 'BRACKET_NOT_PUBLISHED');
+  }
+
+  private async buildKnockoutBracket(
+    eventId: string,
+    draw: Prisma.DrawGetPayload<{ include: { slots: true } }>,
+  ): Promise<Bracket> {
+    const matches = await this.prisma.match.findMany({
+      where: { drawId: draw.id, stage: { in: ['knockout', 'third_place'] } },
+      orderBy: [{ round: 'asc' }, { matchNo: 'asc' }],
+    });
+    const entryIds = Array.from(
+      new Set(
+        matches
+          .flatMap((m) => [m.topEntryId, m.bottomEntryId])
+          .filter((id): id is string => typeof id === 'string'),
+      ),
+    );
+    const entryMap = await this.loadEntryMap(this.prisma, entryIds);
+    const seedByPosition = new Map(draw.slots.map((s) => [s.position, s.seedNo]));
+
+    const knockout = matches.filter((m) => m.stage === 'knockout');
+    const thirdPlaceMatch = matches.find((m) => m.stage === 'third_place') ?? null;
+    const finalRound = Math.max(0, ...knockout.map((m) => m.round));
+    const byRound = new Map<number, Match[]>();
+    for (const m of knockout) byRound.set(m.round, [...(byRound.get(m.round) ?? []), m]);
+
+    // next: where a match's winner goes; feeders: which matchNo fills each side of a match
+    const next = new Map<number, { matchNo: number; side: 'top' | 'bottom' }>();
+    const feeders = new Map<number, { top?: number; bottom?: number }>();
+    for (const [round, list] of byRound) {
+      list.forEach((m, index) => {
+        const slot = nextSlot(round, index);
+        const target = byRound.get(slot.round)?.[slot.index];
+        if (!target) return;
+        next.set(m.matchNo, { matchNo: target.matchNo, side: slot.side });
+        feeders.set(target.matchNo, { ...feeders.get(target.matchNo), [slot.side]: m.matchNo });
+      });
+    }
+    const semis = byRound.get(finalRound - 1) ?? [];
+
+    const toBracketMatch = (m: Match, index: number): BracketMatch => {
+      const placeholder = (side: 'top' | 'bottom'): string | null => {
+        if ((side === 'top' ? m.topEntryId : m.bottomEntryId) !== null) return null;
+        if (m.stage === 'third_place') {
+          const semi = semis[side === 'top' ? 0 : 1];
+          return semi ? `ผู้แพ้คู่ที่ ${semi.matchNo}` : null;
+        }
+        if (m.round === 1) return 'บาย';
+        const feeder = feeders.get(m.matchNo)?.[side];
+        return feeder ? `ผู้ชนะคู่ที่ ${feeder}` : null;
+      };
+      const seedNo = (offset: 1 | 2) =>
+        m.stage === 'knockout' && m.round === 1 ? (seedByPosition.get(2 * index + offset) ?? null) : null;
+      const games = Array.isArray(m.games) ? (m.games as Array<{ a: number; b: number }>) : [];
+      const nx = m.stage === 'knockout' ? next.get(m.matchNo) : undefined;
+      return {
+        matchId: m.id,
+        matchNo: m.matchNo,
+        round: m.round,
+        top: m.topEntryId,
+        topEntry: m.topEntryId ? (entryMap.get(m.topEntryId) ?? null) : null,
+        topSeedNo: seedNo(1),
+        topPlaceholder: placeholder('top'),
+        bottom: m.bottomEntryId,
+        bottomEntry: m.bottomEntryId ? (entryMap.get(m.bottomEntryId) ?? null) : null,
+        bottomSeedNo: seedNo(2),
+        bottomPlaceholder: placeholder('bottom'),
+        winner:
+          m.status === 'confirmed' || m.status === 'walkover' || m.status === 'bye' ? m.winnerEntryId : null,
+        status: m.status,
+        games: games.map((g) => ({ a: g.a, b: g.b })),
+        court: m.court,
+        nextMatchNo: nx?.matchNo ?? null,
+        nextSide: nx?.side ?? null,
+      };
+    };
+
+    const rounds = [...byRound.entries()].map(([round, list]) => ({
+      round,
+      nameTh: bracketRoundName(list.length * 2),
+      matches: list.map((m, i) => toBracketMatch(m, i)),
+    }));
+    const final = byRound.get(finalRound)?.[0];
+    const championId = final && final.status === 'confirmed' ? final.winnerEntryId : null;
+
+    return {
+      eventId,
+      drawId: draw.id,
+      drawVersion: draw.version,
+      drawStatus: draw.status as 'published' | 'locked',
+      provisional: false,
+      size: draw.size,
+      rounds,
+      thirdPlace: thirdPlaceMatch ? toBracketMatch(thirdPlaceMatch, 0) : null,
+      champion: championId ? (entryMap.get(championId) ?? null) : null,
+    };
+  }
+
+  /** groups_knockout before the knockout draw: placeholders only, no names guessed (tournament-format §4.4). */
+  private buildProvisionalBracket(
+    eventId: string,
+    groupLabels: string[],
+    advancePerGroup: number,
+    bestThirds: number,
+  ): Bracket {
+    const labels = [
+      ...groupLabels.map((g) => `แชมป์กลุ่ม ${g}`),
+      ...(advancePerGroup >= 2 ? groupLabels.map((g) => `รองแชมป์กลุ่ม ${g}`) : []),
+      ...Array.from({ length: bestThirds }, (_, i) => `อันดับ 3 ที่ดีที่สุด #${i + 1}`),
+    ];
+    let size = 2;
+    while (size < labels.length) size *= 2;
+    const order = bracketOrder(size); // order[p - 1] = seed number at position p
+
+    const rounds: Bracket['rounds'] = [];
+    let matchNo = 1;
+    let previous: number[] = [];
+    for (let round = 1, count = size / 2; count >= 1; round++, count /= 2) {
+      const current: number[] = [];
+      const matches: BracketMatch[] = [];
+      for (let i = 0; i < count; i++) {
+        const side = (offset: 0 | 1) =>
+          round === 1
+            ? (labels[order[2 * i + offset]! - 1] ?? 'บาย')
+            : `ผู้ชนะคู่ที่ ${previous[2 * i + offset]}`;
+        const nx = count > 1 ? nextSlot(round, i) : null;
+        matches.push({
+          matchId: null,
+          matchNo,
+          round,
+          top: null,
+          topEntry: null,
+          topSeedNo: null,
+          topPlaceholder: side(0),
+          bottom: null,
+          bottomEntry: null,
+          bottomSeedNo: null,
+          bottomPlaceholder: side(1),
+          winner: null,
+          status: 'scheduled',
+          games: [],
+          court: null,
+          // matches of the next round are numbered right after this round's last match
+          nextMatchNo: nx ? matchNo - i + count + nx.index : null,
+          nextSide: nx?.side ?? null,
+        });
+        current.push(matchNo++);
+      }
+      rounds.push({ round, nameTh: bracketRoundName(count * 2), matches });
+      previous = current;
+    }
+
+    return {
+      eventId,
+      drawId: null,
+      drawVersion: null,
+      drawStatus: null,
+      provisional: true,
+      size,
+      rounds,
+      thirdPlace: null,
+      champion: null,
+    };
+  }
+}
+
+function bracketRoundName(entriesLeft: number): string {
+  if (entriesLeft === 2) return 'ชิงชนะเลิศ';
+  if (entriesLeft === 4) return 'รองชนะเลิศ';
+  if (entriesLeft === 8) return 'ก่อนรองชนะเลิศ';
+  return `รอบ ${entriesLeft} คน`;
+}
+
+export interface BracketMatch {
+  matchId: string | null;
+  matchNo: number;
+  round: number;
+  top: string | null;
+  topEntry: EntryRef | null;
+  topSeedNo: number | null;
+  topPlaceholder: string | null;
+  bottom: string | null;
+  bottomEntry: EntryRef | null;
+  bottomSeedNo: number | null;
+  bottomPlaceholder: string | null;
+  winner: string | null;
+  status: string;
+  games: Array<{ a: number; b: number }>;
+  court: string | null;
+  nextMatchNo: number | null;
+  nextSide: 'top' | 'bottom' | null;
+}
+
+export interface Bracket {
+  eventId: string;
+  drawId: string | null;
+  drawVersion: number | null;
+  drawStatus: 'published' | 'locked' | null;
+  provisional: boolean;
+  size: number;
+  rounds: Array<{ round: number; nameTh: string; matches: BracketMatch[] }>;
+  thirdPlace: BracketMatch | null;
+  champion: EntryRef | null;
 }
