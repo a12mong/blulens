@@ -84,7 +84,7 @@ describe('Bracket', () => {
     expect(screen.queryByTestId('bracket-tree')).toBeNull();
     expect(screen.queryByTestId('bracket-list')).toBeNull();
 
-    rerender(<Bracket rounds={[{ round: 1, matches: [] }]} />);
+    rerender(<Bracket rounds={[{ round: 1, nameTh: 'รอบแรก', matches: [] }]} />);
     expect(screen.getByText('ยังไม่มีสายแข่ง')).toBeInTheDocument();
   });
 

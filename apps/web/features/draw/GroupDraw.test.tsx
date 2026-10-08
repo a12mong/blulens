@@ -117,7 +117,7 @@ describe('GroupDraw', () => {
       size: 4,
       sameTeamR1Count: 1,
       createdAt: '2026-10-08T00:00:00Z',
-      conflicts: [{ matchNo: 1, teamId: 'BC BKK' }],
+      conflicts: [{ kind: 'team', matchNo: 1, teamId: 'BC BKK' }],
     };
     act(() => {
       capturedPreviewSuccess?.(conflictDraw);
@@ -622,7 +622,7 @@ describe('GroupDraw', () => {
         size: 4,
         sameTeamR1Count: 1,
         createdAt: '2026-10-08T00:00:00Z',
-        conflicts: [{ matchNo: 1, teamId: 'Red Phoenix' }],
+        conflicts: [{ kind: 'team', matchNo: 1, teamId: 'Red Phoenix' }],
       });
     });
 

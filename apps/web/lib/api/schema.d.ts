@@ -1426,6 +1426,209 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rubrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** All rubric versions, newest first (editor page S12) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Rubric"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Start a new draft version, copied from the active rubric (architecture section 4: Committee only)
+         * @description Only criteria (names, weights, anchors) are editable. The grading parameters (outlier rule, margins, minReviewers default) are owner-approved math (grading.md) and are copied unchanged; they are not part of this API.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Rubric"];
+                    };
+                };
+                /** @description RUBRIC_DRAFT_EXISTS (finish or delete the open draft first) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rubrics/{rubricId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a draft version's criteria */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    rubricId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RubricCriteriaInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Rubric"];
+                    };
+                };
+                400: components["responses"]["Validation"];
+                /** @description RUBRIC_NOT_DRAFT (active or retired versions are immutable) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Delete a draft version */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    rubricId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RUBRIC_NOT_DRAFT */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rubrics/{rubricId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a draft the active rubric; the previous active one becomes retired (audit row with the reason)
+         * @description Applies to assessments submitted AFTER activation; every assessment keeps the rubric locked at its submit (Assessment.rubricId), so in-flight reviews are unaffected.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    rubricId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ReasonInput"];
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Rubric"];
+                    };
+                };
+                /** @description RUBRIC_NOT_DRAFT */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rater-stats": {
         parameters: {
             query?: never;
@@ -1583,6 +1786,129 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/calibration-sets/{setId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One calibration set with its clips (status, play URL, reference grade) and per-reviewer progress (Committee only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CalibrationSetDetail"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calibration-sets/{setId}/clips/{clipId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a clip from the set (only before the set is assigned) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                    clipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description CALIBRATION_SET_ASSIGNED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Change the reference grade of a clip (only before the set is assigned) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    setId: string;
+                    clipId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        referenceKey: components["schemas"]["GradeKey"];
+                    };
+                };
+            };
+            responses: {
+                /** @description ok */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CalibrationSetDetail"];
+                    };
+                };
+                /** @description CALIBRATION_SET_ASSIGNED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/calibration-sets/{setId}/clips/upload-url": {
@@ -2705,7 +3031,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Public bracket of the published draw */
+        /**
+         * Public bracket of the published draw
+         * @description knockout events: the published (or locked) knockout draw, else 404 BRACKET_NOT_PUBLISHED.
+         *     groups_knockout events: before the knockout draw is published the response is 200 with provisional = true and
+         *     every side shows a placeholder from the format ("แชมป์กลุ่ม A", "อันดับ 3 ที่ดีที่สุด #1"), never guessed names
+         *     (tournament-format section 4.4). Only confirmed results advance a winner; reported results show as awaiting confirmation.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2981,7 +3313,17 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Knockout draw preview seeded from the confirmed standings (Draw kind=knockout) */
+        /**
+         * Knockout draw preview seeded from the confirmed standings (Draw kind=knockout)
+         * @description tournament-format.md section 6 (F8 tiered seeding): qualifiers Q = groups x advancePerGroup + bestThirds; group
+         *     winners are ranked among themselves by section 4.3 -> seeds 1..g, then runners-up, then the best thirds
+         *     (rankBestThirds). Bracket size = next power of two >= Q, byes to the top seeds (draw.md section 3). Slots follow
+         *     the draw.md appendix A order; the solver minimises the lexicographic cost (same-team R1 pairs, same-group R1 pairs).
+         *     Each slot carries `source` (which group and place it came from). Publish with POST /draws/{drawId}/publish
+         *     (acknowledgeConflicts when conflicts is not empty): it creates every knockout match (round 1 with byes
+         *     auto-advanced, later rounds empty, plus the third-place match when thirdPlacePlayoff). Re-preview, publish,
+         *     supersede and lock follow draw.md sections 6-7 (D5, D8).
+         */
         post: {
             parameters: {
                 query?: never;
@@ -2995,6 +3337,8 @@ export interface paths {
                 content: {
                     "application/json": {
                         seed?: string;
+                        /** @description draw.md D5: REQUIRED when a preview already exists for this event (version >= 2), else 400 VALIDATION_FAILED; stored in the draw.preview audit row and shown with that version */
+                        reason?: string;
                     };
                 };
             };
@@ -3008,7 +3352,8 @@ export interface paths {
                         "application/json": components["schemas"]["Draw"];
                     };
                 };
-                /** @description GROUP_STAGE_NOT_CONFIRMED */
+                400: components["responses"]["Validation"];
+                /** @description GROUP_STAGE_NOT_CONFIRMED | KNOCKOUT_TOO_FEW_QUALIFIERS (Q < 2) | DRAW_ALREADY_LOCKED */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -3320,6 +3665,15 @@ export interface paths {
                         "application/json": components["schemas"]["Match"];
                     };
                 };
+                /** @description UMPIRE_NOT_ELIGIBLE | UMPIRE_IS_PLAYER (the umpire plays in this match) | MATCH_LOCKED (confirmed result or locked stage) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
+                    };
+                };
             };
         };
         trace?: never;
@@ -3377,6 +3731,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["EventUmpire"][];
+                    };
+                };
+                /** @description UMPIRE_NOT_ELIGIBLE (user lacks the Umpire role; details { userId }) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EnvelopeError"];
                     };
                 };
             };
@@ -3714,7 +4077,27 @@ export interface components {
             viewUrl: string | null;
             durationSec?: number | null;
         };
+        RubricCriteriaInput: {
+            /** @description keys unique; weight > 0 (relative weights, normalised at scoring); anchorsTh keys are the 5 tiers Rookie..Professional */
+            criteria: {
+                key: string;
+                nameTh: string;
+                weight: number;
+                anchorsTh?: {
+                    [key: string]: string;
+                };
+            }[];
+        };
         Rubric: {
+            /** Format: uuid */
+            id?: string;
+            /**
+             * @description draft = editable, never activated; active = the one GET /rubric returns; retired = previously active
+             * @enum {string}
+             */
+            status?: "draft" | "active" | "retired";
+            /** Format: date-time */
+            createdAt?: string;
             methodVersion: string;
             criteria: {
                 /** @example footwork */
@@ -3744,6 +4127,34 @@ export interface components {
             }[];
             /** Format: date-time */
             createdAt?: string;
+        };
+        CalibrationSetDetail: components["schemas"]["CalibrationSet"] & {
+            /**
+             * Format: date-time
+             * @description set once POST .../assign ran; clips are frozen after that
+             */
+            assignedAt?: string | null;
+            clipDetails?: {
+                /** Format: uuid */
+                clipId: string;
+                referenceKey: components["schemas"]["GradeKey"];
+                /** @enum {string} */
+                status: "pending_upload" | "uploaded" | "rejected";
+                /**
+                 * Format: uri
+                 * @description 15-min presigned GET; null unless uploaded
+                 */
+                viewUrl?: string | null;
+                durationSec?: number | null;
+            }[];
+            /** @description per-reviewer progress (submitted counts only; scores are in /calibration-sets/{setId}/results) */
+            reviewers?: {
+                /** Format: uuid */
+                reviewerId?: string;
+                reviewerName?: string;
+                assigned?: number;
+                submitted?: number;
+            }[];
         };
         ReviewInput: {
             scores: components["schemas"]["CriterionScore"][];
@@ -3976,38 +4387,105 @@ export interface components {
                  */
                 entryId?: string | null;
                 seedNo?: number | null;
+                readonly entry?: components["schemas"]["EntryRef"] | null;
+                /** @description kind=knockout only: where this qualifier came from (tournament-format section 6); null for a plain knockout draw or a bye */
+                source?: {
+                    /** @example A */
+                    groupLabel: string;
+                    /** @description 1 = group winner, 2 = runner-up, 3 = best third */
+                    place: number;
+                } | null;
             }[];
             /** @description unavoidable same-team round-1 matches (empty in the normal case) */
             conflicts?: {
                 matchNo?: number;
-                /** Format: uuid */
-                teamId?: string;
+                /**
+                 * @description team = same team/club in round 1 (draw.md D3, minimised first); group = same group in knockout round 1 (tournament-format section 6, minimised second)
+                 * @default team
+                 * @enum {string}
+                 */
+                kind: "team" | "group";
+                /**
+                 * Format: uuid
+                 * @description set when kind = team
+                 */
+                teamId?: string | null;
+                /** @description set when kind = group */
+                groupLabel?: string | null;
             }[];
+            /** @description same-team pairs lower bound; with groups the solver cost is lexicographic (team, group) */
             minimumPossibleConflicts?: number;
         };
         Bracket: {
             /** Format: uuid */
-            eventId?: string;
-            drawVersion?: number;
-            rounds?: {
-                round?: number;
-                matches?: {
-                    matchNo?: number;
-                    /**
-                     * Format: uuid
-                     * @description entryId
-                     */
-                    top?: string | null;
-                    topEntry?: components["schemas"]["EntryRef"] | null;
-                    bottomEntry?: components["schemas"]["EntryRef"] | null;
-                    /** Format: uuid */
-                    bottom?: string | null;
-                    /** Format: uuid */
-                    winner?: string | null;
-                    /** @enum {string} */
-                    status?: "scheduled" | "bye" | "reported" | "confirmed" | "walkover";
-                }[];
+            eventId: string;
+            /**
+             * Format: uuid
+             * @description null while provisional (no knockout draw yet)
+             */
+            drawId?: string | null;
+            drawVersion?: number | null;
+            /** @enum {string|null} */
+            drawStatus?: "published" | "locked" | null;
+            /** @description true = groups_knockout before the knockout draw is published: sides carry placeholders only */
+            provisional: boolean;
+            /** @description bracket size (power of two) */
+            size: number;
+            rounds: {
+                /** @description 1 = first round */
+                round: number;
+                /** @description ชิงชนะเลิศ (2 left), รองชนะเลิศ (4), ก่อนรองชนะเลิศ (8), otherwise "รอบ N คน" */
+                nameTh: string;
+                matches: components["schemas"]["BracketMatch"][];
             }[];
+            /** @description present when thirdPlacePlayoff: the two semi-final losers */
+            thirdPlace?: components["schemas"]["BracketMatch"] | null;
+            /** @description winner of the confirmed final */
+            champion?: components["schemas"]["EntryRef"] | null;
+        };
+        BracketMatch: {
+            /**
+             * Format: uuid
+             * @description null while provisional; links to the Match (result entry, umpire)
+             */
+            matchId?: string | null;
+            /** @description running number in bracket order (draw.md appendix A) */
+            matchNo: number;
+            round: number;
+            /**
+             * Format: uuid
+             * @description entryId
+             */
+            top?: string | null;
+            topEntry?: components["schemas"]["EntryRef"] | null;
+            topSeedNo?: number | null;
+            /** @description shown when top is null: "แชมป์กลุ่ม A", "ผู้ชนะคู่ที่ 3", "บาย" */
+            topPlaceholder?: string | null;
+            /** Format: uuid */
+            bottom?: string | null;
+            bottomEntry?: components["schemas"]["EntryRef"] | null;
+            bottomSeedNo?: number | null;
+            bottomPlaceholder?: string | null;
+            /**
+             * Format: uuid
+             * @description entryId; set only when the result is confirmed (or a bye/walkover)
+             */
+            winner?: string | null;
+            /** @enum {string} */
+            status: "scheduled" | "bye" | "reported" | "confirmed" | "walkover" | "void";
+            /** @description top = a, bottom = b; reported games are shown with status reported (awaiting confirmation) */
+            games?: {
+                a?: number;
+                b?: number;
+            }[];
+            court?: string | null;
+            /** @description null for the final and the third-place match */
+            nextMatchNo?: number | null;
+            /**
+             * @description which side of nextMatchNo the winner fills
+             * @enum {string|null}
+             */
+            nextSide?: "top" | "bottom" | null;
         };
         MatchFormat: {
             /** @enum {string} */
@@ -4089,6 +4567,7 @@ export interface components {
             /** @description the scoring rules of this match, resolved server-side from the event format: stage group -> groupMatchFormat, knockout | third_place -> knockoutMatchFormat (missing -> preset group_2x15 / bo3_21). Always present in every Match response, so the umpire form and score validation never guess (Andy 2026-10-08). */
             readonly format?: components["schemas"]["MatchFormat"];
         };
+        /** @description tournament-format section 5: an umpire may report a match assigned to them (Match.umpireId) or on one of their courts; courts [] = every court of the event, INCLUDING matches that have no court yet (bl-25-15). Picker: GET /users?role=Umpire. */
         EventUmpire: {
             /** Format: uuid */
             userId: string;
