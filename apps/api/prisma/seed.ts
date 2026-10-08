@@ -3,10 +3,19 @@
  * Roles are a fixed enum (A2), so there is nothing to seed for them.
  * Run: pnpm db:seed   (reads ../../.env; SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD)
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/common/crypto/password';
-import { normalizeTeamName } from '@blulens/shared';
+import {
+  DRAW_PRNG_ID,
+  DRAW_RULESET_VERSION,
+  normalizeTeamName,
+  planGroups,
+  roundRobinSchedule,
+  validateMatchScore,
+  type DrawEntry,
+  type MatchFormat,
+} from '@blulens/shared';
 
 const prisma = new PrismaClient();
 
@@ -518,7 +527,11 @@ async function seedDemo(): Promise<string> {
       ? `tournaments: ${tourResult.created + (tourResult.draftCreated ? 1 : 0)} created`
       : 'tournaments: exists';
 
-  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg})`;
+  // Create demo group stage (published group stage with matches)
+  const groupStageMsg = await seedDemoGroupStage(admin?.id ?? null);
+  console.log(groupStageMsg);
+
+  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg}, ${groupStageMsg})`;
 }
 
 async function seedDemoReviews(
@@ -614,6 +627,256 @@ async function seedDemoReviews(
   }
 
   return created > 0 ? `demo reviews: ${created} created` : 'demo reviews: exists';
+}
+
+async function seedDemoGroupStage(adminId: string | null): Promise<string> {
+  if (!adminId) {
+    return 'demo group stage: skipped (no admin)';
+  }
+
+  const tournamentName = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3';
+  const tournament = await prisma.tournament.findFirst({
+    where: { name: tournamentName },
+    include: {
+      events: {
+        where: { discipline: 'MD' },
+      },
+    },
+  });
+
+  if (!tournament || tournament.events.length === 0) {
+    return 'demo group stage: skipped (tournament or MD event not found)';
+  }
+
+  const mdEvent = tournament.events[0]!;
+
+  // Idempotency marker: any Draw with kind 'group' for that MD event
+  const existingDraw = await prisma.draw.findFirst({
+    where: {
+      eventId: mdEvent.id,
+      kind: 'group',
+    },
+  });
+
+  if (existingDraw) {
+    return 'demo group stage: exists';
+  }
+
+  // Use ONLY approved entries. If fewer than 3 are approved, skip with a log line.
+  const approvedEntries = await prisma.entry.findMany({
+    where: {
+      eventId: mdEvent.id,
+      status: 'approved',
+    },
+    include: {
+      players: {
+        include: {
+          gradeResult: true,
+        },
+      },
+    },
+    orderBy: { id: 'asc' },
+  });
+
+  if (approvedEntries.length < 3) {
+    return 'demo group stage: skipped (fewer than 3 approved entries)';
+  }
+
+  const group2x15Format: MatchFormat = {
+    mode: 'fixed_games',
+    games: 2,
+    pointsPerGame: 15,
+    deuce: false,
+    drawAllowed: true,
+  };
+
+  const firstScoreCheck = validateMatchScore(
+    [
+      [15, 11],
+      [15, 9],
+    ],
+    group2x15Format,
+  );
+  if (!firstScoreCheck.ok) {
+    throw new Error(`First match score invalid: ${firstScoreCheck.message}`);
+  }
+
+  const secondScoreCheck = validateMatchScore(
+    [
+      [13, 15],
+      [15, 12],
+    ],
+    group2x15Format,
+  );
+  if (!secondScoreCheck.ok) {
+    throw new Error(`Second match score invalid: ${secondScoreCheck.message}`);
+  }
+
+  const drawEntries: DrawEntry[] = approvedEntries.map((e) => {
+    const teamIds = Array.from(
+      new Set(
+        e.players
+          .map((p) => p.teamId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    );
+    const scores = e.players
+      .map((p) => (p.gradeResult?.score != null ? Number(p.gradeResult.score) : null))
+      .filter((s): s is number => typeof s === 'number');
+    const seedScore =
+      scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 0;
+
+    return {
+      id: e.id,
+      teamIds,
+      seedScore,
+    };
+  });
+
+  const plan = planGroups(drawEntries, 4, 'demo-seed');
+  if ('error' in plan) {
+    throw new Error(`planGroups failed: ${plan.error}`);
+  }
+
+  const sortedEntryIds = approvedEntries.map((e) => e.id).sort();
+  const inputHash = createHash('sha256').update(sortedEntryIds.join(',')).digest('hex');
+
+  const now = new Date();
+  let totalMatches = 0;
+
+  await prisma.$transaction(async (tx) => {
+    const draw = await tx.draw.create({
+      data: {
+        eventId: mdEvent.id,
+        kind: 'group',
+        version: 1,
+        status: 'published',
+        seed: 'demo-seed',
+        seedSource: 'server',
+        inputHash,
+        snapshot: {
+          entries: drawEntries.map((d) => ({
+            id: d.id,
+            teamIds: [...d.teamIds],
+            seedScore: d.seedScore,
+          })),
+        } as Prisma.InputJsonObject,
+        rulesetVersion: DRAW_RULESET_VERSION,
+        prngId: DRAW_PRNG_ID,
+        size: drawEntries.length,
+        seedsCount: 0,
+        createdBy: adminId,
+      },
+    });
+
+    let globalMatchNo = 1;
+
+    for (let i = 0; i < plan.groups.length; i++) {
+      const groupEntries = plan.groups[i]!;
+      const label = String.fromCharCode(65 + i);
+
+      const group = await tx.group.create({
+        data: {
+          eventId: mdEvent.id,
+          drawId: draw.id,
+          label,
+        },
+      });
+
+      for (let j = 0; j < groupEntries.length; j++) {
+        const entryId = groupEntries[j]!;
+        await tx.groupMember.create({
+          data: {
+            groupId: group.id,
+            entryId,
+            seedInGroup: j + 1,
+            pot: j + 1,
+          },
+        });
+      }
+
+      const schedule = roundRobinSchedule(groupEntries.length);
+      for (const roundItem of schedule) {
+        for (const [posA, posB] of roundItem.matches) {
+          const topEntryId = groupEntries[posA - 1]!;
+          const bottomEntryId = groupEntries[posB - 1]!;
+          const matchIndex = totalMatches;
+          totalMatches++;
+          const matchNo = globalMatchNo++;
+
+          if (matchIndex === 0) {
+            await tx.match.create({
+              data: {
+                eventId: mdEvent.id,
+                drawId: draw.id,
+                groupId: group.id,
+                stage: 'group',
+                round: roundItem.round,
+                matchNo,
+                court: 'สนาม 1',
+                topEntryId,
+                bottomEntryId,
+                games: [
+                  { a: 15, b: 11 },
+                  { a: 15, b: 9 },
+                ],
+                result: 'a_win',
+                winnerEntryId: topEntryId,
+                status: 'confirmed',
+                confirmedBy: adminId,
+                confirmedAt: now,
+                resultVersion: 1,
+                flags: [],
+              },
+            });
+          } else if (matchIndex === 1) {
+            await tx.match.create({
+              data: {
+                eventId: mdEvent.id,
+                drawId: draw.id,
+                groupId: group.id,
+                stage: 'group',
+                round: roundItem.round,
+                matchNo,
+                court: 'สนาม 1',
+                topEntryId,
+                bottomEntryId,
+                games: [
+                  { a: 13, b: 15 },
+                  { a: 15, b: 12 },
+                ],
+                result: 'draw',
+                status: 'reported',
+                reportedBy: adminId,
+                reportedAt: now,
+                resultVersion: 0,
+                flags: [],
+              },
+            });
+          } else {
+            await tx.match.create({
+              data: {
+                eventId: mdEvent.id,
+                drawId: draw.id,
+                groupId: group.id,
+                stage: 'group',
+                round: roundItem.round,
+                matchNo,
+                court: 'สนาม 1',
+                topEntryId,
+                bottomEntryId,
+                status: 'scheduled',
+                resultVersion: 0,
+                flags: [],
+              },
+            });
+          }
+        }
+      }
+    }
+  });
+
+  return `demo group stage: created (${plan.groups.length} groups, ${totalMatches} matches)`;
 }
 
 async function main() {

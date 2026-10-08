@@ -39,3 +39,5 @@
 | หลังสำเร็จ | กลับหน้าที่ตั้งใจไป (`returnTo`) หรือ S01 |
 
 Components: C-TextField, C-Button, C-FormError, C-AppShell (variant: bare)
+
+> Stitch export: [`../stitch/auth/`](../stitch/auth/) (index.html + screenshot.png)
