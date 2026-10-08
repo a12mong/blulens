@@ -34,6 +34,24 @@ export interface GroupStandingsTableProps {
   label: string;
   rows: GroupStanding[];
   pendingReportedCount?: number;
+  allPlayed?: boolean;
+}
+
+export const TIEBREAK_LABELS: Record<string, string> = {
+  diff: 'ผลต่างแต้ม',
+  point_diff: 'ผลต่างแต้ม',
+  head_to_head: 'เจอกันเอง',
+  points_for: 'แต้มได้',
+  wins: 'จำนวนชนะ',
+};
+
+export function formatTiebreakNote(rawNote: string): string {
+  const trimmed = rawNote.trim();
+  if (/[ก-๙]/.test(trimmed)) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  return TIEBREAK_LABELS[lower] ?? 'เกณฑ์อื่น';
 }
 
 function formatDiff(diff?: number): string {
@@ -46,9 +64,13 @@ export function GroupStandingsTable({
   label,
   rows,
   pendingReportedCount,
+  allPlayed,
 }: GroupStandingsTableProps) {
   const sortedRows = [...rows].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
-  const isProvisional = sortedRows.some((r) => r.confirmed === false);
+  const isProvisional =
+    allPlayed !== undefined
+      ? !allPlayed
+      : sortedRows.some((r) => r.confirmed === false);
 
   const tiebreakNotes = Array.from(
     new Set(
@@ -71,7 +93,7 @@ export function GroupStandingsTable({
         {isProvisional && (
           <span
             data-testid="standings-provisional"
-            className="px-2 py-0.5 text-xs font-medium border border-amber-500/40 bg-amber-500/10 text-amber-300"
+            className="px-2 py-0.5 text-xs font-pixel border border-night-line bg-night-panel text-night-muted"
           >
             ตารางชั่วคราว
           </span>
@@ -91,8 +113,9 @@ export function GroupStandingsTable({
               <th scope="col" className="py-2 px-2 text-center font-normal w-14">
                 แข่ง
               </th>
-              <th scope="col" className="py-2 px-2 text-center font-normal w-20">
-                ช/ส/พ
+              <th scope="col" className="py-2 px-2 text-center font-normal w-24">
+                <span className="hidden md:inline">ชนะ/เสมอ/แพ้</span>
+                <span className="md:hidden">ช/ส/พ</span>
               </th>
               <th scope="col" className="py-2 px-2 text-center font-normal w-16">
                 ผลต่าง
@@ -137,10 +160,8 @@ export function GroupStandingsTable({
                   <span
                     className={
                       (row.diff ?? 0) > 0
-                        ? 'text-emerald-400'
-                        : (row.diff ?? 0) < 0
-                          ? 'text-rose-400'
-                          : 'text-night-muted'
+                        ? 'text-night-foreground font-bold'
+                        : 'text-night-muted'
                     }
                   >
                     {formatDiff(row.diff)}
@@ -162,12 +183,30 @@ export function GroupStandingsTable({
         </table>
       </div>
 
+      <div
+        data-testid="standings-legend"
+        className="mt-2.5 text-xs text-night-muted"
+      >
+        ช = ชนะ · ส = เสมอ · พ = แพ้
+      </div>
+
       {pendingReportedCount !== undefined && pendingReportedCount > 0 && (
         <div
           data-testid="standings-pending"
           className="mt-2.5 flex items-center gap-1.5 text-xs text-night-muted border-t border-night-line pt-2"
         >
-          <span aria-hidden="true">⏱</span>
+          <svg
+            className="h-3.5 w-3.5 flex-shrink-0 text-night-muted"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z"
+              clipRule="evenodd"
+            />
+          </svg>
           <span>มี {pendingReportedCount} แมตช์รอยืนยัน (ยังไม่นับในตาราง)</span>
         </div>
       )}
@@ -178,7 +217,7 @@ export function GroupStandingsTable({
           className="mt-2.5 text-xs text-night-muted flex flex-col gap-1 border-t border-night-line pt-2"
         >
           {tiebreakNotes.map((note, idx) => (
-            <p key={idx}>เสมอแต้ม ตัดสินด้วย: {note}</p>
+            <p key={idx}>เสมอแต้ม ตัดสินด้วย: {formatTiebreakNote(note)}</p>
           ))}
         </div>
       )}

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StandingsPage } from './StandingsPage';
-import { useStandings } from './api';
+import { useStandings, useEventMatches } from './api';
 import type { GroupStanding } from './bracketFixture';
 
 vi.mock('./api', async (importOriginal) => {
@@ -9,12 +9,17 @@ vi.mock('./api', async (importOriginal) => {
   return {
     ...actual,
     useStandings: vi.fn(),
+    useEventMatches: vi.fn(),
   };
 });
 
 describe('StandingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useEventMatches).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as any);
   });
 
   it('shows one table per group and the provisional badge until every row is confirmed (proving test)', () => {
@@ -77,16 +82,22 @@ describe('StandingsPage', () => {
       refetch: vi.fn(),
     } as any);
 
+    vi.mocked(useEventMatches).mockReturnValue({
+      data: [
+        { id: 'm1', status: 'reported', stage: 'group', groupId: 'g-1' },
+      ],
+      isLoading: false,
+    } as any);
+
     const { rerender } = render(<StandingsPage eventId="evt-101" />);
 
     // 2 tables rendered
     const tables = screen.getAllByTestId('group-standings');
     expect(tables).toHaveLength(2);
 
-    // Lock badge shows 'ยังไม่ครบ'
+    // Lock badge shows reported count
     const lockBadge = screen.getByTestId('standings-lock');
-    expect(lockBadge).toHaveTextContent('ยังไม่ครบ');
-    expect(lockBadge).toHaveTextContent('ยังไม่ครบ: มีผลที่รอยืนยัน');
+    expect(lockBadge).toHaveTextContent('มี 1 ผลรอคณะกรรมการยืนยัน');
 
     // Now all rows confirmed
     const allConfirmedData = twoGroupsWithOneProvisional.map((row) => ({
@@ -102,9 +113,112 @@ describe('StandingsPage', () => {
       refetch: vi.fn(),
     } as any);
 
+    vi.mocked(useEventMatches).mockReturnValue({
+      data: [
+        { id: 'm1', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+      ],
+      isLoading: false,
+    } as any);
+
     rerender(<StandingsPage eventId="evt-101" />);
 
     // Lock badge updates to 'ล็อกแล้ว'
+    expect(screen.getByTestId('standings-lock')).toHaveTextContent('ล็อกแล้ว');
+  });
+
+  it('explains the provisional state precisely and never shows a raw tiebreaker key', () => {
+    const standingsWithDiff: GroupStanding[] = [
+      {
+        groupId: 'g-1',
+        entryId: 'e1',
+        entry: { entryId: 'e1', displayName: 'กิตติ / สมชาย' },
+        rank: 1,
+        played: 2,
+        won: 1,
+        drawn: 0,
+        lost: 1,
+        points: 3,
+        diff: 5,
+        qualification: 'qualified',
+        confirmed: true,
+        tiebreakNote: 'diff',
+      },
+      {
+        groupId: 'g-1',
+        entryId: 'e2',
+        entry: { entryId: 'e2', displayName: 'วิชัย / มานพ' },
+        rank: 2,
+        played: 2,
+        won: 1,
+        drawn: 0,
+        lost: 1,
+        points: 3,
+        diff: -5,
+        qualification: 'qualified',
+        confirmed: true,
+      },
+    ];
+
+    vi.mocked(useStandings).mockReturnValue({
+      data: standingsWithDiff,
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    // 1. matches {2 confirmed, 1 scheduled} -> 'แข่งแล้ว 2 จาก 3 แมตช์' (not 'รอยืนยัน')
+    vi.mocked(useEventMatches).mockReturnValue({
+      data: [
+        { id: 'm1', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+        { id: 'm2', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+        { id: 'm3', status: 'scheduled', stage: 'group', groupId: 'g-1' },
+      ],
+      isLoading: false,
+    } as any);
+
+    const { rerender } = render(<StandingsPage eventId="evt-101" />);
+
+    const lockBadge = screen.getByTestId('standings-lock');
+    expect(lockBadge).toHaveTextContent('แข่งแล้ว 2 จาก 3 แมตช์');
+    expect(lockBadge).not.toHaveTextContent('รอยืนยัน');
+
+    // tiebreakNote 'diff' renders 'ผลต่างแต้ม'
+    const tiebreakEl = screen.getByTestId('tiebreak-note');
+    expect(tiebreakEl).toHaveTextContent('เสมอแต้ม ตัดสินด้วย: ผลต่างแต้ม');
+    expect(tiebreakEl).not.toHaveTextContent('diff');
+
+    // Legend present
+    expect(screen.getByTestId('standings-legend')).toHaveTextContent(
+      'ช = ชนะ · ส = เสมอ · พ = แพ้',
+    );
+
+    // 2. one reported -> 'มี 1 ผลรอ'
+    vi.mocked(useEventMatches).mockReturnValue({
+      data: [
+        { id: 'm1', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+        { id: 'm2', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+        { id: 'm3', status: 'reported', stage: 'group', groupId: 'g-1' },
+      ],
+      isLoading: false,
+    } as any);
+
+    rerender(<StandingsPage eventId="evt-101" />);
+
+    expect(screen.getByTestId('standings-lock')).toHaveTextContent('มี 1 ผลรอคณะกรรมการยืนยัน');
+
+    // 3. all confirmed -> 'ล็อกแล้ว'
+    vi.mocked(useEventMatches).mockReturnValue({
+      data: [
+        { id: 'm1', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+        { id: 'm2', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+        { id: 'm3', status: 'confirmed', stage: 'group', groupId: 'g-1' },
+      ],
+      isLoading: false,
+    } as any);
+
+    rerender(<StandingsPage eventId="evt-101" />);
+
     expect(screen.getByTestId('standings-lock')).toHaveTextContent('ล็อกแล้ว');
   });
 
