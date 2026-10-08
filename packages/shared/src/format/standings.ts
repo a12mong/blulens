@@ -21,6 +21,22 @@ export interface StandingRow {
   decidedBy: 'points' | 'diff' | 'h2h' | 'pointsFor' | 'lot' | null;
 }
 
+export interface GroupInput {
+  groupIndex: number;
+  entryIds: readonly string[];
+  matches: readonly GroupMatch[];
+}
+
+export interface ThirdRow {
+  entryId: string;
+  groupIndex: number;
+  points: number;
+  diff: number;
+  pointsFor: number;
+  rank: number;
+  decidedBy: 'points' | 'diff' | 'pointsFor' | 'lot' | null;
+}
+
 interface EntryStats {
   entryId: string;
   played: number;
@@ -400,4 +416,171 @@ function applyLot(entries: EntryStats[], seed: string): EntryStats[] {
   return shuffled
     .map((id) => entries.find((e) => e.entryId === id))
     .filter((e) => e !== undefined) as EntryStats[];
+}
+
+export function rankBestThirds(
+  groups: readonly GroupInput[],
+  pointsCfg: { win: number; draw: number; loss: number } = { win: 3, draw: 1, loss: 0 },
+  seed: string,
+): ThirdRow[] {
+  const countedStatuses = new Set(['confirmed', 'walkover']);
+  const minSize = Math.min(...groups.map((g) => g.entryIds.length));
+  const thirds: ThirdRow[] = [];
+
+  for (const group of groups) {
+    if (group.entryIds.length < 3) continue;
+
+    const standings = computeGroupStandings(group.entryIds, group.matches, pointsCfg, `${seed}:g${group.groupIndex}`);
+    const thirdRow = standings[2];
+    if (!thirdRow) continue;
+
+    let thirdStats = {
+      entryId: thirdRow.entryId,
+      points: thirdRow.points,
+      pointsFor: thirdRow.pointsFor,
+      pointsAgainst: thirdRow.pointsAgainst,
+    };
+
+    if (group.entryIds.length > minSize) {
+      const lastRow = standings[standings.length - 1];
+      if (lastRow) {
+        const restMatches = Array.from(group.matches).filter(
+          (m) =>
+            !(m.a === thirdRow.entryId && m.b === lastRow.entryId) &&
+            !(m.a === lastRow.entryId && m.b === thirdRow.entryId)
+        );
+        thirdStats = { entryId: thirdRow.entryId, ...computeThirdStats(thirdRow.entryId, restMatches, pointsCfg) };
+      }
+    }
+
+    const diff = thirdStats.pointsFor - thirdStats.pointsAgainst;
+    thirds.push({
+      entryId: thirdRow.entryId,
+      groupIndex: group.groupIndex,
+      points: thirdStats.points,
+      diff,
+      pointsFor: thirdStats.pointsFor,
+      rank: 0,
+      decidedBy: null,
+    });
+  }
+
+  const sorted = [...thirds].sort((a, b) => {
+    if (a.points !== b.points) return b.points - a.points;
+    if (a.diff !== b.diff) return b.diff - a.diff;
+    if (a.pointsFor !== b.pointsFor) return b.pointsFor - a.pointsFor;
+    return 0;
+  });
+
+  const groups2 = groupThirdsByStats(sorted);
+  const result: ThirdRow[] = [];
+
+  for (const group of groups2) {
+    if (group.length === 1) {
+      result.push(group[0]!);
+    } else {
+      result.push(...applyLotToThirds(group, seed));
+    }
+  }
+
+  for (let i = 0; i < result.length; i++) {
+    const entry = result[i];
+    if (!entry) continue;
+    const nextEntry = i < result.length - 1 ? result[i + 1] : null;
+    const decidedBy = nextEntry ? compareThirds(entry, nextEntry) : null;
+
+    result[i] = {
+      ...entry,
+      rank: i + 1,
+      decidedBy,
+    };
+  }
+
+  return result;
+}
+
+function groupThirdsByStats(entries: ThirdRow[]): ThirdRow[][] {
+  const groups: ThirdRow[][] = [];
+  let currentGroup: ThirdRow[] = [];
+
+  for (const entry of entries) {
+    if (currentGroup.length === 0) {
+      currentGroup.push(entry);
+    } else {
+      const prev = currentGroup[0];
+      if (!prev) continue;
+      if (prev.points === entry.points && prev.diff === entry.diff && prev.pointsFor === entry.pointsFor) {
+        currentGroup.push(entry);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [entry];
+      }
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    groups.push(currentGroup);
+  }
+
+  return groups;
+}
+
+function compareThirds(a: ThirdRow, b: ThirdRow): 'points' | 'diff' | 'pointsFor' | 'lot' {
+  if (a.points !== b.points) return 'points';
+  if (a.diff !== b.diff) return 'diff';
+  if (a.pointsFor !== b.pointsFor) return 'pointsFor';
+  return 'lot';
+}
+
+function applyLotToThirds(entries: ThirdRow[], seed: string): ThirdRow[] {
+  const sortedIds = Array.from(entries.map((e) => e.entryId)).sort();
+  const rng = createRng(`${seed}:thirds:${sortedIds.join(',')}`);
+  const shuffled = shuffle([...sortedIds], rng);
+
+  return shuffled
+    .map((id) => entries.find((e) => e.entryId === id))
+    .filter((e) => e !== undefined) as ThirdRow[];
+}
+
+function computeThirdStats(
+  entryId: string,
+  matches: readonly GroupMatch[],
+  pointsCfg: { win: number; draw: number; loss: number }
+) {
+  let points = 0;
+  let pointsFor = 0;
+  let pointsAgainst = 0;
+
+  for (const match of matches) {
+    if (match.status !== 'confirmed' && match.status !== 'walkover') continue;
+    if (match.a !== entryId && match.b !== entryId) continue;
+
+    let aGamesWon = 0;
+    let bGamesWon = 0;
+    let aTotal = 0;
+    let bTotal = 0;
+
+    for (const [aPoints, bPoints] of match.games) {
+      aTotal += aPoints;
+      bTotal += bPoints;
+      if (aPoints > bPoints) aGamesWon += 1;
+      else if (bPoints > aPoints) bGamesWon += 1;
+    }
+
+    if (match.a === entryId) {
+      pointsFor += aTotal;
+      pointsAgainst += bTotal;
+      if (aGamesWon > bGamesWon) points += pointsCfg.win;
+      else if (bGamesWon > aGamesWon) points += pointsCfg.loss;
+      else points += pointsCfg.draw;
+    } else {
+      pointsFor += bTotal;
+      pointsAgainst += aTotal;
+      if (bGamesWon > aGamesWon) points += pointsCfg.win;
+      else if (aGamesWon > bGamesWon) points += pointsCfg.loss;
+      else points += pointsCfg.draw;
+    }
+  }
+
+  return { points, pointsFor, pointsAgainst };
 }

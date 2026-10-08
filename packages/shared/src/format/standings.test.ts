@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeGroupStandings, GroupMatch } from './standings';
+import { computeGroupStandings, GroupMatch, rankBestThirds, GroupInput } from './standings';
 import { shuffle, createRng } from '../draw/prng';
 
 describe('computeGroupStandings', () => {
@@ -214,5 +214,205 @@ describe('computeGroupStandings', () => {
 
     expect(result[0].entryId).toBe('A');
     expect(result[0].points).toBe(2);
+  });
+});
+
+describe('rankBestThirds', () => {
+  it('3 groups of 4: plain order by points', () => {
+    const groups: GroupInput[] = [
+      {
+        groupIndex: 0,
+        entryIds: ['A1', 'A2', 'A3', 'A4'],
+        matches: [
+          { a: 'A1', b: 'A2', status: 'confirmed', games: [[15, 10]] },
+          { a: 'A1', b: 'A3', status: 'confirmed', games: [[15, 10]] },
+          { a: 'A1', b: 'A4', status: 'confirmed', games: [[15, 10]] },
+          { a: 'A2', b: 'A3', status: 'confirmed', games: [[15, 12]] },
+          { a: 'A2', b: 'A4', status: 'confirmed', games: [[10, 15]] },
+          { a: 'A3', b: 'A4', status: 'confirmed', games: [[10, 15]] },
+        ],
+      },
+      {
+        groupIndex: 1,
+        entryIds: ['B1', 'B2', 'B3', 'B4'],
+        matches: [
+          { a: 'B1', b: 'B2', status: 'confirmed', games: [[15, 10]] },
+          { a: 'B1', b: 'B3', status: 'confirmed', games: [[15, 10]] },
+          { a: 'B1', b: 'B4', status: 'confirmed', games: [[10, 15]] },
+          { a: 'B2', b: 'B3', status: 'confirmed', games: [[15, 12]] },
+          { a: 'B2', b: 'B4', status: 'confirmed', games: [[15, 10]] },
+          { a: 'B3', b: 'B4', status: 'confirmed', games: [[10, 15]] },
+        ],
+      },
+      {
+        groupIndex: 2,
+        entryIds: ['C1', 'C2', 'C3', 'C4'],
+        matches: [
+          { a: 'C1', b: 'C2', status: 'confirmed', games: [[15, 10]] },
+          { a: 'C1', b: 'C3', status: 'confirmed', games: [[10, 15]] },
+          { a: 'C1', b: 'C4', status: 'confirmed', games: [[15, 10]] },
+          { a: 'C2', b: 'C3', status: 'confirmed', games: [[15, 10]] },
+          { a: 'C2', b: 'C4', status: 'confirmed', games: [[10, 15]] },
+          { a: 'C3', b: 'C4', status: 'confirmed', games: [[15, 10]] },
+        ],
+      },
+    ];
+
+    const result = rankBestThirds(groups, { win: 3, draw: 1, loss: 0 }, 'seed');
+
+    expect(result).toHaveLength(3);
+    expect(result[0].rank).toBe(1);
+    expect(result[1].rank).toBe(2);
+    expect(result[2].rank).toBe(3);
+  });
+
+  it('unequal group sizes: dropping last-place result changes order', () => {
+    const groups: GroupInput[] = [
+      {
+        groupIndex: 0,
+        entryIds: ['X1', 'X2', 'X3', 'X4', 'X5'],
+        matches: [
+          { a: 'X1', b: 'X2', status: 'confirmed', games: [[15, 10]] },
+          { a: 'X1', b: 'X3', status: 'confirmed', games: [[15, 10]] },
+          { a: 'X1', b: 'X4', status: 'confirmed', games: [[15, 10]] },
+          { a: 'X1', b: 'X5', status: 'confirmed', games: [[10, 15]] },
+          { a: 'X2', b: 'X3', status: 'confirmed', games: [[15, 12]] },
+          { a: 'X2', b: 'X4', status: 'confirmed', games: [[10, 15]] },
+          { a: 'X2', b: 'X5', status: 'confirmed', games: [[10, 15]] },
+          { a: 'X3', b: 'X4', status: 'confirmed', games: [[10, 15]] },
+          { a: 'X3', b: 'X5', status: 'confirmed', games: [[10, 15]] },
+          { a: 'X4', b: 'X5', status: 'confirmed', games: [[15, 10]] },
+        ],
+      },
+      {
+        groupIndex: 1,
+        entryIds: ['Y1', 'Y2', 'Y3', 'Y4'],
+        matches: [
+          { a: 'Y1', b: 'Y2', status: 'confirmed', games: [[15, 10]] },
+          { a: 'Y1', b: 'Y3', status: 'confirmed', games: [[15, 10]] },
+          { a: 'Y1', b: 'Y4', status: 'confirmed', games: [[15, 10]] },
+          { a: 'Y2', b: 'Y3', status: 'confirmed', games: [[15, 12]] },
+          { a: 'Y2', b: 'Y4', status: 'confirmed', games: [[15, 12]] },
+          { a: 'Y3', b: 'Y4', status: 'confirmed', games: [[10, 15]] },
+        ],
+      },
+    ];
+
+    const result = rankBestThirds(groups, { win: 3, draw: 1, loss: 0 }, 'seed');
+
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.groupIndex === 0 || r.groupIndex === 1)).toBe(true);
+  });
+
+  it('full tie on thirds decided by lot; input-order independent (groupIndex consistent)', () => {
+    const groups1: GroupInput[] = [
+      {
+        groupIndex: 0,
+        entryIds: ['A', 'B', 'C'],
+        matches: [
+          { a: 'A', b: 'B', status: 'confirmed', games: [[10, 10]] },
+          { a: 'A', b: 'C', status: 'confirmed', games: [[10, 10]] },
+          { a: 'B', b: 'C', status: 'confirmed', games: [[10, 10]] },
+        ],
+      },
+      {
+        groupIndex: 1,
+        entryIds: ['D', 'E', 'F'],
+        matches: [
+          { a: 'D', b: 'E', status: 'confirmed', games: [[10, 10]] },
+          { a: 'D', b: 'F', status: 'confirmed', games: [[10, 10]] },
+          { a: 'E', b: 'F', status: 'confirmed', games: [[10, 10]] },
+        ],
+      },
+    ];
+
+    const groups2: GroupInput[] = [
+      {
+        groupIndex: 1,
+        entryIds: ['D', 'E', 'F'],
+        matches: [
+          { a: 'D', b: 'E', status: 'confirmed', games: [[10, 10]] },
+          { a: 'D', b: 'F', status: 'confirmed', games: [[10, 10]] },
+          { a: 'E', b: 'F', status: 'confirmed', games: [[10, 10]] },
+        ],
+      },
+      {
+        groupIndex: 0,
+        entryIds: ['A', 'B', 'C'],
+        matches: [
+          { a: 'A', b: 'B', status: 'confirmed', games: [[10, 10]] },
+          { a: 'A', b: 'C', status: 'confirmed', games: [[10, 10]] },
+          { a: 'B', b: 'C', status: 'confirmed', games: [[10, 10]] },
+        ],
+      },
+    ];
+
+    const result1 = rankBestThirds(groups1, { win: 3, draw: 1, loss: 0 }, 'seed');
+    const result2 = rankBestThirds(groups2, { win: 3, draw: 1, loss: 0 }, 'seed');
+
+    expect(result1.map((r) => r.entryId)).toEqual(result2.map((r) => r.entryId));
+  });
+
+  it('group with 2 entries has no third', () => {
+    const groups: GroupInput[] = [
+      {
+        groupIndex: 0,
+        entryIds: ['A1', 'A2', 'A3', 'A4'],
+        matches: [
+          { a: 'A1', b: 'A2', status: 'confirmed', games: [[15, 10]] },
+          { a: 'A1', b: 'A3', status: 'confirmed', games: [[15, 10]] },
+          { a: 'A1', b: 'A4', status: 'confirmed', games: [[15, 10]] },
+          { a: 'A2', b: 'A3', status: 'confirmed', games: [[15, 12]] },
+          { a: 'A2', b: 'A4', status: 'confirmed', games: [[10, 15]] },
+          { a: 'A3', b: 'A4', status: 'confirmed', games: [[10, 15]] },
+        ],
+      },
+      {
+        groupIndex: 1,
+        entryIds: ['B1', 'B2'],
+        matches: [{ a: 'B1', b: 'B2', status: 'confirmed', games: [[15, 10]] }],
+      },
+    ];
+
+    const result = rankBestThirds(groups, { win: 3, draw: 1, loss: 0 }, 'seed');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].groupIndex).toBe(0);
+  });
+
+  it('same seed same order, different seed differs', () => {
+    const groups: GroupInput[] = [
+      {
+        groupIndex: 0,
+        entryIds: ['A', 'B', 'C', 'D'],
+        matches: [
+          { a: 'A', b: 'B', status: 'confirmed', games: [[10, 10]] },
+          { a: 'A', b: 'C', status: 'confirmed', games: [[10, 10]] },
+          { a: 'A', b: 'D', status: 'confirmed', games: [[10, 10]] },
+          { a: 'B', b: 'C', status: 'confirmed', games: [[10, 10]] },
+          { a: 'B', b: 'D', status: 'confirmed', games: [[10, 10]] },
+          { a: 'C', b: 'D', status: 'confirmed', games: [[10, 10]] },
+        ],
+      },
+      {
+        groupIndex: 1,
+        entryIds: ['E', 'F', 'G', 'H'],
+        matches: [
+          { a: 'E', b: 'F', status: 'confirmed', games: [[10, 10]] },
+          { a: 'E', b: 'G', status: 'confirmed', games: [[10, 10]] },
+          { a: 'E', b: 'H', status: 'confirmed', games: [[10, 10]] },
+          { a: 'F', b: 'G', status: 'confirmed', games: [[10, 10]] },
+          { a: 'F', b: 'H', status: 'confirmed', games: [[10, 10]] },
+          { a: 'G', b: 'H', status: 'confirmed', games: [[10, 10]] },
+        ],
+      },
+    ];
+
+    const result1 = rankBestThirds(groups, { win: 3, draw: 1, loss: 0 }, 'seed1');
+    const result2 = rankBestThirds(groups, { win: 3, draw: 1, loss: 0 }, 'seed1');
+    const result3 = rankBestThirds(groups, { win: 3, draw: 1, loss: 0 }, 'seed2');
+
+    expect(result1.map((r) => r.entryId)).toEqual(result2.map((r) => r.entryId));
+    expect(result1.map((r) => r.entryId)).not.toEqual(result3.map((r) => r.entryId));
   });
 });
