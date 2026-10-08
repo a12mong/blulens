@@ -4,11 +4,9 @@ import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { TeamRequestsQueue } from './TeamRequestsQueue';
 import { ApiRequestError } from '@/lib/api/client';
 import type { TeamRequest } from './requestsApi';
-import type { TeamSuggestion } from './api';
 
 const mockUseTeamRequests = vi.fn();
 const mockUseResolveTeamRequest = vi.fn();
-const mockUseTeamSuggestions = vi.fn();
 const mockUseMe = vi.fn();
 
 vi.mock('./requestsApi', async () => {
@@ -20,14 +18,6 @@ vi.mock('./requestsApi', async () => {
   };
 });
 
-vi.mock('./api', async () => {
-  const actual = await vi.importActual('./api');
-  return {
-    ...actual,
-    useTeamSuggestions: (q: string) => mockUseTeamSuggestions(q),
-  };
-});
-
 vi.mock('@/features/auth/api', () => ({
   useMe: () => mockUseMe(),
 }));
@@ -36,34 +26,34 @@ const req1: TeamRequest = {
   id: 'req-1',
   name: 'Badminton Club A',
   requestedBy: 'user-1',
+  requestedByName: 'สมชาย',
   status: 'pending',
   createdAt: '2026-10-08T07:00:00.000Z',
+  similarTeams: [{ id: 'team-existing-1', name: 'BC A Official' }],
 };
 
 const req2: TeamRequest = {
   id: 'req-2',
   name: 'Badminton Club B',
   requestedBy: 'user-2',
+  requestedByName: 'วิภา',
   status: 'pending',
   createdAt: '2026-10-08T08:00:00.000Z',
+  similarTeams: [
+    { id: 'team-existing-2', name: 'BC B Official' },
+    { id: 'team-existing-3', name: 'BC Bangkok' },
+  ],
 };
 
 const req3: TeamRequest = {
   id: 'req-3',
   name: 'Unique Phoenix',
   requestedBy: 'user-3',
+  requestedByName: null,
   status: 'pending',
   createdAt: '2026-10-08T09:00:00.000Z',
+  similarTeams: [],
 };
-
-const suggestionsForReq1: TeamSuggestion[] = [
-  { teamId: 'team-existing-1', name: 'BC A Official' },
-];
-
-const suggestionsForReq2: TeamSuggestion[] = [
-  { teamId: 'team-existing-2', name: 'BC B Official' },
-  { teamId: 'team-existing-3', name: 'BC Bangkok' },
-];
 
 describe('TeamRequestsQueue', () => {
   let mutateMock: ReturnType<typeof vi.fn>;
@@ -90,12 +80,6 @@ describe('TeamRequestsQueue', () => {
       error: null,
       reset: resetMock,
     });
-
-    mockUseTeamSuggestions.mockImplementation((q: string) => {
-      if (q === 'Badminton Club A') return { data: suggestionsForReq1, isPending: false };
-      if (q === 'Badminton Club B') return { data: suggestionsForReq2, isPending: false };
-      return { data: [], isPending: false };
-    });
   });
 
   it('proves full flow: create -> confirm, alias -> select -> confirm, reject -> min length 5 validation', async () => {
@@ -112,11 +96,13 @@ describe('TeamRequestsQueue', () => {
     const rows = screen.getAllByTestId('teamreq-row');
     expect(rows).toHaveLength(3);
 
-    // Displays name, requester static label, and date
+    // Displays name, requester chip (with name when present, fallback when null), and date
     expect(screen.getByText('Badminton Club A')).toBeInTheDocument();
     expect(screen.getByText('Badminton Club B')).toBeInTheDocument();
     expect(screen.getByText('Unique Phoenix')).toBeInTheDocument();
-    expect(screen.getAllByText('ผู้ขอ')).toHaveLength(3);
+    expect(screen.getByText('ผู้ขอ: สมชาย')).toBeInTheDocument();
+    expect(screen.getByText('ผู้ขอ: วิภา')).toBeInTheDocument();
+    expect(screen.getByText('ผู้ขอ')).toBeInTheDocument();
     expect(screen.getAllByText(/ขอเมื่อ/)).toHaveLength(3);
 
     // Displays similar teams
