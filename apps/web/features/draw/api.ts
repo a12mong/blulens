@@ -76,6 +76,8 @@ export function usePublishDraw(
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'standings'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'bracket'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'groups'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'groups', 'preview'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'groups', 'published'] });
       options?.onSuccess?.(data, variables, ...rest);
     },
   });
