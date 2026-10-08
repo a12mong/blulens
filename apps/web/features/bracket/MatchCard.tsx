@@ -1,4 +1,5 @@
 import React from 'react';
+import { CheckIcon, TimerIcon } from '@/components/ui/Icon';
 
 export type MatchStatus =
   | 'scheduled'
@@ -45,7 +46,7 @@ export function MatchCard({ match, highlightEntryId }: MatchCardProps) {
           title="ยังไม่นับในตารางคะแนน"
           className="inline-flex items-center gap-1 text-xs text-night-muted"
         >
-          <span aria-hidden="true">⏱</span>
+          <TimerIcon className="w-4 h-4" />
           <span>รอยืนยัน</span>
         </span>
       );
@@ -136,7 +137,7 @@ export function MatchCard({ match, highlightEntryId }: MatchCardProps) {
                 {isWinner && (
                   <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-400">
                     <span>ชนะ</span>
-                    <span aria-hidden="true">✓</span>
+                    <CheckIcon className="w-4 h-4" />
                   </span>
                 )}
               </div>
