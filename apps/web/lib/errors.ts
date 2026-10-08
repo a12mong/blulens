@@ -34,6 +34,7 @@ const MESSAGES: Record<string, string> = {
   REVIEWER_CONFLICT_OF_INTEREST: 'ผู้ประเมินสังกัดทีมเดียวกับผู้ถูกประเมิน',
   REVIEWER_NOT_ELIGIBLE: 'ผู้ใช้นี้ไม่มีสิทธิ์เป็นผู้ประเมิน',
   ASSESSMENT_NOT_ASSIGNABLE: 'สถานะนี้มอบหมายผู้ประเมินเพิ่มไม่ได้',
+  MATCH_NOT_REPORTED: 'แมตช์นี้ไม่ได้อยู่ในสถานะรอยืนยัน',
 };
 
 function hasThai(text: string): boolean {
