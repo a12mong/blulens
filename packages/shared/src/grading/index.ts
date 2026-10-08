@@ -6,3 +6,4 @@ export * from './project-grade';
 export * from './calibration';
 export * from './aggregate';
 export * from './reviewer-score';
+export * from './rater-stats';
