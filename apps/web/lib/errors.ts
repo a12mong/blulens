@@ -20,6 +20,11 @@ const MESSAGES: Record<string, string> = {
   NOT_FOUND: 'ไม่พบรายการที่ขอ',
   REVIEW_ALREADY_SUBMITTED: 'ส่งผลประเมินไปแล้ว แก้ไขไม่ได้',
   ASSIGNMENT_EXPIRED: 'งานนี้หมดเวลาแล้ว',
+  MATCH_SCORE_INVALID: 'คะแนนไม่ถูกต้องตามกติกา',
+  STAGE_CONFIRMED: 'รอบนี้ยืนยันแล้ว แก้ไขไม่ได้',
+  MATCH_ALREADY_CONFIRMED: 'แมตช์นี้ถูกยืนยันแล้ว',
+  UMPIRE_NOT_ASSIGNED: 'คุณไม่ได้รับมอบหมายแมตช์นี้',
+  UMPIRE_OWN_MATCH: 'ห้ามกรอกผลแมตช์ที่ตนเองเป็นผู้เล่น',
 };
 
 function hasThai(text: string): boolean {

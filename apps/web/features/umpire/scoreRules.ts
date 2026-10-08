@@ -127,11 +127,9 @@ export function validateMatch(games: Game[], f: MatchFormat): MatchValidation {
       if (errors[i] === null) {
         visibleGames = Math.min(f.games, i + 2);
       } else {
-        visibleGames = Math.min(f.games, i + 1);
         break;
       }
     }
-    visibleGames = Math.max(visibleGames, Math.min(f.games, games.length));
 
     return {
       ok: false,

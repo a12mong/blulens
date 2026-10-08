@@ -1,0 +1,228 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '@/lib/api/client';
+import { useReportResult, type Match } from './api';
+import { MatchFormatBadge } from './MatchFormatBadge';
+import { MatchResultForm } from './MatchResultForm';
+import type { MatchFormat } from './scoreRules';
+
+vi.mock('./api', () => ({
+  useReportResult: vi.fn(),
+}));
+
+describe('MatchResultForm', () => {
+  const mockMutate = vi.fn();
+  const mockReset = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (useReportResult as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: null,
+      reset: mockReset,
+    });
+  });
+
+  const bo3_21: MatchFormat = {
+    preset: 'bo3_21',
+    mode: 'best_of',
+    games: 3,
+    pointsPerGame: 21,
+    deuce: true,
+    cap: 30,
+    drawAllowed: false,
+  };
+
+  const group_2x15: MatchFormat = {
+    preset: 'group_2x15',
+    mode: 'fixed_games',
+    games: 2,
+    pointsPerGame: 15,
+    deuce: false,
+    cap: null,
+    drawAllowed: true,
+  };
+
+  const baseMatch: Match = {
+    id: 'm-1',
+    stage: 'knockout',
+    round: 1,
+    court: '1',
+    status: 'scheduled',
+    aEntry: {
+      entryId: 'e-1',
+      displayName: 'สมชาย / วิภา',
+      teamNames: ['สโมสร ก'],
+    },
+    bEntry: {
+      entryId: 'e-2',
+      displayName: 'อนันต์ / มาลี',
+      teamNames: ['สโมสร ข'],
+    },
+    games: [],
+  };
+
+  it('reports a valid played result after a confirm and blocks an invalid score (proving test)', () => {
+    const onReported = vi.fn();
+    render(
+      <MatchResultForm
+        match={baseMatch}
+        format={bo3_21}
+        onReported={onReported}
+      />,
+    );
+
+    const submitBtn = screen.getByTestId('result-submit');
+    expect(submitBtn).toBeDisabled();
+
+    // Set game 1 to 21-15
+    const scoreAInputs = screen.getAllByTestId('score-a');
+    const scoreBInputs = screen.getAllByTestId('score-b');
+    fireEvent.change(scoreAInputs[0], { target: { value: '21' } });
+    fireEvent.change(scoreBInputs[0], { target: { value: '15' } });
+
+    // Now game 2 becomes visible because bo3 requires another win
+    const scoreAAfterGame1 = screen.getAllByTestId('score-a');
+    const scoreBAfterGame1 = screen.getAllByTestId('score-b');
+    expect(scoreAAfterGame1.length).toBeGreaterThanOrEqual(2);
+
+    // Set game 2 to 21-10
+    fireEvent.change(scoreAAfterGame1[1], { target: { value: '21' } });
+    fireEvent.change(scoreBAfterGame1[1], { target: { value: '10' } });
+
+    // Result summary shows the winner and submit button is enabled
+    const summary = screen.getByTestId('result-summary');
+    expect(summary).toBeInTheDocument();
+    expect(summary).toHaveTextContent('ผู้ชนะ: สมชาย / วิภา');
+    expect(submitBtn).toBeEnabled();
+
+    // With game 1 at 21-20 -> submit disabled and a game-error
+    fireEvent.change(screen.getAllByTestId('score-b')[0], {
+      target: { value: '20' },
+    });
+    expect(submitBtn).toBeDisabled();
+    expect(screen.getByTestId('game-error')).toHaveTextContent(
+      'ต้องห่างกัน 2 แต้ม',
+    );
+
+    // Restore game 1 to 21-15 -> submit enabled
+    fireEvent.change(screen.getAllByTestId('score-b')[0], {
+      target: { value: '15' },
+    });
+    expect(submitBtn).toBeEnabled();
+
+    // Click submit -> confirm dialog opens
+    fireEvent.click(submitBtn);
+    expect(
+      screen.getByRole('heading', {
+        name: /ยืนยันรายงานผล สมชาย \/ วิภา/,
+      }),
+    ).toBeInTheDocument();
+
+    // Click result-confirm -> mutate called with only the 2 played games
+    fireEvent.click(screen.getByTestId('result-confirm'));
+    expect(mockMutate).toHaveBeenCalledWith(
+      {
+        outcome: 'played',
+        games: [
+          { a: 21, b: 15 },
+          { a: 21, b: 10 },
+        ],
+      },
+      expect.any(Object),
+    );
+  });
+
+  it('walkover dialog sends walkover_a for "A ไม่มา"', () => {
+    render(<MatchResultForm match={baseMatch} format={bo3_21} />);
+
+    fireEvent.click(screen.getByTestId('result-walkover'));
+    expect(
+      screen.getByRole('heading', {
+        name: 'เลือกฝ่ายที่ไม่มาแข่ง (Walkover)',
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('walkover-a'));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { outcome: 'walkover_a' },
+      expect.any(Object),
+    );
+  });
+
+  it('confirmed match is read-only with no action buttons', () => {
+    const confirmedMatch: Match = {
+      ...baseMatch,
+      status: 'confirmed',
+      flags: ['CORRECTED'],
+      games: [
+        { a: 21, b: 18 },
+        { a: 21, b: 19 },
+      ],
+    };
+
+    render(<MatchResultForm match={confirmedMatch} format={bo3_21} />);
+
+    const confirmedBanner = screen.getByTestId('result-confirmed');
+    expect(confirmedBanner).toHaveTextContent('ยืนยันแล้ว (แก้ไขหลังยืนยัน)');
+
+    expect(screen.queryByTestId('result-submit')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('result-walkover')).not.toBeInTheDocument();
+  });
+
+  it('reported match shows the banner and prefilled scores', () => {
+    const reportedMatch: Match = {
+      ...baseMatch,
+      status: 'reported',
+      games: [
+        { a: 21, b: 12 },
+        { a: 21, b: 14 },
+      ],
+    };
+
+    render(<MatchResultForm match={reportedMatch} format={bo3_21} />);
+
+    expect(screen.getByTestId('result-reported')).toHaveTextContent(
+      'รายงานแล้ว รอ Committee ยืนยัน',
+    );
+
+    const scoreAInputs = screen.getAllByTestId('score-a');
+    const scoreBInputs = screen.getAllByTestId('score-b');
+    expect(scoreAInputs[0]).toHaveValue('21');
+    expect(scoreBInputs[0]).toHaveValue('12');
+    expect(scoreAInputs[1]).toHaveValue('21');
+    expect(scoreBInputs[1]).toHaveValue('14');
+  });
+
+  it('server 422 shows "คะแนนไม่ถูกต้องตามกติกา"', () => {
+    (useReportResult as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      error: new ApiRequestError(422, 'MATCH_SCORE_INVALID', 'Invalid score'),
+      reset: mockReset,
+    });
+
+    render(<MatchResultForm match={baseMatch} format={bo3_21} />);
+
+    const errorEl = screen.getByTestId('result-error');
+    expect(errorEl).toHaveTextContent('คะแนนไม่ถูกต้องตามกติกา');
+  });
+
+  describe('MatchFormatBadge text', () => {
+    it('formats group_2x15 text correctly', () => {
+      render(<MatchFormatBadge format={group_2x15} />);
+      expect(screen.getByTestId('match-format-badge')).toHaveTextContent(
+        '2 เกม × 15 แต้ม ไม่มีดิวส์ เสมอได้',
+      );
+    });
+
+    it('formats bo3_21 text correctly', () => {
+      render(<MatchFormatBadge format={bo3_21} />);
+      expect(screen.getByTestId('match-format-badge')).toHaveTextContent(
+        '2 ใน 3 เกม × 21 แต้ม ดิวส์ถึง 30',
+      );
+    });
+  });
+});
