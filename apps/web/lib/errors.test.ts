@@ -33,6 +33,17 @@ describe('thaiError', () => {
     expect(
       thaiError(new ApiRequestError(409, 'STAGE_CONFIRMED', 'Stage confirmed')),
     ).toBe('รอบนี้ยืนยันแล้ว แก้ไขไม่ได้');
+
+    // Umpire assignment error codes
+    expect(
+      thaiError(new ApiRequestError(409, 'UMPIRE_NOT_ELIGIBLE', 'Umpire not eligible')),
+    ).toBe('กรรมการนี้ไม่มีสิทธิ์ในรายการนี้');
+    expect(
+      thaiError(new ApiRequestError(409, 'UMPIRE_IS_PLAYER', 'Umpire is player')),
+    ).toBe('กรรมการเป็นผู้เล่นในแมตช์นี้');
+    expect(
+      thaiError(new ApiRequestError(409, 'MATCH_LOCKED', 'Match locked')),
+    ).toBe('แมตช์นี้ล็อกแล้ว');
   });
 
   it('every listed code has a non-empty Thai text', () => {
@@ -76,6 +87,9 @@ describe('thaiError', () => {
       'DRAW_KIND_NOT_SUPPORTED',
       'GROUP_MATCHES_INCOMPLETE',
       'NO_PUBLISHED_GROUP_DRAW',
+      'UMPIRE_NOT_ELIGIBLE',
+      'UMPIRE_IS_PLAYER',
+      'MATCH_LOCKED',
     ];
 
     codes.forEach((code) => {
