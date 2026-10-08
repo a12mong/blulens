@@ -300,6 +300,13 @@ describe('Assessment Confirm and Override (bl-26-4)', () => {
         .send({ note: 'ยืนยันผลประเมินกรรมการเดี่ยว' })
         .expect(200);
 
+      // N3 (bl-39-2)
+      const confirmedNotes = await prisma.notification.findMany({
+        where: { type: 'assessment_confirmed', link: `/me/assessments/${assess.id}` },
+      });
+      expect(confirmedNotes.map((n) => n.recipientUserId)).toEqual([assess.subjectUserId]);
+      expect(confirmedNotes[0]!.title).toBe('ผลประเมินฝีมือของคุณได้รับการยืนยันแล้ว');
+
       expect(res.body.success).toBe(true);
       expect(res.body.data.id).toBe(assess.id);
       expect(res.body.data.status).toBe('approved');
@@ -365,6 +372,16 @@ describe('Assessment Confirm and Override (bl-26-4)', () => {
       });
       expect(resultsBefore).toHaveLength(2); // v1 provisional, v2 approved
 
+      // a second Committee member must hear about the override (G7 a)
+      const otherCommittee = await prisma.user.create({
+        data: {
+          email: `${randomUUID()}-other-committee@test.local`,
+          passwordHash: 'x',
+          displayName: 'Other Committee',
+          roles: { create: [{ role: 'Committee' }] },
+        },
+      });
+
       const reason = 'ปรับเกรดโดยคณะกรรมการหลังพิจารณาประวัติการแข่งขันระดับชาติ';
       expect(reason.length).toBeGreaterThanOrEqual(20);
 
@@ -376,6 +393,19 @@ describe('Assessment Confirm and Override (bl-26-4)', () => {
           reason,
         })
         .expect(200);
+
+      // N4 (bl-39-2): member + every other Committee member, with the reason; never the actor
+      const overriddenNotes = await prisma.notification.findMany({
+        where: { type: 'assessment_overridden', body: reason },
+      });
+      expect(overriddenNotes).toContainEqual(
+        expect.objectContaining({ recipientUserId: assess.subjectUserId, link: `/me/assessments/${assess.id}` }),
+      );
+      expect(overriddenNotes).toContainEqual(
+        expect.objectContaining({ recipientUserId: otherCommittee.id, link: `/committee/assessments/${assess.id}` }),
+      );
+      expect(overriddenNotes.some((n) => n.recipientUserId === committeeId)).toBe(false);
+      await prisma.user.update({ where: { id: otherCommittee.id }, data: { status: 'disabled' } });
 
       expect(res.body.success).toBe(true);
       expect(res.body.data.id).toBe(assess.id);

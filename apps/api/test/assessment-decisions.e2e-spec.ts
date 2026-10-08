@@ -292,6 +292,16 @@ describe('Assessment Decisions - approve and return (bl-26-3)', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.id).toBe(assess.id);
       expect(res.body.data.status).toBe('approved');
+
+      // N1 (bl-39-2): the member is told, the acting Committee user is not
+      const approvedNotes = await prisma.notification.findMany({
+        where: { type: 'assessment_approved', link: `/me/assessments/${assess.id}` },
+      });
+      expect(approvedNotes).toHaveLength(1);
+      expect(approvedNotes[0]).toMatchObject({
+        recipientUserId: assess.subjectUserId,
+        title: 'ผลประเมินฝีมือของคุณได้รับอนุมัติแล้ว',
+      });
       expect(res.body.data.latestResult).toMatchObject({
         version: 2,
         status: 'approved',
@@ -470,6 +480,16 @@ describe('Assessment Decisions - approve and return (bl-26-3)', () => {
         .set('Cookie', committeeCookie)
         .send({ reason: 'ต้องการให้กรรมการผู้เชี่ยวชาญประเภทคู่ประเมินเพิ่มเติม' })
         .expect(200);
+
+      // N2 (bl-39-2): the member gets the return reason
+      const returnedNotes = await prisma.notification.findMany({
+        where: { type: 'assessment_returned', link: `/me/assessments/${assess.id}` },
+      });
+      expect(returnedNotes).toHaveLength(1);
+      expect(returnedNotes[0]).toMatchObject({
+        recipientUserId: assess.subjectUserId,
+        body: 'ต้องการให้กรรมการผู้เชี่ยวชาญประเภทคู่ประเมินเพิ่มเติม',
+      });
 
       expect(res.body.success).toBe(true);
       expect(res.body.data.id).toBe(assess.id);

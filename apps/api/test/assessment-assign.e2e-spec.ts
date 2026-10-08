@@ -157,6 +157,16 @@ describe('assessment assign (bl-10 wave 3)', () => {
 
     expect(assignRes.body.data.status).toBe('in_review');
 
+    // N5 (bl-39-2): each new reviewer gets one blind notice linking to the queue
+    const assignedNotes = await prisma.notification.findMany({
+      where: { type: 'review_assigned', recipientUserId: { in: [reviewerId1, reviewerId2] } },
+    });
+    expect(assignedNotes.map((n) => n.recipientUserId).sort()).toEqual([reviewerId1, reviewerId2].sort());
+    for (const n of assignedNotes) {
+      expect(n).toMatchObject({ title: 'มีงานประเมินใหม่ 1 งาน', body: null, link: '/review' });
+      expect(`${n.title}${n.link}`).not.toContain(assessmentId);
+    }
+
     // Verify 2 assignments created
     const assignments = await prisma.reviewAssignment.findMany({
       where: { assessmentId },
