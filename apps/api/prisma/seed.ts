@@ -9,11 +9,13 @@ import { hashPassword } from '../src/common/crypto/password';
 import {
   DRAW_PRNG_ID,
   DRAW_RULESET_VERSION,
+  eventFormatSchema,
   normalizeTeamName,
   planGroups,
   roundRobinSchedule,
   validateMatchScore,
   type DrawEntry,
+  type EventFormat,
   type MatchFormat,
 } from '@blulens/shared';
 
@@ -260,6 +262,13 @@ async function seedDemoTournament(
     const now = new Date();
 
     // Create events
+    const eventFormatData: EventFormat = eventFormatSchema.parse({
+      type: 'groups_knockout',
+      groupSize: 4,
+      advancePerGroup: 2,
+      bestThirds: 0,
+    });
+
     const mdEvent = await tx.event.create({
       data: {
         tournamentId: tournament.id,
@@ -268,6 +277,7 @@ async function seedDemoTournament(
         gradeMaxIndex: 8, // S+
         maxEntries: 16,
         minReviewers: 2,
+        format: eventFormatData,
       },
     });
 
@@ -529,6 +539,10 @@ async function seedDemo(): Promise<string> {
       ? `tournaments: ${tourResult.created + (tourResult.draftCreated ? 1 : 0)} created`
       : 'tournaments: exists';
 
+  // Set demo event format (before group stage)
+  const eventFormatMsg = await seedDemoEventFormat();
+  console.log(eventFormatMsg);
+
   // Create demo group stage (published group stage with matches)
   const groupStageMsg = await seedDemoGroupStage(admin?.id ?? null);
   console.log(groupStageMsg);
@@ -537,7 +551,7 @@ async function seedDemo(): Promise<string> {
   const umpireMsg = await seedDemoUmpire(umpire1.id);
   console.log(umpireMsg);
 
-  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members + umpire1, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg}, ${groupStageMsg}, ${umpireMsg})`;
+  return `demo: ok (committee + 3 reviewers + ${DEMO_MEMBERS.length} members + umpire1, ${DEMO_TEAMS.length} teams${admin ? ', admin += Committee' : ''}, ${tournamentsMsg}, ${reviewsMsg}, ${eventFormatMsg}, ${groupStageMsg}, ${umpireMsg})`;
 }
 
 async function seedDemoReviews(
@@ -633,6 +647,43 @@ async function seedDemoReviews(
   }
 
   return created > 0 ? `demo reviews: ${created} created` : 'demo reviews: exists';
+}
+
+async function seedDemoEventFormat(): Promise<string> {
+  const tournamentName = 'ศึกลูกขนไก่ชิงถ้วยประธานชมรม ครั้งที่ 3';
+  const tournament = await prisma.tournament.findFirst({
+    where: { name: tournamentName },
+    include: {
+      events: {
+        where: { discipline: 'MD' },
+      },
+    },
+  });
+
+  if (!tournament || tournament.events.length === 0) {
+    return 'demo event format: no event';
+  }
+
+  const mdEvent = tournament.events[0]!;
+
+  // Never overwrite if format is already set (god-approved exception for idempotency)
+  if (mdEvent.format !== null) {
+    return 'demo event format: exists';
+  }
+
+  const eventFormatData: EventFormat = eventFormatSchema.parse({
+    type: 'groups_knockout',
+    groupSize: 4,
+    advancePerGroup: 2,
+    bestThirds: 0,
+  });
+
+  await prisma.event.update({
+    where: { id: mdEvent.id },
+    data: { format: eventFormatData },
+  });
+
+  return 'demo event format: set';
 }
 
 async function seedDemoGroupStage(adminId: string | null): Promise<string> {

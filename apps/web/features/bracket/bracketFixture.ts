@@ -4,9 +4,11 @@ import type { BracketRound } from './Bracket';
 export const bracketFixture: BracketRound[] = [
   {
     round: 1,
+    nameTh: 'รอบก่อนรองชนะเลิศ',
     matches: [
       {
         matchNo: 1,
+        round: 1,
         top: 'E1',
         bottom: 'E2',
         topEntry: {
@@ -24,6 +26,7 @@ export const bracketFixture: BracketRound[] = [
       },
       {
         matchNo: 2,
+        round: 1,
         top: 'E3',
         bottom: null,
         topEntry: {
@@ -37,6 +40,7 @@ export const bracketFixture: BracketRound[] = [
       },
       {
         matchNo: 3,
+        round: 1,
         top: 'E4',
         bottom: 'E5',
         topEntry: {
@@ -54,6 +58,7 @@ export const bracketFixture: BracketRound[] = [
       },
       {
         matchNo: 4,
+        round: 1,
         top: 'E6',
         bottom: 'E7',
         topEntry: {
@@ -73,9 +78,11 @@ export const bracketFixture: BracketRound[] = [
   },
   {
     round: 2,
+    nameTh: 'รอบรองชนะเลิศ',
     matches: [
       {
         matchNo: 5,
+        round: 2,
         top: 'E1',
         bottom: 'E3',
         topEntry: {
@@ -93,6 +100,7 @@ export const bracketFixture: BracketRound[] = [
       },
       {
         matchNo: 6,
+        round: 2,
         top: 'E4',
         bottom: 'E6',
         topEntry: {
@@ -112,9 +120,11 @@ export const bracketFixture: BracketRound[] = [
   },
   {
     round: 3,
+    nameTh: 'รอบชิงชนะเลิศ',
     matches: [
       {
         matchNo: 7,
+        round: 3,
         top: null,
         bottom: null,
         topEntry: null,

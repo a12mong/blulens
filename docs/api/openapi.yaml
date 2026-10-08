@@ -529,6 +529,63 @@ paths:
       x-roles: [Guest, Member, Reviewer, Committee, Admin]
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Rubric' } } } }
+  /rubrics:
+    get:
+      tags: [reviews]
+      summary: All rubric versions, newest first (editor page S12)
+      x-roles: [Committee]
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Rubric' } }
+    post:
+      tags: [reviews]
+      summary: 'Start a new draft version, copied from the active rubric (architecture section 4: Committee only)'
+      description: 'Only criteria (names, weights, anchors) are editable. The grading parameters (outlier rule, margins, minReviewers default) are owner-approved math (grading.md) and are copied unchanged; they are not part of this API.'
+      x-roles: [Committee]
+      responses:
+        '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/Rubric' } } } }
+        '409': { description: 'RUBRIC_DRAFT_EXISTS (finish or delete the open draft first)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /rubrics/{rubricId}:
+    put:
+      tags: [reviews]
+      summary: Edit a draft version's criteria
+      x-roles: [Committee]
+      parameters: [{ name: rubricId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RubricCriteriaInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Rubric' } } } }
+        '400': { $ref: '#/components/responses/Validation' }
+        '409': { description: 'RUBRIC_NOT_DRAFT (active or retired versions are immutable)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+    delete:
+      tags: [reviews]
+      summary: Delete a draft version
+      x-roles: [Committee]
+      parameters: [{ name: rubricId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: deleted }
+        '409': { description: 'RUBRIC_NOT_DRAFT', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+  /rubrics/{rubricId}/activate:
+    post:
+      tags: [reviews]
+      summary: Make a draft the active rubric; the previous active one becomes retired (audit row with the reason)
+      description: 'Applies to assessments submitted AFTER activation; every assessment keeps the rubric locked at its submit (Assessment.rubricId), so in-flight reviews are unaffected.'
+      x-roles: [Committee]
+      parameters: [{ name: rubricId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonInput' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Rubric' } } } }
+        '409': { description: 'RUBRIC_NOT_DRAFT', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
 
   # ---------------- rater stats ----------------
   /rater-stats:
@@ -599,6 +656,41 @@ paths:
                 period: { type: string, example: 2026-Q4 }
       responses:
         '201': { description: created, content: { application/json: { schema: { $ref: '#/components/schemas/CalibrationSet' } } } }
+  /calibration-sets/{setId}:
+    get:
+      tags: [rater-stats]
+      summary: One calibration set with its clips (status, play URL, reference grade) and per-reviewer progress (Committee only)
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/CalibrationSetDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /calibration-sets/{setId}/clips/{clipId}:
+    patch:
+      tags: [rater-stats]
+      summary: Change the reference grade of a clip (only before the set is assigned)
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }, { name: clipId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [referenceKey]
+              properties:
+                referenceKey: { $ref: '#/components/schemas/GradeKey' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/CalibrationSetDetail' } } } }
+        '409': { description: 'CALIBRATION_SET_ASSIGNED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+    delete:
+      tags: [rater-stats]
+      summary: Remove a clip from the set (only before the set is assigned)
+      x-roles: [Committee]
+      parameters: [{ name: setId, in: path, required: true, schema: { type: string, format: uuid } }, { name: clipId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: removed }
+        '409': { description: 'CALIBRATION_SET_ASSIGNED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /calibration-sets/{setId}/clips/upload-url:
     post:
       tags: [rater-stats]
@@ -982,7 +1074,12 @@ paths:
     get:
       tags: [draws]
       summary: Public bracket of the published draw
-      x-roles: [Guest, Member, Reviewer, Committee, Admin]
+      description: |
+        knockout events: the published (or locked) knockout draw, else 404 BRACKET_NOT_PUBLISHED.
+        groups_knockout events: before the knockout draw is published the response is 200 with provisional = true and
+        every side shows a placeholder from the format ("แชมป์กลุ่ม A", "อันดับ 3 ที่ดีที่สุด #1"), never guessed names
+        (tournament-format section 4.4). Only confirmed results advance a winner; reported results show as awaiting confirmation.
+      x-roles: [Guest, Member, Reviewer, Umpire, Committee, Admin]
       parameters: [{ $ref: '#/components/parameters/EventId' }]
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Bracket' } } } }
@@ -1065,6 +1162,15 @@ paths:
     post:
       tags: [format]
       summary: Knockout draw preview seeded from the confirmed standings (Draw kind=knockout)
+      description: |
+        tournament-format.md section 6 (F8 tiered seeding): qualifiers Q = groups x advancePerGroup + bestThirds; group
+        winners are ranked among themselves by section 4.3 -> seeds 1..g, then runners-up, then the best thirds
+        (rankBestThirds). Bracket size = next power of two >= Q, byes to the top seeds (draw.md section 3). Slots follow
+        the draw.md appendix A order; the solver minimises the lexicographic cost (same-team R1 pairs, same-group R1 pairs).
+        Each slot carries `source` (which group and place it came from). Publish with POST /draws/{drawId}/publish
+        (acknowledgeConflicts when conflicts is not empty): it creates every knockout match (round 1 with byes
+        auto-advanced, later rounds empty, plus the third-place match when thirdPlacePlayoff). Re-preview, publish,
+        supersede and lock follow draw.md sections 6-7 (D5, D8).
       x-roles: [Committee]
       parameters: [{ $ref: '#/components/parameters/EventId' }]
       requestBody:
@@ -1074,9 +1180,11 @@ paths:
               type: object
               properties:
                 seed: { type: string, pattern: '^[0-9a-f]{32}$' }
+                reason: { type: string, minLength: 5, maxLength: 2000, description: 'draw.md D5: REQUIRED when a preview already exists for this event (version >= 2), else 400 VALIDATION_FAILED; stored in the draw.preview audit row and shown with that version' }
       responses:
         '201': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Draw' } } } }
-        '409': { description: 'GROUP_STAGE_NOT_CONFIRMED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
+        '400': { $ref: '#/components/responses/Validation' }
+        '409': { description: 'GROUP_STAGE_NOT_CONFIRMED | KNOCKOUT_TOO_FEW_QUALIFIERS (Q < 2) | DRAW_ALREADY_LOCKED', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /events/{eventId}/matches:
     get:
       tags: [format]
@@ -1177,6 +1285,7 @@ paths:
                 umpireId: { type: [string, 'null'], format: uuid }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Match' } } } }
+        '409': { description: 'UMPIRE_NOT_ELIGIBLE | UMPIRE_IS_PLAYER (the umpire plays in this match) | MATCH_LOCKED (confirmed result or locked stage)', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /events/{eventId}/umpires:
     get:
       tags: [format]
@@ -1205,6 +1314,7 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/EventUmpire' } }
+        '409': { description: 'UMPIRE_NOT_ELIGIBLE (user lacks the Umpire role; details { userId })', content: { application/json: { schema: { $ref: '#/components/schemas/EnvelopeError' } } } }
   /umpire/matches:
     get:
       tags: [format]
@@ -1464,10 +1574,30 @@ components:
         durationSec: { type: [integer, 'null'] }
 
     # ---- reviews ----
+    RubricCriteriaInput:
+      type: object
+      required: [criteria]
+      properties:
+        criteria:
+          type: array
+          minItems: 1
+          maxItems: 12
+          description: 'keys unique; weight > 0 (relative weights, normalised at scoring); anchorsTh keys are the 5 tiers Rookie..Professional'
+          items:
+            type: object
+            required: [key, nameTh, weight]
+            properties:
+              key: { type: string, pattern: '^[a-z][a-z_]{1,31}$' }
+              nameTh: { type: string, minLength: 1, maxLength: 80 }
+              weight: { type: number, exclusiveMinimum: 0, maximum: 10 }
+              anchorsTh: { type: object, additionalProperties: { type: string, maxLength: 500 } }
     Rubric:
       type: object
       required: [methodVersion, criteria]
       properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [draft, active, retired], description: 'draft = editable, never activated; active = the one GET /rubric returns; retired = previously active' }
+        createdAt: { type: string, format: date-time }
         methodVersion: { type: string }
         criteria:
           type: array
@@ -1499,6 +1629,33 @@ components:
               clipId: { type: string, format: uuid }
               referenceKey: { $ref: '#/components/schemas/GradeKey' }
         createdAt: { type: string, format: date-time }
+    CalibrationSetDetail:
+      allOf:
+        - { $ref: '#/components/schemas/CalibrationSet' }
+        - type: object
+          properties:
+            assignedAt: { type: [string, 'null'], format: date-time, description: 'set once POST .../assign ran; clips are frozen after that' }
+            clipDetails:
+              type: array
+              items:
+                type: object
+                required: [clipId, referenceKey, status]
+                properties:
+                  clipId: { type: string, format: uuid }
+                  referenceKey: { $ref: '#/components/schemas/GradeKey' }
+                  status: { type: string, enum: [pending_upload, uploaded, rejected] }
+                  viewUrl: { type: [string, 'null'], format: uri, description: '15-min presigned GET; null unless uploaded' }
+                  durationSec: { type: [integer, 'null'] }
+            reviewers:
+              type: array
+              description: per-reviewer progress (submitted counts only; scores are in /calibration-sets/{setId}/results)
+              items:
+                type: object
+                properties:
+                  reviewerId: { type: string, format: uuid }
+                  reviewerName: { type: string }
+                  assigned: { type: integer }
+                  submitted: { type: integer }
     ReviewInput:
       type: object
       required: [scores]
@@ -1713,6 +1870,16 @@ components:
                   position: { type: integer, description: 1..size }
                   entryId: { type: [string, 'null'], format: uuid, description: null = bye }
                   seedNo: { type: [integer, 'null'] }
+                  entry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }], readOnly: true }
+                  source:
+                    oneOf:
+                      - type: object
+                        required: [groupLabel, place]
+                        properties:
+                          groupLabel: { type: string, example: A }
+                          place: { type: integer, minimum: 1, maximum: 3, description: '1 = group winner, 2 = runner-up, 3 = best third' }
+                      - { type: 'null' }
+                    description: 'kind=knockout only: where this qualifier came from (tournament-format section 6); null for a plain knockout draw or a bye'
             conflicts:
               type: array
               description: unavoidable same-team round-1 matches (empty in the normal case)
@@ -1720,31 +1887,52 @@ components:
                 type: object
                 properties:
                   matchNo: { type: integer }
-                  teamId: { type: string, format: uuid }
-            minimumPossibleConflicts: { type: integer }
+                  kind: { type: string, enum: [team, group], default: team, description: 'team = same team/club in round 1 (draw.md D3, minimised first); group = same group in knockout round 1 (tournament-format section 6, minimised second)' }
+                  teamId: { type: [string, 'null'], format: uuid, description: set when kind = team }
+                  groupLabel: { type: [string, 'null'], description: set when kind = group }
+            minimumPossibleConflicts: { type: integer, description: 'same-team pairs lower bound; with groups the solver cost is lexicographic (team, group)' }
     Bracket:
       type: object
+      required: [eventId, provisional, size, rounds]
       properties:
         eventId: { type: string, format: uuid }
-        drawVersion: { type: integer }
+        drawId: { type: [string, 'null'], format: uuid, description: null while provisional (no knockout draw yet) }
+        drawVersion: { type: [integer, 'null'] }
+        drawStatus: { type: [string, 'null'], enum: [published, locked, null] }
+        provisional: { type: boolean, description: 'true = groups_knockout before the knockout draw is published: sides carry placeholders only' }
+        size: { type: integer, description: bracket size (power of two) }
         rounds:
           type: array
           items:
             type: object
+            required: [round, nameTh, matches]
             properties:
-              round: { type: integer }
-              matches:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    matchNo: { type: integer }
-                    top: { type: [string, 'null'], format: uuid, description: entryId }
-                    topEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
-                    bottomEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
-                    bottom: { type: [string, 'null'], format: uuid }
-                    winner: { type: [string, 'null'], format: uuid }
-                    status: { type: string, enum: [scheduled, bye, reported, confirmed, walkover] }
+              round: { type: integer, description: 1 = first round }
+              nameTh: { type: string, description: 'ชิงชนะเลิศ (2 left), รองชนะเลิศ (4), ก่อนรองชนะเลิศ (8), otherwise "รอบ N คน"' }
+              matches: { type: array, items: { $ref: '#/components/schemas/BracketMatch' } }
+        thirdPlace: { oneOf: [{ $ref: '#/components/schemas/BracketMatch' }, { type: 'null' }], description: 'present when thirdPlacePlayoff: the two semi-final losers' }
+        champion: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }], description: winner of the confirmed final }
+    BracketMatch:
+      type: object
+      required: [matchNo, round, status]
+      properties:
+        matchId: { type: [string, 'null'], format: uuid, description: 'null while provisional; links to the Match (result entry, umpire)' }
+        matchNo: { type: integer, description: 'running number in bracket order (draw.md appendix A)' }
+        round: { type: integer }
+        top: { type: [string, 'null'], format: uuid, description: entryId }
+        topEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
+        topSeedNo: { type: [integer, 'null'] }
+        topPlaceholder: { type: [string, 'null'], description: 'shown when top is null: "แชมป์กลุ่ม A", "ผู้ชนะคู่ที่ 3", "บาย"' }
+        bottom: { type: [string, 'null'], format: uuid }
+        bottomEntry: { oneOf: [{ $ref: '#/components/schemas/EntryRef' }, { type: 'null' }] }
+        bottomSeedNo: { type: [integer, 'null'] }
+        bottomPlaceholder: { type: [string, 'null'] }
+        winner: { type: [string, 'null'], format: uuid, description: 'entryId; set only when the result is confirmed (or a bye/walkover)' }
+        status: { type: string, enum: [scheduled, bye, reported, confirmed, walkover, void] }
+        games: { type: array, items: { type: object, properties: { a: { type: integer }, b: { type: integer } } }, description: 'top = a, bottom = b; reported games are shown with status reported (awaiting confirmation)' }
+        court: { type: [string, 'null'] }
+        nextMatchNo: { type: [integer, 'null'], description: null for the final and the third-place match }
+        nextSide: { type: [string, 'null'], enum: [top, bottom, null], description: which side of nextMatchNo the winner fills }
 
     # ---- format (bl-17 DRAFT) ----
     MatchFormat:
@@ -1805,10 +1993,11 @@ components:
     EventUmpire:
       type: object
       required: [userId]
+      description: 'tournament-format section 5: an umpire may report a match assigned to them (Match.umpireId) or on one of their courts; courts [] = every court of the event, INCLUDING matches that have no court yet (bl-25-15). Picker: GET /users?role=Umpire.'
       properties:
         userId: { type: string, format: uuid }
         displayName: { type: string, readOnly: true }
-        courts: { type: array, items: { type: string }, description: 'empty = all courts of the event' }
+        courts: { type: array, items: { type: string, maxLength: 32 }, description: 'empty = all courts of the event' }
     EntryRef:
       type: object
       description: 'compact entry label for brackets/standings/matches; public-safe (no grade unless visible per A14)'

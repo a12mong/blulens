@@ -77,10 +77,16 @@ test.describe.serial('bl-21 API Slice Smoke Tests', () => {
     expect(memLoginRes.status(), 'Member1 login failed').toBe(200);
 
     // 2. Fetch members and teams for test fixtures (unwrapping API envelope { success: true, data })
-    const usersRes = await committeeCtx.get('users?role=Member&limit=50');
-    expect(usersRes.status(), 'GET /users failed').toBe(200);
-    const usersData = await getJson<{ items: Array<{ id: string; displayName: string }> }>(usersRes);
-    const userByName = new Map(usersData.items.map((u) => [u.displayName, u]));
+    // look members up by name: the list is ordered by displayName and each run adds 'Ungraded Player' users that would
+    // push the Thai-named demo members past a fixed page of 50
+    const userByName = new Map<string, { id: string; displayName: string }>();
+    for (const name of ['สมชาย ใจดี', 'วิภา ศรีสุข', 'ธนา รุ่งเรือง', 'มาลี สายสมร', 'กิตติ พานทอง', 'นภา ทองดี']) {
+      const r = await committeeCtx.get(`users?role=Member&limit=20&q=${encodeURIComponent(name)}`);
+      expect(r.status(), `GET /users q=${name} failed`).toBe(200);
+      const d = await getJson<{ items: Array<{ id: string; displayName: string }> }>(r);
+      const hit = d.items.find((u) => u.displayName === name);
+      if (hit) userByName.set(name, hit);
+    }
 
     const member1 = userByName.get('สมชาย ใจดี');
     const member2 = userByName.get('วิภา ศรีสุข');
