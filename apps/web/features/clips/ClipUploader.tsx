@@ -44,10 +44,13 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    void processFile(file);
+  };
 
+  const processFile = async (file: File) => {
     setSelectedFile(file);
     setState('checking');
     setErrorMsg('');
@@ -92,6 +95,8 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
         sizeBytes: file.size,
       });
 
+      if (abortControllerRef.current.signal.aborted) throw new Error('UPLOAD_ABORTED');
+
       // PUT file to storage
       await putFileWithProgress(
         uploadUrlData.uploadUrl,
@@ -121,7 +126,7 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
         if (err instanceof Error && err.message === 'UPLOAD_FAILED') {
           setErrorMsg('อัปโหลดไม่สำเร็จ ลองใหม่');
         } else {
-          setErrorMsg(thaiError(err as any, 'ไม่สามารถอัปโหลดได้'));
+          setErrorMsg(thaiError(err, 'ไม่สามารถอัปโหลดได้'));
         }
       }
     }
@@ -129,7 +134,7 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
 
   const handleRetry = async () => {
     if (!selectedFile) return;
-    await handleFileChange({ target: { files: [selectedFile] } } as any);
+    await processFile(selectedFile);
   };
 
   const handleCancel = () => {
@@ -195,7 +200,7 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
           <button
             onClick={handleCancel}
             data-testid="clip-cancel"
-            className="text-sm text-destructive hover:underline"
+            className="min-h-[44px] px-2 text-sm text-destructive hover:underline"
           >
             ยกเลิก
           </button>
@@ -215,7 +220,7 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
           </div>
           <button
             onClick={handlePickNew}
-            className="text-sm text-primary hover:underline"
+            className="min-h-[44px] px-2 text-sm text-primary hover:underline"
           >
             เลือกไฟล์ใหม่
           </button>
@@ -233,7 +238,7 @@ export function ClipUploader({ assessmentId, onUploaded, disabled = false }: Cli
           </div>
           <button
             onClick={handleRetry}
-            className="text-sm text-primary hover:underline"
+            className="min-h-[44px] px-2 text-sm text-primary hover:underline"
           >
             ลองใหม่
           </button>

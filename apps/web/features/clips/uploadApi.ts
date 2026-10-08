@@ -1,8 +1,7 @@
 'use client';
 
-import type { UseMutationOptions, UseQueryOptions } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ApiRequestError, apiFetch } from '@/lib/api/client';
+import { apiFetch } from '@/lib/api/client';
 import type { components } from '@/lib/api/schema';
 
 type Clip = components['schemas']['Clip'];
@@ -118,6 +117,7 @@ export async function readVideoDuration(file: File): Promise<number> {
     };
 
     video.onerror = () => {
+      clearTimeout(timeout);
       cleanup();
       reject(new Error('Cannot read video metadata'));
     };
