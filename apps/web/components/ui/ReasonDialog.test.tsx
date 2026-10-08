@@ -28,20 +28,19 @@ describe('ReasonDialog', () => {
     expect(counter).toHaveTextContent('0/20');
 
     // Type exactly 19 chars
-    await userEvent.type(textarea, '1234567890123456789');
+    fireEvent.change(textarea, { target: { value: '1234567890123456789' } });
     expect(textarea.value).toBe('1234567890123456789');
     expect(submitButton).toBeDisabled();
     expect(counter).toHaveTextContent('19/20');
 
     // Type one more char (exactly 20)
-    await userEvent.type(textarea, '0');
+    fireEvent.change(textarea, { target: { value: '12345678901234567890' } });
     expect(textarea.value).toBe('12345678901234567890');
     expect(submitButton).not.toBeDisabled();
     expect(counter).toHaveTextContent('20/20');
 
     // Type with surrounding spaces, trim counts only content
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, '   12345678901234567890   ');
+    fireEvent.change(textarea, { target: { value: '   12345678901234567890   ' } });
     expect(textarea.value).toBe('   12345678901234567890   ');
     expect(submitButton).not.toBeDisabled();
     expect(counter).toHaveTextContent('20/20');
