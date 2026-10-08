@@ -41,6 +41,26 @@ const AssignReviewersSchema = z.object({
 
 class AssignReviewersDto extends createZodDto(AssignReviewersSchema) {}
 
+const ApproveAssessmentSchema = z
+  .object({
+    resultVersion: z.number().int().optional(),
+    note: z.string().max(1000).optional(),
+  })
+  .optional()
+  .default({});
+
+class ApproveAssessmentDto extends createZodDto(ApproveAssessmentSchema) {}
+
+const ReturnAssessmentSchema = z
+  .object({
+    reason: z.string().optional(),
+    resultVersion: z.number().int().optional(),
+  })
+  .optional()
+  .default({});
+
+class ReturnAssessmentDto extends createZodDto(ReturnAssessmentSchema) {}
+
 @Controller('assessments')
 export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
@@ -82,5 +102,27 @@ export class AssessmentsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.assessmentsService.assign(assessmentId, user, body);
+  }
+
+  @Post(':assessmentId/approve')
+  @HttpCode(200)
+  @Roles('Committee')
+  async approve(
+    @Param('assessmentId', uuid) assessmentId: string,
+    @Body() body: ApproveAssessmentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.approve(assessmentId, user, body);
+  }
+
+  @Post(':assessmentId/return')
+  @HttpCode(200)
+  @Roles('Committee')
+  async return(
+    @Param('assessmentId', uuid) assessmentId: string,
+    @Body() body: ReturnAssessmentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.return(assessmentId, user, body);
   }
 }
