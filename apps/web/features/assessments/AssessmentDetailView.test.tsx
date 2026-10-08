@@ -251,4 +251,99 @@ describe('AssessmentDetailView', () => {
     const backLink = screen.getByRole('link', { name: '← รายการผลประเมิน' });
     expect(backLink).toHaveAttribute('href', '/committee/assessments');
   });
+
+  it('displays subject club names and event line in detail header', () => {
+    const dataWithEvent: AssessmentDetail = {
+      ...mockDetailData,
+      subject: {
+        userId: 'u-1',
+        displayName: 'สมชาย ชนะเลิศ',
+        clubNames: ['สโมสร กทม.', 'สโมสร สิงห์'],
+      },
+      event: {
+        id: 'evt-1',
+        tournamentName: 'BluLens Masters 2026',
+        discipline: 'MD',
+      },
+    };
+
+    vi.mocked(useAssessmentDetail).mockReturnValue({
+      data: dataWithEvent,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    render(<AssessmentDetailView id="asm-1" />);
+
+    expect(screen.getByText('สมชาย ชนะเลิศ')).toBeInTheDocument();
+    expect(screen.getByText('สโมสร กทม., สโมสร สิงห์')).toBeInTheDocument();
+    expect(screen.getByText('BluLens Masters 2026 · ชายคู่')).toBeInTheDocument();
+  });
+
+  it('displays "ประเมินทั่วไป" when event is null or undefined', () => {
+    const dataNullEvent: AssessmentDetail = {
+      ...mockDetailData,
+      event: null,
+    };
+
+    vi.mocked(useAssessmentDetail).mockReturnValue({
+      data: dataNullEvent,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    render(<AssessmentDetailView id="asm-1" />);
+
+    expect(screen.getByText('ประเมินทั่วไป')).toBeInTheDocument();
+  });
+
+  it('renders ReviewerProgress when assignments are present, and omits when empty', () => {
+    const dataWithAssignments: AssessmentDetail = {
+      ...mockDetailData,
+      assignments: [
+        {
+          id: 'asg-1',
+          reviewerId: 'rev-1',
+          reviewerName: 'กรรมการ นพพล',
+          state: 'open',
+          dueAt: '2026-10-15T12:00:00Z',
+        },
+      ],
+    };
+
+    vi.mocked(useAssessmentDetail).mockReturnValue({
+      data: dataWithAssignments,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    const { rerender } = render(<AssessmentDetailView id="asm-1" />);
+
+    expect(screen.getByTestId('detail-progress')).toBeInTheDocument();
+    expect(screen.getByText('กรรมการ นพพล')).toBeInTheDocument();
+
+    // Rerender with empty assignments
+    const dataEmptyAssignments: AssessmentDetail = {
+      ...mockDetailData,
+      assignments: [],
+    };
+
+    vi.mocked(useAssessmentDetail).mockReturnValue({
+      data: dataEmptyAssignments,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    rerender(<AssessmentDetailView id="asm-1" />);
+    expect(screen.queryByTestId('detail-progress')).toBeNull();
+  });
 });
+
