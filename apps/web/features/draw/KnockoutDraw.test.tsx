@@ -263,7 +263,7 @@ describe('KnockoutDraw', () => {
     expect(screen.queryByTestId('knockout-preview')).toBeNull();
   });
 
-  it('renders nothing when NEXT_PUBLIC_KNOCKOUT_UI is not 1', () => {
+  it('renders nothing when NEXT_PUBLIC_KNOCKOUT_UI is 0', () => {
     process.env.NEXT_PUBLIC_KNOCKOUT_UI = '0';
     const { container } = renderWithClient(<KnockoutDraw eventId="evt-1" />);
     expect(container.firstChild).toBeNull();

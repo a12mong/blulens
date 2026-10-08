@@ -321,8 +321,8 @@ function KnockoutDrawInner({ eventId }: KnockoutDrawProps) {
 }
 
 export function KnockoutDraw({ eventId }: KnockoutDrawProps) {
-  // Feature flag: rendered only when NEXT_PUBLIC_KNOCKOUT_UI === '1'
-  if (process.env.NEXT_PUBLIC_KNOCKOUT_UI !== '1') {
+  // On by default now that GET /events/{id}/bracket is live (7a7c17f); '0' is the kill switch
+  if (process.env.NEXT_PUBLIC_KNOCKOUT_UI === '0') {
     return null;
   }
 
