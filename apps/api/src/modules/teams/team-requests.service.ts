@@ -114,14 +114,71 @@ export class TeamRequestsService {
       orderBy: { createdAt: 'asc' },
     });
 
+    if (requests.length === 0) {
+      return [];
+    }
+
+    // Collect all request textKeys and requester IDs for batch loading
+    const requestTextKeys = requests.map((r) => r.textKey);
+    const requesterIds = new Set(requests.map((r) => r.requestedBy));
+
+    // Load all users in one query (batch loading requester names)
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: Array.from(requesterIds) } },
+      select: { id: true, displayName: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.displayName]));
+
+    // Load all active teams with their aliases in one query
+    const teams = await this.prisma.team.findMany({
+      where: { status: 'active' },
+      include: { aliases: true },
+    });
+
+    // Find similar teams for each request (in memory)
+    const similarTeamsMap = this.computeSimilarTeams(requestTextKeys, teams);
+
     return requests.map((r) => ({
       id: r.id,
       name: r.text,
       requestedBy: r.requestedBy,
+      requestedByName: userMap.get(r.requestedBy) ?? null,
       status: r.status,
       teamId: r.resolvedTeamId,
+      similarTeams: similarTeamsMap.get(r.textKey) ?? [],
       createdAt: r.createdAt,
     }));
+  }
+
+  private computeSimilarTeams(
+    requestTextKeys: string[],
+    teams: Array<{ id: string; name: string; nameKey: string; aliases: Array<{ aliasKey: string }> }>,
+  ): Map<string, Array<{ id: string; name: string }>> {
+    const result = new Map<string, Array<{ id: string; name: string }>>();
+
+    for (const requestKey of requestTextKeys) {
+      const similar: Array<{ id: string; name: string }> = [];
+
+      for (const team of teams) {
+        // Check if nameKey contains requestKey, or requestKey contains nameKey, or an alias matches
+        const nameKeyMatch =
+          team.nameKey.includes(requestKey) || requestKey.includes(team.nameKey);
+
+        const aliasMatch = team.aliases.some((alias) =>
+          alias.aliasKey.includes(requestKey) || requestKey.includes(alias.aliasKey),
+        );
+
+        if (nameKeyMatch || aliasMatch) {
+          similar.push({ id: team.id, name: team.name });
+        }
+      }
+
+      // Sort by name, limit to 5
+      similar.sort((a, b) => a.name.localeCompare(b.name));
+      result.set(requestKey, similar.slice(0, 5));
+    }
+
+    return result;
   }
 
   async resolveTeamRequest(
