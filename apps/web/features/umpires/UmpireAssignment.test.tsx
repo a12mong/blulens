@@ -42,6 +42,11 @@ describe('UmpireAssignment', () => {
     },
   ];
 
+  const mockUmpireUsers = [
+    { id: 'umpire-1', displayName: 'สมศักดิ์ เมืองเชียง', teamIds: [], teamNames: [], gradeLabel: null, gradeProvisional: false },
+    { id: 'umpire-2', displayName: 'จำเนียร เลียมลิสา', teamIds: [], teamNames: [], gradeLabel: null, gradeProvisional: false },
+  ];
+
   function renderComponent() {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -66,6 +71,11 @@ describe('UmpireAssignment', () => {
     } as any);
     vi.spyOn(api, 'useEventMatches').mockReturnValue({
       data: mockMatches,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(api, 'useUmpireUsers').mockReturnValue({
+      data: mockUmpireUsers,
       isLoading: false,
       error: null,
     } as any);
@@ -123,6 +133,11 @@ describe('UmpireAssignment', () => {
       isLoading: false,
       error: null,
     } as any);
+    vi.spyOn(api, 'useUmpireUsers').mockReturnValue({
+      data: mockUmpireUsers,
+      isLoading: false,
+      error: null,
+    } as any);
     vi.spyOn(api, 'useAssignMatch').mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -154,6 +169,11 @@ describe('UmpireAssignment', () => {
       isLoading: false,
       error: null,
     } as any);
+    vi.spyOn(api, 'useUmpireUsers').mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    } as any);
     vi.spyOn(api, 'useAssignMatch').mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -178,6 +198,11 @@ describe('UmpireAssignment', () => {
       refetch: refetchFn,
     } as any);
     vi.spyOn(api, 'useEventMatches').mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(api, 'useUmpireUsers').mockReturnValue({
       data: [],
       isLoading: false,
       error: null,
@@ -214,6 +239,11 @@ describe('UmpireAssignment', () => {
       isLoading: false,
       error: null,
     } as any);
+    vi.spyOn(api, 'useUmpireUsers').mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    } as any);
     vi.spyOn(api, 'useAssignMatch').mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -239,6 +269,11 @@ describe('UmpireAssignment', () => {
     } as any);
     vi.spyOn(api, 'useEventMatches').mockReturnValue({
       data: [],
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.spyOn(api, 'useUmpireUsers').mockReturnValue({
+      data: mockUmpireUsers,
       isLoading: false,
       error: null,
     } as any);
