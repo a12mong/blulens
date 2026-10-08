@@ -104,6 +104,10 @@ describe('TournamentDetailView', () => {
     expect(groupsLink).toHaveAttribute('href', '/committee/events/E1/groups');
     expect(groupsLink).toHaveTextContent('จัดกลุ่ม');
 
+    const umpiresLink = screen.getByTestId('event-umpires-committee');
+    expect(umpiresLink).toHaveAttribute('href', '/committee/events/E1/umpires');
+    expect(umpiresLink).toHaveTextContent('มอบหมายกรรมการสนาม');
+
     // With roles ['Committee'] only committee links
     mockRoles = ['Committee'];
     rerender(<TournamentDetailView tournamentId="T1" />);
@@ -111,6 +115,7 @@ describe('TournamentDetailView', () => {
     expect(screen.getByTestId('event-entries-committee')).toBeInTheDocument();
     expect(screen.getByTestId('event-results-committee')).toBeInTheDocument();
     expect(screen.getByTestId('event-groups-committee')).toBeInTheDocument();
+    expect(screen.getByTestId('event-umpires-committee')).toBeInTheDocument();
 
     // Tournament status draft -> tournament-not-open is visible
     mockTournamentState = {
@@ -136,11 +141,16 @@ describe('TournamentDetailView', () => {
     expect(groupsLink).toBeInTheDocument();
     expect(groupsLink.getAttribute('href')).toMatch(/\/groups$/);
 
+    const umpiresLink = screen.getByTestId('event-umpires-committee');
+    expect(umpiresLink).toBeInTheDocument();
+    expect(umpiresLink.getAttribute('href')).toMatch(/\/umpires$/);
+
     // roles ['Member'] -> absent
     mockRoles = ['Member'];
     rerender(<TournamentDetailView tournamentId="T1" />);
     expect(screen.queryByTestId('event-results-committee')).toBeNull();
     expect(screen.queryByTestId('event-groups-committee')).toBeNull();
+    expect(screen.queryByTestId('event-umpires-committee')).toBeNull();
   });
 
   it('shows skeleton while pending', () => {

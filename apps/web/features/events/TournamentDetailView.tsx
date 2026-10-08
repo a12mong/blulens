@@ -138,6 +138,13 @@ export function TournamentDetailView({
                     >
                       จัดกลุ่ม
                     </Link>
+                    <Link
+                      data-testid="event-umpires-committee"
+                      href={`/committee/events/${e.id}/umpires`}
+                      className="inline-flex min-h-[44px] items-center rounded border border-border bg-card text-card-foreground px-4 text-sm font-medium hover:bg-muted transition-colors"
+                    >
+                      มอบหมายกรรมการสนาม
+                    </Link>
                   </>
                 )}
               </div>

@@ -5,6 +5,7 @@ import type { AuthUser } from '../../common/auth/auth.types';
 import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { nextSlot } from '../draws/bracket';
 import {
   bracketOrder,
   computeGroupStandings,
@@ -1159,6 +1160,9 @@ export class MatchesService {
         data: updateData,
       });
 
+      // 9b. A confirmed knockout result moves the winner (and a semi-final loser) forward (bl-33-4)
+      await this.advanceKnockout(tx, match, updated);
+
       // 10. Record audit entry
       await this.audit.record(
         {
@@ -1201,6 +1205,56 @@ export class MatchesService {
       );
       return this.mapMatch(updated, entryMap, format, userNames);
     });
+  }
+
+  /**
+   * Fills the next-round slot with the winner of a confirmed knockout match, and the third-place
+   * slot with a semi-final loser. A correction that changes the winner replaces the entry only
+   * while the downstream match is still scheduled; otherwise 409 NEXT_MATCH_ALREADY_PLAYED.
+   */
+  private async advanceKnockout(tx: Prisma.TransactionClient, before: Match, after: Match) {
+    if (after.stage !== 'knockout' || after.status !== 'confirmed') return;
+    const isCorrection = before.status === 'confirmed';
+    if (isCorrection && before.winnerEntryId === after.winnerEntryId) return;
+
+    const bracket = await tx.match.findMany({
+      where: { drawId: after.drawId, stage: { in: ['knockout', 'third_place'] } },
+      orderBy: [{ round: 'asc' }, { matchNo: 'asc' }],
+    });
+    const knockout = bracket.filter((m) => m.stage === 'knockout');
+    const finalRound = Math.max(...knockout.map((m) => m.round));
+    const index = knockout.filter((m) => m.round === after.round).findIndex((m) => m.id === after.id);
+    const slot = nextSlot(after.round, index);
+
+    const loserEntryId =
+      after.winnerEntryId === null
+        ? null
+        : after.winnerEntryId === after.topEntryId
+          ? after.bottomEntryId
+          : after.topEntryId;
+
+    const moves: Array<{ target: Match; entryId: string | null }> = [];
+    const nextMatch = knockout.filter((m) => m.round === slot.round)[slot.index];
+    if (nextMatch) moves.push({ target: nextMatch, entryId: after.winnerEntryId });
+    const thirdPlace = bracket.find((m) => m.stage === 'third_place');
+    if (thirdPlace && after.round === finalRound - 1) {
+      moves.push({ target: thirdPlace, entryId: loserEntryId });
+    }
+
+    for (const { target, entryId } of moves) {
+      await tx.$queryRaw`SELECT id FROM matches WHERE id = ${target.id}::uuid FOR UPDATE`;
+      const current = await tx.match.findUniqueOrThrow({ where: { id: target.id } });
+      if (current.status !== 'scheduled') {
+        throw ApiException.conflict(
+          'NEXT_MATCH_ALREADY_PLAYED',
+          `แมตช์ที่ ${current.matchNo} รอบถัดไปมีผลแล้ว ไม่สามารถเปลี่ยนผู้ชนะได้`,
+        );
+      }
+      await tx.match.update({
+        where: { id: target.id },
+        data: slot.side === 'top' ? { topEntryId: entryId } : { bottomEntryId: entryId },
+      });
+    }
   }
 
   async putMatchResult(matchId: string, body: PutMatchResultInput, caller: AuthUser) {
