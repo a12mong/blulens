@@ -318,4 +318,49 @@ describe('GET /team-requests read model: requestedByName + similarTeams', () => 
     const sortedNames = [...names].sort();
     expect(names).toEqual(sortedNames);
   });
+
+  it('similarTeams: reverse match (request contains team key) without forward match', async () => {
+    const requesterCookie = cookieFor(requesterUserId, ['Member']);
+    const committeeCookie = cookieFor(committeeUserId, ['Committee']);
+
+    // Create a team with short nameKey
+    const teamName = `${reqToken} ชมรมแบดหาดใหญ่`;
+    const reverseTeam = await prisma.team.create({
+      data: {
+        name: teamName,
+        nameKey: teamName.toLowerCase(),
+        status: 'active',
+      },
+    });
+
+    // Request with a name that contains the team's nameKey but doesn't match forward condition
+    // Forward: team.nameKey contains request key (no match, since request key is longer)
+    // Reverse: request key contains team.nameKey (match)
+    const requestName = `${reqToken} ชมรมแบดหาดใหญ่ตะวันออก`;
+    const requestRes = await http()
+      .post('/api/v1/team-requests')
+      .set('Cookie', requesterCookie)
+      .send({ name: requestName })
+      .expect(201);
+    const requestId = requestRes.body.data.id;
+
+    // GET pending requests
+    const getRes = await http()
+      .get('/api/v1/team-requests')
+      .set('Cookie', committeeCookie)
+      .expect(200);
+
+    const items = getRes.body.data;
+    const item = items.find((r: any) => r.id === requestId);
+    expect(item).toBeDefined();
+    // Should contain the reverse-matched team
+    expect(item.similarTeams).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: reverseTeam.id,
+          name: teamName,
+        }),
+      ]),
+    );
+  });
 });

@@ -156,11 +156,12 @@ export class TeamRequestsService {
     const forwardIdSet = new Set(forwardTeams.map((t) => t.id));
 
     // Load reverse teams (exclude already loaded forward teams)
+    const missingReverseIds = reverseIds.filter((r) => !forwardIdSet.has(r.id));
     const reverseTeams =
-      reverseIdSet.size > reverseIds.filter((r) => !forwardIdSet.has(r.id)).length
+      missingReverseIds.length > 0
         ? await this.prisma.team.findMany({
             where: {
-              id: { in: reverseIds.map((r) => r.id).filter((id) => !forwardIdSet.has(id)) },
+              id: { in: missingReverseIds.map((r) => r.id) },
             },
             select: { id: true, name: true, nameKey: true, aliases: { select: { aliasKey: true } } },
           })
