@@ -128,6 +128,7 @@ test.describe.serial('slice 4 knockout: 4 qualifiers (semi-finals, final, third 
   let eventId = '';
   let firstPreviewId = '';
   let secondPreviewId = '';
+  let finalWinnerName = '';
 
   test('K1 setup: 6 pairs, 2 groups of 3, groups published', async () => {
     eventId = await setupEvent('main', 6, { type: 'groups_knockout', groupSize: 3, advancePerGroup: 2, bestThirds: 0 });
@@ -238,6 +239,7 @@ test.describe.serial('slice 4 knockout: 4 qualifiers (semi-finals, final, third 
     await reportAndConfirm(third.id);
     const b = await bracketOf(publicCtx, eventId);
     expect(b.champion?.entryId, 'champion is the top side of the final').toBe(final.aEntry.entryId);
+    finalWinnerName = b.champion.displayName;
     expect(b.thirdPlace.winner).toBe(third.aEntry.entryId);
     const rejected = await umpireCtx.put(`matches/${final.id}/result`, { data: { outcome: 'played', games: KO_GAMES } });
     expect(rejected.status(), 'confirmed final cannot be reported again').toBe(409);
@@ -257,16 +259,18 @@ test.describe.serial('slice 4 knockout: 4 qualifiers (semi-finals, final, third 
     await ctx.close();
   });
 
-  test('K8b KNOWN ISSUE (test.fail): the third-place match is on the public bracket (API has bracket.thirdPlace; the page renders only rounds)', async ({ browser }) => {
-    test.fail(true, 'GET /events/{id}/bracket returns thirdPlace but BracketPage/Bracket render only rounds[], so the ชิงที่ 3 match and its winner never show');
+  test('K8b public bracket (guest): knockout tab is the default, third place (ชิงที่ 3) and the champion are shown', async ({ browser }) => {
     const ctx = await browser.newContext({ baseURL: WEB_BASE });
     const page = await ctx.newPage();
     await page.goto(`/events/${eventId}/bracket`);
-    await page.getByRole('tab', { name: 'สายน็อคเอาท์' }).click({ timeout: 30000 });
-    const tree = page.getByTestId('bracket-tree');
-    await expect(tree.getByTestId('match-card')).toHaveCount(4, { timeout: 10000 });
-    await expect(tree.getByTestId('match-third-place')).toHaveCount(1);
-    await expect(tree.locator('[data-winner="true"]')).toHaveCount(4);
+    await expect(page.getByRole('tab', { name: 'สายน็อคเอาท์' }), 'knockout tab is selected by default once published').toHaveAttribute('aria-selected', 'true', { timeout: 30000 });
+    const champ = page.getByTestId('bracket-champion');
+    await expect(champ).toBeVisible();
+    await expect(champ).toContainText(finalWinnerName);
+    const third = page.getByTestId('bracket-third-place');
+    await expect(third).toBeVisible();
+    await expect(third).toContainText('ชิงที่ 3');
+    await expect(third.locator('[data-winner="true"]'), 'third-place winner marked').toHaveCount(1);
     await ctx.close();
   });
 });

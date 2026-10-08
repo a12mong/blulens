@@ -109,10 +109,9 @@ test.describe.serial('umpire assignment screen', () => {
     test.use({ storageState: COMMITTEE_AUTH_FILE });
 
     test('A2 event without umpires: empty state AND a way to add the first umpire', async ({ page }) => {
-      test.fail(true, 'KNOWN ISSUE (bl-34): UmpireAssignment returns the bare empty state when the event has no umpires, so there is no add button, no match table and no way to add the first umpire from the UI');
       await page.goto(`/committee/events/${eventId}/umpires`);
       await expect(page.getByTestId('umpire-empty')).toBeVisible({ timeout: 30000 });
-      await expect(page.getByRole('button', { name: /เพิ่มกรรมการ/ }), 'the first umpire must be addable from the screen').toBeVisible();
+      await expect(page.getByTestId('umpire-add'), 'the first umpire must be addable from the screen').toBeVisible();
     });
 
     test('A3 umpire1 listed with "ทุกสนาม"; adding a second umpire from the UI saves (PUT 200)', async ({ page }) => {
