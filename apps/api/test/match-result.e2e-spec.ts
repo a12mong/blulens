@@ -266,6 +266,33 @@ describe('match-result (bl-25-3 API)', () => {
     });
   });
 
+  describe('bl-25-15 umpire all-courts court-null matches', () => {
+    it('umpire with courts [] (all courts) can report court-null match -> 200', async () => {
+      // match1 should have court = null (published draw matches)
+      const match = await prisma.match.findUnique({ where: { id: match1Id } });
+      if (match && match.court === null) {
+        const cookie = cookieFor(umpireAssignedId, ['Umpire']);
+        const res = await http()
+          .put(`/api/v1/matches/${match1Id}/result`)
+          .set('Cookie', cookie)
+          .send({
+            outcome: 'played',
+            games: [
+              { a: 15, b: 12 },
+              { a: 15, b: 14 },
+            ],
+          })
+          .expect(200);
+
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.status).toBe('reported');
+        // Verify umpireId stays null in DB
+        const updated = await prisma.match.findUnique({ where: { id: match1Id } });
+        expect(updated?.umpireId).toBeNull();
+      }
+    });
+  });
+
   afterAll(async () => {
     // Disable test users rather than deleting append-only rows
     if (userIds.length > 0) {
