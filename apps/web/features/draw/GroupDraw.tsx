@@ -195,8 +195,12 @@ export function GroupDraw({ eventId }: GroupDrawProps) {
   });
 
   const previewGroupsQuery = useGroups(eventId, 'preview', {
-    enabled: Boolean(currentDraw && !isPublished),
+    enabled: !isPublished,
   });
+
+  // A preview created before a page reload is not in local state: a new preview then needs a reason.
+  const hasExistingPreview =
+    !currentDraw && Boolean(previewGroupsQuery.data && previewGroupsQuery.data.length > 0);
 
   const effectivePublished =
     isPublished ||
@@ -231,6 +235,10 @@ export function GroupDraw({ eventId }: GroupDrawProps) {
 
   const handlePreview = () => {
     setActionError(null);
+    if (hasExistingPreview) {
+      setShowRerollDialog(true);
+      return;
+    }
     previewMutation.mutate();
   };
 

@@ -703,5 +703,25 @@ describe('GroupDraw', () => {
     expect(notGroupsEl).toHaveTextContent('ยังไม่ได้ตั้งค่ารูปแบบแบ่งกลุ่ม');
     expect(screen.queryByTestId('draw-preview')).toBeNull();
   });
+  it('asks for a reason when a preview already exists after a reload', () => {
+    vi.mocked(drawApi.useGroups).mockImplementation((_eventId, draw) => ({
+      data:
+        draw === 'preview'
+          ? ([{ id: 'g1', label: 'A', members: [], matches: [] }] as unknown as drawApi.Group[])
+          : undefined,
+      isLoading: false,
+    }) as unknown as ReturnType<typeof drawApi.useGroups>);
+
+    render(<GroupDraw eventId="e1" />);
+
+    fireEvent.click(screen.getByTestId('draw-preview'));
+
+    // No reason-less preview is sent; the reason dialog opens instead.
+    expect(mockPreviewMutate).not.toHaveBeenCalled();
+    const reasonInput = screen.getByTestId('reason-input');
+    fireEvent.change(reasonInput, { target: { value: 'ขอสุ่มใหม่' } });
+    fireEvent.click(screen.getByTestId('reason-submit'));
+    expect(mockPreviewMutate).toHaveBeenCalledWith({ reason: 'ขอสุ่มใหม่' });
+  });
 });
 
