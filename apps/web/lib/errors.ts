@@ -58,6 +58,7 @@ const MESSAGES: Record<string, string> = {
   CLIP_MISMATCH: 'ไฟล์ที่อัปโหลดไม่ตรงกับที่เลือก ลองใหม่',
   CLIP_REJECTED: 'คลิปนี้ใช้ไม่ได้ กรุณาเลือกไฟล์ใหม่',
   CLIP_NOT_FOUND: 'ไม่พบคลิป',
+  CALIBRATION_SET_ASSIGNED: 'ชุดนี้มอบหมายแล้ว แก้คลิปไม่ได้',
 };
 
 function hasThai(text: string): boolean {
