@@ -276,7 +276,9 @@ export function ReviewScoring({ id }: ReviewScoringProps) {
                 data-testid="scoring-warning"
                 className="flex items-center gap-2 p-3 rounded bg-warning/15 text-warning-foreground text-sm font-medium"
               >
-                <span aria-hidden="true">⚠️</span>
+                <span className="inline-flex">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
+                </span>
                 <span>ประเมินไม่ได้เกินครึ่ง</span>
               </div>
             )}
