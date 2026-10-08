@@ -23,6 +23,9 @@ describe('GET/POST /rubrics (bl-34-1)', () => {
   let memberCookie: string;
   let guestCookie: string;
   let activeRubricId: string;
+  let activeMethodVersion: string;
+  let activeCriteria: unknown;
+  let draftMethodVersion: string;
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -63,6 +66,10 @@ describe('GET/POST /rubrics (bl-34-1)', () => {
       where: { active: true },
     });
     activeRubricId = activeRubric.id;
+    activeMethodVersion = activeRubric.methodVersion;
+    activeCriteria = activeRubric.criteria;
+    // another suite may have left a draft open; this suite needs the draft slot free
+    await prisma.rubric.deleteMany({ where: { active: false, activatedAt: null } });
   });
 
   afterAll(async () => {
@@ -83,16 +90,9 @@ describe('GET/POST /rubrics (bl-34-1)', () => {
       const res = await http().get('/api/v1/rubrics').set('Cookie', committeeCookie).expect(200);
 
       expect(Array.isArray(res.body.data)).toBe(true);
-      const activeRubric = res.body.data.find((r: any) => r.id === activeRubricId);
-      expect(activeRubric).toBeDefined();
-      expect(activeRubric.status).toBe('active');
-      expect(activeRubric.methodVersion).toBe('grading-v1');
-      expect(Array.isArray(activeRubric.criteria)).toBe(true);
-      expect(activeRubric.criteria.length).toBeGreaterThan(0);
-      expect(activeRubric.criteria[0]).toHaveProperty('key');
-      expect(activeRubric.criteria[0]).toHaveProperty('nameTh');
-      expect(activeRubric.criteria[0]).toHaveProperty('weight');
-      expect(activeRubric.params).toBeUndefined();
+      const activeRubric = res.body.data.find((r: { id: string }) => r.id === activeRubricId);
+      expect(activeRubric).toMatchObject({ status: 'active', methodVersion: activeMethodVersion, criteria: activeCriteria });
+      expect(activeRubric).not.toHaveProperty('params');
     });
 
     it('Member -> 403', async () => {
@@ -105,24 +105,25 @@ describe('GET/POST /rubrics (bl-34-1)', () => {
   });
 
   describe('POST /rubrics', () => {
-    it('Committee -> 201 creates draft with methodVersion <active>-r2', async () => {
+    it('Committee -> 201 creates a draft <base>-r<next N> with the active criteria', async () => {
+      const base = activeMethodVersion.replace(/-r\d+$/, '');
+      const used = (await prisma.rubric.findMany({ where: { methodVersion: { startsWith: `${base}-r` } } }))
+        .map((r) => Number(/-r(\d+)$/.exec(r.methodVersion)?.[1] ?? 0));
+      const expectedN = Math.max(1, ...used) + 1;
+
       const res = await http().post('/api/v1/rubrics').set('Cookie', committeeCookie).expect(201);
 
-      expect(res.body.data).toBeDefined();
       const draft = res.body.data;
-      expect(draft.status).toBe('draft');
-      expect(draft.methodVersion).toBe('grading-v1-r2');
-      expect(Array.isArray(draft.criteria)).toBe(true);
-      expect(draft.criteria.length).toBeGreaterThan(0);
-      expect(draft.criteria).toEqual(expect.arrayContaining([expect.objectContaining({ key: expect.any(String), nameTh: expect.any(String), weight: expect.any(Number) })]));
-      expect(draft.params).toBeUndefined();
+      expect(draft).toMatchObject({ status: 'draft', methodVersion: `${base}-r${expectedN}`, criteria: activeCriteria });
+      expect(draft).not.toHaveProperty('params');
+      draftMethodVersion = draft.methodVersion;
     });
 
     it('GET now shows draft first', async () => {
       const res = await http().get('/api/v1/rubrics').set('Cookie', committeeCookie).expect(200);
 
       expect(res.body.data[0].status).toBe('draft');
-      expect(res.body.data[0].methodVersion).toBe('grading-v1-r2');
+      expect(res.body.data[0].methodVersion).toBe(draftMethodVersion);
     });
 
     it('Second POST -> 409 RUBRIC_DRAFT_EXISTS', async () => {
@@ -137,6 +138,11 @@ describe('GET/POST /rubrics (bl-34-1)', () => {
 
     it('Guest -> 403', async () => {
       await http().post('/api/v1/rubrics').set('Cookie', guestCookie).expect(403);
+    });
+
+    it('unauthenticated -> 401 on GET and POST', async () => {
+      await http().get('/api/v1/rubrics').expect(401);
+      await http().post('/api/v1/rubrics').expect(401);
     });
   });
 });

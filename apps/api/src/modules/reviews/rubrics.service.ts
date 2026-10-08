@@ -1,5 +1,5 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Rubric } from '@prisma/client';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { ApiException } from '../../common/errors/api.exception';
 import { AuditService } from '../../common/audit/audit.service';
@@ -25,7 +25,7 @@ export class RubricsService {
     private audit: AuditService,
   ) {}
 
-  toRubric(row: any): RubricResponse {
+  toRubric(row: Rubric): RubricResponse {
     let status: 'draft' | 'active' | 'retired';
     if (row.active) {
       status = 'active';
@@ -40,7 +40,7 @@ export class RubricsService {
       status,
       createdAt: row.createdAt.toISOString(),
       methodVersion: row.methodVersion,
-      criteria: row.criteria,
+      criteria: row.criteria as RubricResponse['criteria'],
     };
   }
 
@@ -81,6 +81,10 @@ export class RubricsService {
     // Create draft in transaction
     try {
       const draft = await this.prisma.$transaction(async (tx) => {
+        const openDraft = await tx.rubric.findFirst({ where: { active: false, activatedAt: null } });
+        if (openDraft) {
+          throw new ApiException(HttpStatus.CONFLICT, 'RUBRIC_DRAFT_EXISTS', 'มีแบบฟอร์มร่างอยู่แล้ว');
+        }
         const newDraft = await tx.rubric.create({
           data: {
             methodVersion: newMethodVersion,
@@ -106,8 +110,9 @@ export class RubricsService {
       });
 
       return this.toRubric(draft);
-    } catch (error: any) {
-      if (error?.code === 'P2002') {
+    } catch (error) {
+      // a concurrent POST hit the rubrics_one_draft index
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ApiException(HttpStatus.CONFLICT, 'RUBRIC_DRAFT_EXISTS', 'มีแบบฟอร์มร่างอยู่แล้ว');
       }
       throw error;
