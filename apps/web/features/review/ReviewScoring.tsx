@@ -9,6 +9,7 @@ import { thaiError } from '@/lib/errors';
 import { useAssignment, useSubmitReview } from './api';
 import { useReviewDraft } from './useReviewDraft';
 import type { components } from '@/lib/api/schema';
+import type { GradeKey } from '@/components/ui/GradeBand';
 
 type CriterionScore = components['schemas']['CriterionScore'];
 
@@ -164,7 +165,7 @@ export function ReviewScoring({ id }: ReviewScoringProps) {
               key={criterion.key}
               index={index}
               criterion={criterion}
-              value={(draft.draft.scores[criterion.key] || null) as any}
+              value={draft.draft.scores[criterion.key] as GradeKey | null | undefined}
               onChange={(gradeKey) => {
                 draft.setScore(criterion.key, gradeKey);
               }}
