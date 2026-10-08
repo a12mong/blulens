@@ -247,4 +247,47 @@ export class RubricsService {
       );
     });
   }
+
+  /** Draft -> active; the previous active version becomes retired (activated_at is stamped by a DB trigger). */
+  async activate(rubricId: string, input: unknown, user: AuthUser): Promise<RubricResponse> {
+    const parsed = z.object({ reason: z.string().trim().min(5).max(2000) }).safeParse(input);
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? 'ต้องระบุเหตุผลอย่างน้อย 5 ตัวอักษร';
+      throw new ApiException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', message);
+    }
+    const { reason } = parsed.data;
+
+    const activated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM rubrics WHERE id = ${rubricId}::uuid OR active FOR UPDATE`;
+      const target = await tx.rubric.findUnique({ where: { id: rubricId } });
+      if (!target) {
+        throw new ApiException(HttpStatus.NOT_FOUND, 'RUBRIC_NOT_FOUND', 'ไม่พบแบบฟอร์มการประเมิน');
+      }
+      if (target.active || target.activatedAt) {
+        throw new ApiException(HttpStatus.CONFLICT, 'RUBRIC_NOT_DRAFT', 'แบบฟอร์มนี้ไม่ใช่ร่าง');
+      }
+      const previous = await tx.rubric.findFirst({ where: { active: true } });
+      // rubrics_one_active: retire the current version before activating the draft
+      if (previous) {
+        await tx.rubric.update({ where: { id: previous.id }, data: { active: false } });
+      }
+      const updated = await tx.rubric.update({ where: { id: rubricId }, data: { active: true } });
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'rubric.activate',
+          entityType: 'rubric',
+          entityId: rubricId,
+          before: { methodVersion: previous?.methodVersion ?? null },
+          after: { methodVersion: updated.methodVersion },
+          reason,
+        },
+        tx,
+      );
+      return updated;
+    });
+
+    return this.toRubric(activated);
+  }
 }

@@ -50,4 +50,15 @@ export class RubricsController {
   ) {
     return this.rubricsService.deleteDraft(rubricId, user);
   }
+
+  @Roles('Committee', 'Admin')
+  @Post(':rubricId/activate')
+  @HttpCode(HttpStatus.OK)
+  activate(
+    @Param('rubricId', new ParseUUIDPipe()) rubricId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.rubricsService.activate(rubricId, body, user);
+  }
 }
