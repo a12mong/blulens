@@ -188,21 +188,43 @@ describe('GET /calibration-sets/{id} (bl-35-3)', () => {
     expect(detail.reviewers).toHaveLength(2);
 
     // Both reviewers should have assigned=2
-    expect(detail.reviewers.every((r: any) => r.assigned === 2)).toBe(true);
+    expect(detail.reviewers.every((r: { assigned: number }) => r.assigned === 2)).toBe(true);
 
     // Reviewer A: assigned=2, submitted=1
     const reviewerA = detail.reviewers.find(
-      (r: any) => r.reviewerName === `${tag} Reviewer A`,
+      (r: { reviewerName: string }) => r.reviewerName === `${tag} Reviewer A`,
     );
     expect(reviewerA).toBeDefined();
     expect(reviewerA.submitted).toBe(1);
 
     // Reviewer B: assigned=2, submitted=0
     const reviewerB = detail.reviewers.find(
-      (r: any) => r.reviewerName === `${tag} Reviewer B`,
+      (r: { reviewerName: string }) => r.reviewerName === `${tag} Reviewer B`,
     );
     expect(reviewerB).toBeDefined();
     expect(reviewerB.submitted).toBe(0);
+  });
+
+  it('an uploaded bucket clip gets a presigned viewUrl; clips[] carries the reference keys', async () => {
+    const bucketClip = await prisma.calibrationClip.create({
+      data: {
+        setId,
+        objectKey: `calibration/${setId}/bucket.mp4`,
+        referenceIndex: 10,
+        status: 'uploaded',
+        durationSec: 9,
+      },
+    });
+    const res = await http()
+      .get(`/api/v1/calibration-sets/${setId}`)
+      .set('Cookie', committeeCookie)
+      .expect(200);
+    const detail = res.body.data;
+    const clip = detail.clipDetails.find((c: { clipId: string }) => c.clipId === bucketClip.id);
+    expect(clip.viewUrl).toMatch(
+      new RegExp(`/calibration/${setId}/bucket\.mp4\?.*X-Amz-Expires=900`),
+    );
+    expect(detail.clips).toContainEqual({ clipId: bucketClip.id, referenceKey: 'N' });
   });
 
   it('Unknown id -> 404 CALIBRATION_SET_NOT_FOUND', async () => {
@@ -215,9 +237,6 @@ describe('GET /calibration-sets/{id} (bl-35-3)', () => {
   });
 
   it('Reviewer -> 403', async () => {
-    await http()
-      .get(`/api/v1/calibration-sets/${setId}`)
-      .set('Cookie', reviewerCookie)
-      .expect(403);
+    await http().get(`/api/v1/calibration-sets/${setId}`).set('Cookie', reviewerCookie).expect(403);
   });
 });

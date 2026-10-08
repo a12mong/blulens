@@ -1,5 +1,5 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import { CalibrationSet, CalibrationClip } from '@prisma/client';
+import { CalibrationSet, CalibrationClip, Prisma } from '@prisma/client';
 import { GRADES } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
@@ -15,7 +15,7 @@ export interface CalibrationSetDto {
   clips: Array<{ clipId: string; referenceKey: string }>;
 }
 
-export interface CalibrationSetDetail extends Omit<CalibrationSetDto, 'clips' | 'createdAt'> {
+export interface CalibrationSetDetail extends Omit<CalibrationSetDto, 'createdAt'> {
   assignedAt: string | null;
   createdAt: string;
   clipDetails: Array<{
@@ -42,7 +42,9 @@ export class CalibrationService {
   ) {}
 
   toCalibrationSet(set: CalibrationSet & { clips: CalibrationClip[] }): CalibrationSetDto {
-    const sortedClips = [...set.clips].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const sortedClips = [...set.clips].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    );
     return {
       id: set.id,
       name: set.name,
@@ -93,7 +95,10 @@ export class CalibrationService {
     });
   }
 
-  async getSetDetail(setId: string, db = this.prisma): Promise<CalibrationSetDetail> {
+  async getSetDetail(
+    setId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<CalibrationSetDetail> {
     // Fetch set with clips
     const set = await db.calibrationSet.findUnique({
       where: { id: setId },
@@ -114,32 +119,18 @@ export class CalibrationService {
         kind: 'calibration',
         calibrationClip: { setId },
       },
-      include: { reviewer: true, calibrationClip: true },
+      select: { reviewerId: true, state: true, reviewer: { select: { displayName: true } } },
     });
 
     // Build clipDetails with viewUrl
     const clipDetails = await Promise.all(
       set.clips.map(async (clip) => {
-        let viewUrl: string | null = null;
-
-        // Check if status is 'uploaded' and objectKey is a path or URL
-        if (clip.status === 'uploaded') {
-          const isPath = clip.objectKey.startsWith('/');
-          const isUrl = clip.objectKey.startsWith('http://') || clip.objectKey.startsWith('https://');
-
-          if (isPath || isUrl) {
-            viewUrl = clip.objectKey;
-          } else {
-            // Use StorageService.viewUrl for MinIO keys
-            viewUrl = await this.storage.viewUrl('calibration', clip.objectKey);
-          }
-        }
-
         return {
           clipId: clip.id,
           referenceKey: GRADES[clip.referenceIndex] ?? '',
           status: clip.status,
-          viewUrl,
+          // bucket keys get a presigned GET; seeded '/...' and http(s) keys pass through
+          viewUrl: await this.storage.viewUrl(clip.status, clip.objectKey),
           durationSec: clip.durationSec,
         };
       }),
@@ -181,6 +172,10 @@ export class CalibrationService {
       id: set.id,
       name: set.name,
       period: set.period ?? null,
+      clips: set.clips.map((clip) => ({
+        clipId: clip.id,
+        referenceKey: GRADES[clip.referenceIndex] ?? '',
+      })),
       assignedAt: set.assignedAt?.toISOString() ?? null,
       createdAt: set.createdAt.toISOString(),
       clipDetails,
