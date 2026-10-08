@@ -8,6 +8,16 @@ import {
 } from './selectors';
 
 /**
+ * /events lists by startsOn desc, id asc with a page limit. A fixed 2099-01-01 piles up across runs on the
+ * same DB and pushes the new tournament off page 1 (flaky Step 2). A later date every minute keeps it first.
+ */
+function uniqueFutureDate(): string {
+  const days = Math.floor((Date.now() - Date.UTC(2026, 9, 8)) / 60000);
+  return new Date(Date.UTC(2100, 0, 1) + days * 86400000).toISOString().slice(0, 10);
+}
+
+
+/**
  * Packet bl-21: Slice 1 E2E Playwright Smoke Suite.
  *
  * Implements full RG-29..40 lifecycle without vacuous passes:
@@ -109,7 +119,7 @@ test.describe.serial('Admin Tournament and Event Creation', () => {
     // Step 2: Schedule (dates well in future to prevent ENTRIES_CLOSED)
     await expect(steps.nth(0)).toHaveAttribute('data-state', 'done');
     await expect(steps.nth(1)).toHaveAttribute('data-state', 'current');
-    await page.getByTestId(SELECTORS.wizard.startsOn).fill('2099-01-01');
+    await page.getByTestId(SELECTORS.wizard.startsOn).fill(uniqueFutureDate());
     await page.getByTestId(SELECTORS.wizard.entriesClose).fill('2098-12-01T23:59');
     await page.getByTestId(SELECTORS.wizard.next).click();
 

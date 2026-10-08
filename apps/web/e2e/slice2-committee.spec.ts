@@ -133,7 +133,7 @@ test.describe.serial('bl-24 slice 2b: committee decisions', () => {
       data: {
         name: `QA Tourney committee ${Date.now()}`,
         venue: 'e2e',
-        startsOn: '2099-01-01',
+        startsOn: '2097-01-01', // below slice1's far-future dates so /events page 1 stays free for slice1
         entriesCloseAt: '2098-12-20T23:59:00.000Z',
       },
     });
