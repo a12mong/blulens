@@ -6,3 +6,5 @@ Caddyfile text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 *.sql text eol=lf
+# Shell scripts run inside Linux containers / on the Droplet: CRLF breaks them (bl-13)
+*.sh text eol=lf
