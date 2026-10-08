@@ -59,8 +59,11 @@ export function MyAssessmentDetail({ id }: MyAssessmentDetailProps) {
   }
 
   const result = data.latestResult;
-  const published = Boolean(result && result.status !== 'pending' && result.status !== 'superseded');
-  const grade = published ? result?.grade : null;
+  // approved | overridden = published; provisional = shown with a label; anything else = waiting
+  const rs = result?.status;
+  const published = rs === 'approved' || rs === 'overridden';
+  const provisional = rs === 'provisional';
+  const grade = published || provisional ? result?.grade : null;
   const clips = (data.clips ?? []).filter((c) => c.id);
 
   return (
@@ -86,13 +89,18 @@ export function MyAssessmentDetail({ id }: MyAssessmentDetailProps) {
                 คณะกรรมการปรับผล เหตุผล: {result.reason}
               </p>
             )}
+            {provisional && (
+              <p data-testid="myassess-provisional" className="text-sm font-medium">
+                ชั่วคราว · กรรมการ 1 คน
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               ประกาศเมื่อ {formatDate(result?.computedAt)} (ครั้งที่ {result?.version})
             </p>
           </div>
         ) : (
           <p data-testid="myassess-pending" className="text-sm text-muted-foreground">
-            ยังไม่มีผลประกาศ คณะกรรมการกำลังตรวจคำขอของคุณ
+            รอคณะกรรมการ ยังไม่มีผลประกาศ
           </p>
         )}
       </section>

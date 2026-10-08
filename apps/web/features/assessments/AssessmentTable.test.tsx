@@ -209,7 +209,7 @@ describe('AssessmentTable', () => {
       latestResult: {
         version: 1,
         source: 'computed',
-        status: 'pending',
+        status: 'pending_approval',
         grade: {
           score: 4.0,
           margin: 3.75,
