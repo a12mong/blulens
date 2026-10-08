@@ -174,6 +174,21 @@ describe('AssessmentDecisions', () => {
     );
   });
 
+  it('a disputed result needs a note of at least 5 characters before approve; pending_approval does not', () => {
+    const { unmount } = render(<AssessmentDecisions detail={{ ...baseDetail, status: 'disputed' }} />);
+    fireEvent.click(screen.getByTestId('decide-approve'));
+    expect(screen.getByTestId('approve-submit')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('approve-note'), { target: { value: 'abcd' } });
+    expect(screen.getByTestId('approve-submit')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('approve-note'), { target: { value: 'abcde' } });
+    expect(screen.getByTestId('approve-submit')).not.toBeDisabled();
+    unmount();
+
+    render(<AssessmentDecisions detail={{ ...baseDetail, status: 'pending_approval' }} />);
+    fireEvent.click(screen.getByTestId('decide-approve'));
+    expect(screen.getByTestId('approve-submit')).not.toBeDisabled();
+  });
+
   it('confirm action opens dialog and submits confirm mutation', () => {
     render(<AssessmentDecisions detail={baseDetail} />);
 
