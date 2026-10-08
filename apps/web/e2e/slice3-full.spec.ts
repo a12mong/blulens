@@ -67,8 +67,13 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
     expect(fmt.status(), await fmt.text()).toBe(200);
     expect((await committeeCtx.post(`tournaments/${tid}/status`, { data: { to: 'open' } })).status()).toBe(200);
 
-    const users = await data<{ items: Array<{ id: string; displayName: string }> }>(await committeeCtx.get('users?role=Member&limit=50'));
-    const byName = new Map(users.items.map((u) => [u.displayName, u.id]));
+    // by name (q=): the unfiltered member list is ordered by displayName and fills up with 'Ungraded Player' test users
+    const byName = new Map<string, string>();
+    for (const n of ['สมชาย ใจดี', 'วิภา ศรีสุข', 'ธนา รุ่งเรือง', 'มาลี สายสมร', 'กิตติ พานทอง', 'นภา ทองดี']) {
+      const r = await data<{ items: Array<{ id: string; displayName: string }> }>(await committeeCtx.get(`users?role=Member&limit=20&q=${encodeURIComponent(n)}`));
+      const hit = r.items.find((u) => u.displayName === n);
+      if (hit) byName.set(n, hit.id);
+    }
     const ids = ['สมชาย ใจดี', 'วิภา ศรีสุข', 'ธนา รุ่งเรือง', 'มาลี สายสมร', 'กิตติ พานทอง', 'นภา ทองดี'].map((n) => byName.get(n)!);
     ids.forEach((i) => expect(i).toBeTruthy());
     const team = async (q: string) => (await data<Array<{ teamId: string }>>(await committeeCtx.get(`teams/suggest?q=${q}`)))[0].teamId;
@@ -140,6 +145,8 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
 
     test('F5 Committee approves all three in the results queue', async ({ page }) => {
       await page.goto(`/committee/events/${eventId}/results`);
+      await expect(page.getByTestId('groupconfirm')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByTestId('groupconfirm-button'), 'disabled while matches are open').toBeDisabled();
       for (let left = 3; left > 0; left--) {
         await expect(page.getByTestId('result-row')).toHaveCount(left, { timeout: 20000 });
         await page.getByTestId('result-row').first().getByTestId('result-approve').click();
@@ -148,6 +155,8 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
         expect((await post).status()).toBe(200);
       }
       await expect.poll(() => sql(`select count(*) from matches where event_id='${eventId}' and stage='group' and status='confirmed'`)).toBe('3');
+      await page.reload();
+      await expect(page.getByTestId('groupconfirm-button'), 'enabled when all group matches are confirmed').toBeEnabled({ timeout: 20000 });
     });
 
     test('F6 live standings: ranks 1-3, each played 2, not yet confirmed; public page marks them provisional', async ({ page }) => {
@@ -162,19 +171,34 @@ test.describe.serial('slice 3 full loop: draw -> results -> group lock', () => {
     });
   });
 
-  test('F7 Committee locks the group stage: snapshot with qualification, draw locked', async () => {
-    const res = await committeeCtx.post(`events/${eventId}/groups/confirm`);
-    expect(res.status(), await res.text()).toBe(200);
-    const rows: any[] = await data(res);
-    expect(rows.length).toBe(3);
-    expect(rows.every((r) => r.confirmed === true)).toBe(true);
-    const byRank = [...rows].sort((a, b) => a.rank - b.rank);
-    expect(byRank.map((r) => r.qualification)).toEqual(['qualified', 'qualified', 'out']);
-    expect(sql(`select status from draws where event_id='${eventId}' and kind='group' and status in ('published','locked') limit 1`)).toBe('locked');
-    expect(sql(`select count(*) from audit_logs a join draws d on d.id::text=a.entity_id where a.action='groups.confirm' and d.event_id='${eventId}'`)).toBe('1');
-    // public standings now come from the confirmed snapshot
-    const pub: any[] = await data(await publicCtx.get(`events/${eventId}/standings`));
-    expect(pub.every((r) => r.confirmed === true)).toBe(true);
+  test.describe('committee lock UI', () => {
+    test.use({ storageState: COMMITTEE_AUTH_FILE });
+
+    test('F7 Committee locks the group stage with the button: snapshot with qualification, draw locked', async ({ page }) => {
+      await page.goto(`/committee/events/${eventId}/results`);
+      await page.getByTestId('groupconfirm-button').click({ timeout: 20000 });
+      const post = page.waitForResponse((r) => r.url().includes(`/events/${eventId}/groups/confirm`) && r.request().method() === 'POST');
+      await page.getByTestId('groupconfirm-dialog-confirm').click();
+      const res = await post;
+      expect(res.status(), await res.text()).toBe(200);
+      const body: any = await res.json();
+      const rows: any[] = body.data ?? body;
+      expect(rows.length).toBe(3);
+      expect(rows.every((r) => r.confirmed === true)).toBe(true);
+      const byRank = [...rows].sort((a, b) => a.rank - b.rank);
+      expect(byRank.map((r) => r.qualification)).toEqual(['qualified', 'qualified', 'out']);
+      await expect(page.getByTestId('groupconfirm-done')).toBeVisible({ timeout: 20000 });
+      expect(sql(`select status from draws where event_id='${eventId}' and kind='group' and status in ('published','locked') limit 1`)).toBe('locked');
+      expect(sql(`select count(*) from audit_logs a join draws d on d.id::text=a.entity_id where a.action='groups.confirm' and d.event_id='${eventId}'`)).toBe('1');
+      const pub: any[] = await data(await publicCtx.get(`events/${eventId}/standings`));
+      expect(pub.every((r) => r.confirmed === true)).toBe(true);
+    });
+
+    test('F7b after reload the page shows the done state and no confirm button', async ({ page }) => {
+      await page.goto(`/committee/events/${eventId}/results`);
+      await expect(page.getByTestId('groupconfirm-done')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByTestId('groupconfirm-button')).toHaveCount(0);
+    });
   });
 
   test('F8 after the lock: second confirm, new result, reject are all refused', async () => {
