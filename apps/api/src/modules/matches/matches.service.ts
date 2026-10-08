@@ -24,7 +24,6 @@ import {
   type ResultMatch,
   type StandingRow,
 } from '@blulens/shared';
-import { nextSlot } from '../draws/bracket';
 
 export interface EntryRef {
   entryId: string;
@@ -1729,177 +1728,193 @@ export class MatchesService {
     return result.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
-  async getBracket(eventId: string, user?: AuthUser) {
+  async getBracket(eventId: string, user?: AuthUser): Promise<Bracket> {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       include: { tournament: { select: { status: true } } },
     });
-
-    if (!event || (event.tournament.status === 'draft' && !this.isStaff(user))) {
+    if (!event || (event.tournament.status === 'draft' && !isStaff(user))) {
       throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
     }
 
     const knockoutDraw = await this.prisma.draw.findFirst({
-      where: { eventId, kind: 'knockout' },
-      include: { slots: true },
+      where: { eventId, kind: 'knockout', status: { in: ['published', 'locked'] } },
       orderBy: { version: 'desc' },
+      include: { slots: true },
     });
-
-    if (knockoutDraw && (knockoutDraw.status === 'published' || knockoutDraw.status === 'locked')) {
+    if (knockoutDraw) {
       return this.buildKnockoutBracket(eventId, knockoutDraw);
     }
 
     const parsed = eventFormatSchema.safeParse(event.format);
-    const eventFormat = parsed.success ? parsed.data : null;
-    if (eventFormat?.type === 'groups_knockout') {
+    if (parsed.success && parsed.data.type === 'groups_knockout') {
       const groupDraw = await this.prisma.draw.findFirst({
-        where: { eventId, kind: 'group' },
+        where: { eventId, kind: 'group', status: { in: ['published', 'locked'] } },
         orderBy: { version: 'desc' },
+        include: { groups: { select: { label: true }, orderBy: { label: 'asc' } } },
       });
-
-      if (groupDraw && (groupDraw.status === 'published' || groupDraw.status === 'locked')) {
-        return this.buildProvisionalBracket(eventId, eventFormat, groupDraw);
+      if (groupDraw) {
+        return this.buildProvisionalBracket(
+          eventId,
+          groupDraw.groups.map((g) => g.label),
+          parsed.data.advancePerGroup ?? 2,
+          parsed.data.bestThirds ?? 0,
+        );
       }
     }
 
-    throw ApiException.notFound('ไม่มีการจับคู่ที่ตีพิมพ์', 'BRACKET_NOT_PUBLISHED');
+    throw ApiException.notFound('ยังไม่มีสายการแข่งรอบน็อกเอาต์', 'BRACKET_NOT_PUBLISHED');
   }
 
-  private async buildKnockoutBracket(eventId: string, knockoutDraw: any) {
+  private async buildKnockoutBracket(
+    eventId: string,
+    draw: Prisma.DrawGetPayload<{ include: { slots: true } }>,
+  ): Promise<Bracket> {
     const matches = await this.prisma.match.findMany({
-      where: { eventId, drawId: knockoutDraw.id, stage: { in: ['knockout', 'third_place'] } },
-      orderBy: [{ stage: 'asc' }, { round: 'asc' }, { matchNo: 'asc' }],
+      where: { drawId: draw.id, stage: { in: ['knockout', 'third_place'] } },
+      orderBy: [{ round: 'asc' }, { matchNo: 'asc' }],
     });
-
-    if (matches.length === 0) {
-      throw ApiException.notFound('ไม่มีการจับคู่ที่ตีพิมพ์', 'BRACKET_NOT_PUBLISHED');
-    }
-
     const entryIds = Array.from(
       new Set(
         matches
-          .flatMap((m) => [m.topEntryId, m.bottomEntryId, m.winnerEntryId])
-          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+          .flatMap((m) => [m.topEntryId, m.bottomEntryId])
+          .filter((id): id is string => typeof id === 'string'),
       ),
     );
-
     const entryMap = await this.loadEntryMap(this.prisma, entryIds);
+    const seedByPosition = new Map(draw.slots.map((s) => [s.position, s.seedNo]));
 
-    const knockoutMatches = matches.filter((m) => m.stage === 'knockout');
-    const thirdPlaceMatch = matches.find((m) => m.stage === 'third_place');
+    const knockout = matches.filter((m) => m.stage === 'knockout');
+    const thirdPlaceMatch = matches.find((m) => m.stage === 'third_place') ?? null;
+    const finalRound = Math.max(0, ...knockout.map((m) => m.round));
+    const byRound = new Map<number, Match[]>();
+    for (const m of knockout) byRound.set(m.round, [...(byRound.get(m.round) ?? []), m]);
 
-    const roundMap = new Map<number, typeof matches>();
-    for (const match of knockoutMatches) {
-      if (!roundMap.has(match.round)) {
-        roundMap.set(match.round, []);
-      }
-      roundMap.get(match.round)!.push(match);
-    }
-
-    const maxRound = Math.max(...knockoutMatches.map((x) => x.round), 0);
-
-    const rounds = Array.from(roundMap.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([round, roundMatches]) => {
-        const entryCountInRound = roundMatches.length * 2;
-        return {
-          round,
-          nameTh: this.getNameTh(entryCountInRound),
-          matches: roundMatches.map((m) => this.buildBracketMatch(m, entryMap, knockoutDraw.slots, round, maxRound)),
-        };
+    // next: where a match's winner goes; feeders: which matchNo fills each side of a match
+    const next = new Map<number, { matchNo: number; side: 'top' | 'bottom' }>();
+    const feeders = new Map<number, { top?: number; bottom?: number }>();
+    for (const [round, list] of byRound) {
+      list.forEach((m, index) => {
+        const slot = nextSlot(round, index);
+        const target = byRound.get(slot.round)?.[slot.index];
+        if (!target) return;
+        next.set(m.matchNo, { matchNo: target.matchNo, side: slot.side });
+        feeders.set(target.matchNo, { ...feeders.get(target.matchNo), [slot.side]: m.matchNo });
       });
+    }
+    const semis = byRound.get(finalRound - 1) ?? [];
 
-    const finalMatch = knockoutMatches.find(
-      (m) => m.round === maxRound && (m.status === 'confirmed' || m.status === 'bye' || m.status === 'walkover'),
-    );
-    const champion = finalMatch?.winnerEntryId ? entryMap.get(finalMatch.winnerEntryId) ?? null : null;
+    const toBracketMatch = (m: Match, index: number): BracketMatch => {
+      const placeholder = (side: 'top' | 'bottom'): string | null => {
+        if ((side === 'top' ? m.topEntryId : m.bottomEntryId) !== null) return null;
+        if (m.stage === 'third_place') {
+          const semi = semis[side === 'top' ? 0 : 1];
+          return semi ? `ผู้แพ้คู่ที่ ${semi.matchNo}` : null;
+        }
+        if (m.round === 1) return 'บาย';
+        const feeder = feeders.get(m.matchNo)?.[side];
+        return feeder ? `ผู้ชนะคู่ที่ ${feeder}` : null;
+      };
+      const seedNo = (offset: 1 | 2) =>
+        m.stage === 'knockout' && m.round === 1 ? (seedByPosition.get(2 * index + offset) ?? null) : null;
+      const games = Array.isArray(m.games) ? (m.games as Array<{ a: number; b: number }>) : [];
+      const nx = m.stage === 'knockout' ? next.get(m.matchNo) : undefined;
+      return {
+        matchId: m.id,
+        matchNo: m.matchNo,
+        round: m.round,
+        top: m.topEntryId,
+        topEntry: m.topEntryId ? (entryMap.get(m.topEntryId) ?? null) : null,
+        topSeedNo: seedNo(1),
+        topPlaceholder: placeholder('top'),
+        bottom: m.bottomEntryId,
+        bottomEntry: m.bottomEntryId ? (entryMap.get(m.bottomEntryId) ?? null) : null,
+        bottomSeedNo: seedNo(2),
+        bottomPlaceholder: placeholder('bottom'),
+        winner:
+          m.status === 'confirmed' || m.status === 'walkover' || m.status === 'bye' ? m.winnerEntryId : null,
+        status: m.status,
+        games: games.map((g) => ({ a: g.a, b: g.b })),
+        court: m.court,
+        nextMatchNo: nx?.matchNo ?? null,
+        nextSide: nx?.side ?? null,
+      };
+    };
+
+    const rounds = [...byRound.entries()].map(([round, list]) => ({
+      round,
+      nameTh: bracketRoundName(list.length * 2),
+      matches: list.map((m, i) => toBracketMatch(m, i)),
+    }));
+    const final = byRound.get(finalRound)?.[0];
+    const championId = final && final.status === 'confirmed' ? final.winnerEntryId : null;
 
     return {
       eventId,
-      drawId: knockoutDraw.id,
-      drawVersion: knockoutDraw.version,
-      drawStatus: knockoutDraw.status,
+      drawId: draw.id,
+      drawVersion: draw.version,
+      drawStatus: draw.status as 'published' | 'locked',
       provisional: false,
-      size: knockoutDraw.size,
+      size: draw.size,
       rounds,
-      thirdPlace: thirdPlaceMatch ? this.buildBracketMatch(thirdPlaceMatch, entryMap, knockoutDraw.slots, maxRound + 1, maxRound) : null,
-      champion,
+      thirdPlace: thirdPlaceMatch ? toBracketMatch(thirdPlaceMatch, 0) : null,
+      champion: championId ? (entryMap.get(championId) ?? null) : null,
     };
   }
 
-  private buildBracketMatch(match: Match, entryMap: Map<string, EntryRef>, drawSlots: any[], round: number, maxRound: number) {
-    const topEntry = match.topEntryId ? entryMap.get(match.topEntryId) ?? null : null;
-    const bottomEntry = match.bottomEntryId ? entryMap.get(match.bottomEntryId) ?? null : null;
+  /** groups_knockout before the knockout draw: placeholders only, no names guessed (tournament-format §4.4). */
+  private buildProvisionalBracket(
+    eventId: string,
+    groupLabels: string[],
+    advancePerGroup: number,
+    bestThirds: number,
+  ): Bracket {
+    const labels = [
+      ...groupLabels.map((g) => `แชมป์กลุ่ม ${g}`),
+      ...(advancePerGroup >= 2 ? groupLabels.map((g) => `รองแชมป์กลุ่ม ${g}`) : []),
+      ...Array.from({ length: bestThirds }, (_, i) => `อันดับ 3 ที่ดีที่สุด #${i + 1}`),
+    ];
+    let size = 2;
+    while (size < labels.length) size *= 2;
+    const order = bracketOrder(size); // order[p - 1] = seed number at position p
 
-    const topSlot = round === 1 ? drawSlots.find((s) => s.position === 2 * match.matchNo - 1) : null;
-    const bottomSlot = round === 1 ? drawSlots.find((s) => s.position === 2 * match.matchNo) : null;
-
-    const topSeedNo = round === 1 ? (topSlot?.seedNo ?? null) : null;
-    const bottomSeedNo = round === 1 ? (bottomSlot?.seedNo ?? null) : null;
-
-    const topPlaceholder = !match.topEntryId ? this.getPlaceholder(match, 'top', round, maxRound) : null;
-    const bottomPlaceholder = !match.bottomEntryId ? this.getPlaceholder(match, 'bottom', round, maxRound) : null;
-
-    const winner = match.status === 'confirmed' || match.status === 'bye' || match.status === 'walkover' ? match.winnerEntryId ?? null : null;
-
-    const nextSlotInfo = round < maxRound + 1 ? nextSlot(round, match.matchNo - 1) : null;
-    const nextMatchNo = nextSlotInfo ? nextSlotInfo.index + 1 : null;
-
-    return {
-      matchId: match.id,
-      matchNo: match.matchNo,
-      round: match.round,
-      top: match.topEntryId ?? null,
-      topEntry,
-      topSeedNo,
-      topPlaceholder,
-      bottom: match.bottomEntryId ?? null,
-      bottomEntry,
-      bottomSeedNo,
-      bottomPlaceholder,
-      winner,
-      status: match.status,
-      games: match.games ? (Array.isArray(match.games) ? match.games : []) : [],
-      court: match.court ?? null,
-      nextMatchNo,
-      nextSide: nextSlotInfo?.side ?? null,
-    };
-  }
-
-  private getPlaceholder(match: Match, side: 'top' | 'bottom', round: number, maxRound: number): string | null {
-    if (round === 1 && match.status === 'bye') {
-      return 'บาย';
+    const rounds: Bracket['rounds'] = [];
+    let matchNo = 1;
+    let previous: number[] = [];
+    for (let round = 1, count = size / 2; count >= 1; round++, count /= 2) {
+      const current: number[] = [];
+      const matches: BracketMatch[] = [];
+      for (let i = 0; i < count; i++) {
+        const side = (offset: 0 | 1) =>
+          round === 1
+            ? (labels[order[2 * i + offset]! - 1] ?? 'บาย')
+            : `ผู้ชนะคู่ที่ ${previous[2 * i + offset]}`;
+        const nx = count > 1 ? nextSlot(round, i) : null;
+        matches.push({
+          matchId: null,
+          matchNo,
+          round,
+          top: null,
+          topEntry: null,
+          topSeedNo: null,
+          topPlaceholder: side(0),
+          bottom: null,
+          bottomEntry: null,
+          bottomSeedNo: null,
+          bottomPlaceholder: side(1),
+          winner: null,
+          status: 'scheduled',
+          games: [],
+          court: null,
+          // matches of the next round are numbered right after this round's last match
+          nextMatchNo: nx ? matchNo - i + count + nx.index : null,
+          nextSide: nx?.side ?? null,
+        });
+        current.push(matchNo++);
+      }
+      rounds.push({ round, nameTh: bracketRoundName(count * 2), matches });
+      previous = current;
     }
-    if (round > 1 && round <= maxRound) {
-      return `ผู้ชนะคู่ที่ ${Math.ceil(match.matchNo / 2)}`;
-    }
-    if (round === maxRound + 1) {
-      return `ผู้แพ้คู่ที่ ${Math.ceil(match.matchNo / 2)}`;
-    }
-    return null;
-  }
-
-  private async buildProvisionalBracket(eventId: string, eventFormat: any, groupDraw: any) {
-    const standings = await this.prisma.groupStanding.findMany({
-      where: { groupId: { in: (await this.prisma.group.findMany({ where: { eventId, drawId: groupDraw.id } })).map((g) => g.id) }, qualification: { in: ['qualified', 'best_third'] } },
-      orderBy: [{ groupId: 'asc' }, { rank: 'asc' }],
-    });
-
-    const groups = await this.prisma.group.findMany({
-      where: { eventId, drawId: groupDraw.id },
-      orderBy: { label: 'asc' },
-    });
-
-    const Q = groups.length * eventFormat.advancePerGroup + (eventFormat.bestThirds ?? 0);
-    const size = Math.pow(2, Math.ceil(Math.log2(Math.max(Q, 2))));
-
-    const seeds = this.buildProvisionalSeeds(standings, groups, Q);
-    const order = bracketOrder(size);
-
-    const entryIds = seeds.map((s) => s.entryId).filter((id): id is string => typeof id === 'string' && id.length > 0);
-    const entryMap = await this.loadEntryMap(this.prisma, entryIds);
-
-    const rounds = this.generateProvisionalRounds(seeds, order, size, entryMap);
 
     return {
       eventId,
@@ -1913,119 +1928,43 @@ export class MatchesService {
       champion: null,
     };
   }
+}
 
-  private buildProvisionalSeeds(standings: any[], groups: any[], Q: number) {
-    const seeds: { entryId?: string; placeholder: string }[] = [];
+function bracketRoundName(entriesLeft: number): string {
+  if (entriesLeft === 2) return 'ชิงชนะเลิศ';
+  if (entriesLeft === 4) return 'รองชนะเลิศ';
+  if (entriesLeft === 8) return 'ก่อนรองชนะเลิศ';
+  return `รอบ ${entriesLeft} คน`;
+}
 
-    const byGroup = new Map<string, any[]>();
-    for (const s of standings) {
-      if (!byGroup.has(s.groupId)) {
-        byGroup.set(s.groupId, []);
-      }
-      byGroup.get(s.groupId)!.push(s);
-    }
+export interface BracketMatch {
+  matchId: string | null;
+  matchNo: number;
+  round: number;
+  top: string | null;
+  topEntry: EntryRef | null;
+  topSeedNo: number | null;
+  topPlaceholder: string | null;
+  bottom: string | null;
+  bottomEntry: EntryRef | null;
+  bottomSeedNo: number | null;
+  bottomPlaceholder: string | null;
+  winner: string | null;
+  status: string;
+  games: Array<{ a: number; b: number }>;
+  court: string | null;
+  nextMatchNo: number | null;
+  nextSide: 'top' | 'bottom' | null;
+}
 
-    for (const group of groups) {
-      const groupStandings = byGroup.get(group.id) || [];
-      const champion = groupStandings.find((s: any) => s.rank === 1);
-      if (champion) {
-        seeds.push({ entryId: champion.entryId, placeholder: `แชมป์กลุ่ม ${group.label}` });
-      }
-    }
-
-    for (const group of groups) {
-      const groupStandings = byGroup.get(group.id) || [];
-      const runner = groupStandings.find((s: any) => s.rank === 2);
-      if (runner) {
-        seeds.push({ entryId: runner.entryId, placeholder: `รองแชมป์กลุ่ม ${group.label}` });
-      }
-    }
-
-    const thirds = standings.filter((s: any) => s.rank === 3 && s.qualification === 'best_third');
-    for (let i = 0; i < thirds.length; i++) {
-      seeds.push({ entryId: thirds[i].entryId, placeholder: `อันดับ 3 ที่ดีที่สุด #${i + 1}` });
-    }
-
-    for (let i = seeds.length; i < Q; i++) {
-      seeds.push({ placeholder: 'บาย' });
-    }
-
-    return seeds;
-  }
-
-  private generateProvisionalRounds(seeds: any[], order: number[], size: number, entryMap: Map<string, EntryRef>) {
-    const rounds: any[] = [];
-    let matchNo = 1;
-    const numRounds = Math.log2(size);
-
-    for (let roundIdx = 0; roundIdx < numRounds; roundIdx++) {
-      const matchesInRound = size / Math.pow(2, roundIdx);
-      const round = roundIdx + 1;
-      const matches = [];
-
-      for (let i = 0; i < matchesInRound / 2; i++) {
-        const pos1Index = 2 * i;
-        const pos2Index = 2 * i + 1;
-        const pos1 = order[pos1Index];
-        const pos2 = order[pos2Index];
-
-        const seed1 = pos1 ? seeds[pos1 - 1] : undefined;
-        const seed2 = pos2 ? seeds[pos2 - 1] : undefined;
-
-        const topEntry = seed1?.entryId ? entryMap.get(seed1.entryId) ?? null : null;
-        const bottomEntry = seed2?.entryId ? entryMap.get(seed2.entryId) ?? null : null;
-
-        const nextSlotInfo = roundIdx < numRounds - 1 ? nextSlot(round, i) : null;
-        const nextMatchNo = nextSlotInfo ? nextSlotInfo.index + 1 : null;
-
-        matches.push({
-          matchId: null,
-          matchNo,
-          round,
-          top: seed1?.entryId ?? null,
-          topEntry,
-          topSeedNo: null,
-          topPlaceholder: seed1 && !seed1.entryId ? seed1.placeholder : null,
-          bottom: seed2?.entryId ?? null,
-          bottomEntry,
-          bottomSeedNo: null,
-          bottomPlaceholder: seed2 && !seed2.entryId ? seed2.placeholder : null,
-          winner: null,
-          status: 'scheduled',
-          games: [],
-          court: null,
-          nextMatchNo,
-          nextSide: nextSlotInfo?.side ?? null,
-        });
-
-        matchNo++;
-      }
-
-      const entryCount = matchesInRound;
-      rounds.push({
-        round,
-        nameTh: this.getNameTh(entryCount),
-        matches,
-      });
-    }
-
-    return rounds;
-  }
-
-  private getNameTh(entries: number): string {
-    switch (entries) {
-      case 2:
-        return 'ชิงชนะเลิศ';
-      case 4:
-        return 'รองชนะเลิศ';
-      case 8:
-        return 'ก่อนรองชนะเลิศ';
-      default:
-        return `รอบ ${entries} คน`;
-    }
-  }
-
-  private isStaff(user?: AuthUser): boolean {
-    return user?.roles?.some((r: any) => ['Admin', 'Committee'].includes(r)) ?? false;
-  }
+export interface Bracket {
+  eventId: string;
+  drawId: string | null;
+  drawVersion: number | null;
+  drawStatus: 'published' | 'locked' | null;
+  provisional: boolean;
+  size: number;
+  rounds: Array<{ round: number; nameTh: string; matches: BracketMatch[] }>;
+  thirdPlace: BracketMatch | null;
+  champion: EntryRef | null;
 }
