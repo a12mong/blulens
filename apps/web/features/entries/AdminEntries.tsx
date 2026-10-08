@@ -60,7 +60,7 @@ export function AdminEntries({ eventId }: AdminEntriesProps) {
             + เพิ่มคู่
           </a>
         ) : (
-          <p role="alert" data-testid="entries-closed-notice" className="text-sm text-red-600">
+          <p role="alert" data-testid="entries-closed-notice" className="text-sm text-destructive">
             ต้องเปิดรับสมัครทัวร์นาเมนต์ก่อน
           </p>
         )}
@@ -68,7 +68,7 @@ export function AdminEntries({ eventId }: AdminEntriesProps) {
 
       {/* Forward Error Alert */}
       {actionError && (
-        <p role="alert" data-testid="entries-action-error" className="text-sm text-red-600">
+        <p role="alert" data-testid="entries-action-error" className="text-sm text-destructive">
           {actionError}
         </p>
       )}
