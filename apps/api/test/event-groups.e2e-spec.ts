@@ -115,6 +115,7 @@ describe('event-groups (bl-25-10)', () => {
     openEventId = openEvent.id;
 
     // 5. 6 Approved Entries for Open Event
+    const entryIds: string[] = [];
     for (let i = 1; i <= 6; i++) {
       const p = await prisma.user.create({
         data: {
@@ -125,7 +126,7 @@ describe('event-groups (bl-25-10)', () => {
       });
       userIds.push(p.id);
 
-      await prisma.entry.create({
+      const entry = await prisma.entry.create({
         data: {
           eventId: openEventId,
           status: 'approved',
@@ -136,6 +137,7 @@ describe('event-groups (bl-25-10)', () => {
           },
         },
       });
+      entryIds.push(entry.id);
     }
 
     // 6. Event with no draw
@@ -188,18 +190,77 @@ describe('event-groups (bl-25-10)', () => {
     const pubRes = await http()
       .post(`/api/v1/draws/${publishedDrawId}/publish`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
-      .send({})
+      .send({ acknowledgeConflicts: true })
       .expect(200);
     expect(pubRes.body.data.status).toBe('published');
 
-    // 9. Generate Preview 2 (newer preview) using the draws endpoints
-    const prev2Res = await http()
-      .post(`/api/v1/events/${openEventId}/groups/preview`)
-      .set('Cookie', cookieFor(committeeId, ['Committee']))
-      .send({})
-      .expect(201);
-    previewDrawId = prev2Res.body.data.id;
-    expect(prev2Res.body.data.version).toBe(2);
+    // 9. Create a newer preview draw (version 2) directly in DB to verify preview query behavior
+    const prev2 = await prisma.draw.create({
+      data: {
+        eventId: openEventId,
+        kind: 'group',
+        version: 2,
+        status: 'preview',
+        seed: 'seed-preview-2',
+        seedSource: 'server',
+        inputHash: '2'.repeat(64),
+        snapshot: {},
+        rulesetVersion: '1.0',
+        prngId: 'pcg32',
+        size: 6,
+        seedsCount: 0,
+        createdBy: adminId,
+      },
+    });
+    previewDrawId = prev2.id;
+
+    const prevGroupA = await prisma.group.create({
+      data: {
+        eventId: openEventId,
+        drawId: previewDrawId,
+        label: 'A',
+      },
+    });
+    const prevGroupB = await prisma.group.create({
+      data: {
+        eventId: openEventId,
+        drawId: previewDrawId,
+        label: 'B',
+      },
+    });
+
+    for (let i = 1; i <= 3; i++) {
+      await prisma.groupMember.create({
+        data: {
+          groupId: prevGroupA.id,
+          entryId: entryIds[i - 1]!,
+          seedInGroup: i,
+          pot: i,
+        },
+      });
+      await prisma.groupMember.create({
+        data: {
+          groupId: prevGroupB.id,
+          entryId: entryIds[i + 2]!,
+          seedInGroup: i,
+          pot: i,
+        },
+      });
+    }
+
+    await prisma.match.create({
+      data: {
+        eventId: openEventId,
+        drawId: previewDrawId,
+        groupId: prevGroupA.id,
+        stage: 'group',
+        round: 1,
+        matchNo: 1,
+        status: 'scheduled',
+        topEntryId: entryIds[0]!,
+        bottomEntryId: entryIds[1]!,
+      },
+    });
   });
 
   afterAll(async () => {
