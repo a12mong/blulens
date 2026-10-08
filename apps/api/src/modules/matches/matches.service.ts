@@ -21,6 +21,7 @@ import {
   type ResultMatch,
   type StandingRow,
 } from '@blulens/shared';
+import { nextSlot } from '../draws/bracket';
 
 export interface EntryRef {
   entryId: string;
@@ -1155,6 +1156,87 @@ export class MatchesService {
         where: { id: matchId },
         data: updateData,
       });
+
+      // 9a. Handle knockout winner advancement
+      if (match.stage === 'knockout' && updated.status === 'confirmed' && updated.winnerEntryId) {
+        // Compute indexInRound: count matches in same draw/stage/round with matchNo < this match's matchNo
+        const indexInRound = await tx.match.count({
+          where: {
+            drawId: match.drawId,
+            stage: 'knockout',
+            round: match.round,
+            matchNo: { lt: match.matchNo },
+          },
+        });
+
+        const nextInfo = nextSlot(match.round, indexInRound);
+
+        // Find next match in bracket: fetch all matches in next round and pick by index
+        const nextRoundMatches = await tx.match.findMany({
+          where: {
+            drawId: match.drawId,
+            stage: 'knockout',
+            round: nextInfo.round,
+          },
+          orderBy: { matchNo: 'asc' },
+        });
+
+        const nextMatch = nextRoundMatches[nextInfo.index] || null;
+
+        if (nextMatch) {
+          // Determine if this is a winner-change correction
+          const prevWinner = match.winnerEntryId;
+          const newWinner = updated.winnerEntryId;
+          const isWinnerChange = prevWinner !== newWinner;
+
+          if (nextMatch.status === 'scheduled') {
+            // Can update if scheduled
+            const updateField = nextInfo.side === 'top' ? 'topEntryId' : 'bottomEntryId';
+            await tx.match.update({
+              where: { id: nextMatch.id },
+              data: { [updateField]: newWinner },
+            });
+
+            // For semi-finals, also place loser in third_place match
+            const finalRound = await tx.match.findFirst({
+              where: {
+                drawId: match.drawId,
+                stage: 'knockout',
+              },
+              orderBy: { round: 'desc' },
+              select: { round: true },
+            });
+
+            if (finalRound && match.round === finalRound.round - 1) {
+              // This is a semi-final
+              const loserEntryId =
+                newWinner === match.topEntryId ? match.bottomEntryId : match.topEntryId;
+
+              const thirdPlace = await tx.match.findFirst({
+                where: {
+                  drawId: match.drawId,
+                  stage: 'third_place',
+                },
+              });
+
+              if (thirdPlace) {
+                const thirdPlaceField =
+                  nextInfo.side === 'top' ? 'topEntryId' : 'bottomEntryId';
+                await tx.match.update({
+                  where: { id: thirdPlace.id },
+                  data: { [thirdPlaceField]: loserEntryId },
+                });
+              }
+            }
+          } else if (isWinnerChange && (nextMatch.status as string) !== 'scheduled') {
+            // Winner change but next match already reported/confirmed
+            throw ApiException.conflict(
+              'ไม่สามารถเปลี่ยนแปลงผู้ชนะได้ เนื่องจากแมตช์ถัดไปได้รายงานผลแล้ว',
+              'NEXT_MATCH_ALREADY_PLAYED',
+            );
+          }
+        }
+      }
 
       // 10. Record audit entry
       await this.audit.record(
