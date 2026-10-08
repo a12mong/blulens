@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { thaiError } from '@/lib/errors';
 import { useReportedMatches, useMatchDecision, type Match } from './api';
+import { GroupStageConfirm } from './GroupStageConfirm';
 
 export interface ResultsQueueProps {
   eventId: string;
@@ -176,14 +177,18 @@ export function ResultsQueue({ eventId }: ResultsQueueProps) {
 
   if (!matches || matches.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-lg bg-card">
-        ไม่มีผลที่รอยืนยัน
+      <div className="space-y-4">
+        <GroupStageConfirm eventId={eventId} />
+        <div className="text-center py-12 text-muted-foreground border border-dashed border-border rounded-lg bg-card">
+          ไม่มีผลที่รอยืนยัน
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <GroupStageConfirm eventId={eventId} />
       {matches.map((match) => {
         const nameA = match.aEntry?.displayName || 'ฝ่าย A';
         const nameB = match.bEntry?.displayName || 'ฝ่าย B';
