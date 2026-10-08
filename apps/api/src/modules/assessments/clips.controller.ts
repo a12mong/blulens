@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { z } from 'zod';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { CurrentUser, Roles } from '../../common/auth/decorators';
@@ -23,5 +23,11 @@ export class ClipsController {
   @Roles('Member')
   complete(@Param('clipId', uuid) clipId: string, @Body() body: CompleteClipDto, @CurrentUser() user: AuthUser) {
     return this.assessmentsService.completeClip(clipId, body.durationSec, user);
+  }
+
+  @Get(':clipId/playback-url')
+  @Roles('Member', 'Reviewer', 'Committee', 'Admin')
+  playbackUrl(@Param('clipId', uuid) clipId: string, @CurrentUser() user: AuthUser) {
+    return this.assessmentsService.clipPlaybackUrl(clipId, user);
   }
 }

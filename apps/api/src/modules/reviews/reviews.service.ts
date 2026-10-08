@@ -7,6 +7,7 @@ import {
   type ReviewerScore,
   type RubricCriterion,
 } from '@blulens/shared';
+import { StorageService } from '../../common/storage/storage.service';
 import { AuditService } from '../../common/audit/audit.service';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { ApiException } from '../../common/errors/api.exception';
@@ -18,6 +19,7 @@ export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   async getActiveRubric() {
@@ -127,12 +129,14 @@ export class ReviewsService {
           ? [assignment.calibrationClip]
           : [];
 
-    const clips = rawClips.map((c) => ({
-      id: c.id,
-      status: c.status,
-      viewUrl: this.computeViewUrl(c.status, c.objectKey),
-      durationSec: c.durationSec,
-    }));
+    const clips = await Promise.all(
+      rawClips.map(async (c) => ({
+        id: c.id,
+        status: c.status,
+        viewUrl: await this.storage.viewUrl(c.status, c.objectKey),
+        durationSec: c.durationSec,
+      })),
+    );
 
     let myScores: Array<{ criterion: string; gradeKey: (typeof GRADE_KEYS)[number] | null }> = [];
     if (assignment.state === 'submitted') {
@@ -173,19 +177,6 @@ export class ReviewsService {
     };
   }
 
-  private computeViewUrl(status: string, objectKey: string): string | null {
-    if (status !== 'uploaded') {
-      return null;
-    }
-    if (
-      objectKey.startsWith('/') ||
-      objectKey.startsWith('http://') ||
-      objectKey.startsWith('https://')
-    ) {
-      return objectKey;
-    }
-    return null;
-  }
 
   async submit(assignmentId: string, input: ReviewInputDto, actor: AuthUser, ip?: string) {
     return this.prisma.$transaction(async (tx) => {

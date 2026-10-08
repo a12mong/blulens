@@ -316,7 +316,7 @@ describe('GET /reviews/assignments/:assignmentId (bl-10-3h assignment detail)', 
         .expect(400);
     });
 
-    it('returns null viewUrl for MinIO-style objectKey even when status is uploaded', async () => {
+    it('returns a 15-min presigned GET viewUrl for a bucket objectKey when uploaded (bl-36-4)', async () => {
       const res = await http()
         .get(`/api/v1/reviews/assignments/${a2MinioId}`)
         .set('Cookie', r1Cookie)
@@ -326,7 +326,7 @@ describe('GET /reviews/assignments/:assignmentId (bl-10-3h assignment detail)', 
       expect(res.body.data.clips).toHaveLength(1);
       expect(res.body.data.clips[0].id).toBe(clip3Id);
       expect(res.body.data.clips[0].status).toBe('uploaded');
-      expect(res.body.data.clips[0].viewUrl).toBeNull();
+      expect(res.body.data.clips[0].viewUrl).toMatch(/^http.*X-Amz-Expires=900/);
       expect(res.body.data.clips[0].durationSec).toBe(10);
       expect(res.body.data.clips[0].objectKey).toBeUndefined();
     });
