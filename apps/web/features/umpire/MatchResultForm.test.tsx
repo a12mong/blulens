@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, act } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '@/lib/api/client';
@@ -6,6 +6,14 @@ import { useReportResult, type Match } from './api';
 import { MatchFormatBadge } from './MatchFormatBadge';
 import { MatchResultForm } from './MatchResultForm';
 import type { MatchFormat } from './scoreRules';
+import { formatCourtName, UmpireMatchCard } from './UmpireMatchCard';
+import { loadResultDraft } from './useResultDraft';
+
+const mockPush = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+  usePathname: () => '/umpire/matches/m-1',
+}));
 
 vi.mock('./api', () => ({
   useReportResult: vi.fn(),
@@ -17,6 +25,7 @@ describe('MatchResultForm', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     (useReportResult as any).mockReturnValue({
       mutate: mockMutate,
       isPending: false,
@@ -208,6 +217,165 @@ describe('MatchResultForm', () => {
 
     const errorEl = screen.getByTestId('result-error');
     expect(errorEl).toHaveTextContent('คะแนนไม่ถูกต้องตามกติกา');
+  });
+
+  it('keeps the scores and redirects to login on 401 (proving test)', () => {
+    const { unmount } = render(
+      <MatchResultForm match={baseMatch} format={bo3_21} />,
+    );
+
+    // Enter scores for game 1 and game 2
+    const scoreAInputs = screen.getAllByTestId('score-a');
+    const scoreBInputs = screen.getAllByTestId('score-b');
+    fireEvent.change(scoreAInputs[0], { target: { value: '21' } });
+    fireEvent.change(scoreBInputs[0], { target: { value: '18' } });
+
+    const scoreAInputsG2 = screen.getAllByTestId('score-a');
+    const scoreBInputsG2 = screen.getAllByTestId('score-b');
+    fireEvent.change(scoreAInputsG2[1], { target: { value: '21' } });
+    fireEvent.change(scoreBInputsG2[1], { target: { value: '19' } });
+
+    // Draft key holds the entered scores
+    const draftBeforeSubmit = loadResultDraft(baseMatch.id!);
+    expect(draftBeforeSubmit).not.toBeNull();
+    expect(draftBeforeSubmit?.games[0]).toEqual({ a: 21, b: 18 });
+    expect(draftBeforeSubmit?.games[1]).toEqual({ a: 21, b: 19 });
+
+    // Reject mutation with status 401
+    mockMutate.mockImplementation((payload, options) => {
+      options?.onError?.(new ApiRequestError(401, 'UNAUTHORIZED', 'Session expired'));
+    });
+
+    const submitBtn = screen.getByTestId('result-submit');
+    expect(submitBtn).toBeEnabled();
+    fireEvent.click(submitBtn);
+
+    const confirmBtn = screen.getByTestId('result-confirm');
+    fireEvent.click(confirmBtn);
+
+    // router.push called with login URL with pathname encoded
+    expect(mockPush).toHaveBeenCalledWith('/login?next=%2Fumpire%2Fmatches%2Fm-1');
+
+    // Dialog is closed
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // No 401 error text inside dialog or page
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('result-error')).not.toBeInTheDocument();
+
+    // Draft key still holds entered scores
+    const draftAfter401 = loadResultDraft(baseMatch.id!);
+    expect(draftAfter401?.games[0]).toEqual({ a: 21, b: 18 });
+    expect(draftAfter401?.games[1]).toEqual({ a: 21, b: 19 });
+
+    // Remount restores them
+    unmount();
+    render(<MatchResultForm match={baseMatch} format={bo3_21} />);
+
+    const restoredA = screen.getAllByTestId('score-a');
+    const restoredB = screen.getAllByTestId('score-b');
+    expect(restoredA[0]).toHaveValue('21');
+    expect(restoredB[0]).toHaveValue('18');
+    expect(restoredA[1]).toHaveValue('21');
+    expect(restoredB[1]).toHaveValue('19');
+
+    // Winner summary and submit button enabled
+    expect(screen.getByTestId('result-summary')).toHaveTextContent('ผู้ชนะ: สมชาย / วิภา');
+    expect(screen.getByTestId('result-submit')).toBeEnabled();
+  });
+
+  it('does not duplicate "สนาม" prefix when court already starts with "สนาม"', () => {
+    // Component test with court starting with "สนาม"
+    const matchWithPrefix: Match = {
+      ...baseMatch,
+      court: 'สนาม 1',
+    };
+    const { unmount } = render(
+      <MatchResultForm match={matchWithPrefix} format={bo3_21} />,
+    );
+    expect(screen.getByText('สนาม 1')).toBeInTheDocument();
+    expect(screen.queryByText(/สนาม สนาม/)).not.toBeInTheDocument();
+
+    unmount();
+
+    // Component test with plain court number
+    const matchWithoutPrefix: Match = {
+      ...baseMatch,
+      court: '2',
+    };
+    render(<MatchResultForm match={matchWithoutPrefix} format={bo3_21} />);
+    expect(screen.getByText('สนาม 2')).toBeInTheDocument();
+    expect(screen.queryByText(/สนาม สนาม/)).not.toBeInTheDocument();
+
+    // Helper formatCourtName behavior
+    expect(formatCourtName('สนาม 1')).toBe('สนาม 1');
+    expect(formatCourtName('1')).toBe('สนาม 1');
+    expect(formatCourtName('  สนาม 3  ')).toBe('สนาม 3');
+    expect(formatCourtName('')).toBe('สนาม -');
+    expect(formatCourtName(null)).toBe('สนาม -');
+
+    // UmpireMatchCard display
+    const { container } = render(<UmpireMatchCard match={matchWithPrefix} />);
+    expect(container).toHaveTextContent('สนาม 1 · น็อคเอาท์ รอบ 1');
+    expect(container).not.toHaveTextContent('สนาม สนาม 1');
+  });
+
+  it('tie label shows games and total points', () => {
+    render(<MatchResultForm match={baseMatch} format={group_2x15} />);
+
+    // Game 1: 15-10
+    const inputsA = screen.getAllByTestId('score-a');
+    const inputsB = screen.getAllByTestId('score-b');
+    fireEvent.change(inputsA[0], { target: { value: '15' } });
+    fireEvent.change(inputsB[0], { target: { value: '10' } });
+
+    // Game 2: 12-15
+    fireEvent.change(inputsA[1], { target: { value: '12' } });
+    fireEvent.change(inputsB[1], { target: { value: '15' } });
+
+    const summary = screen.getByTestId('result-summary');
+    expect(summary).toBeInTheDocument();
+    expect(summary).toHaveTextContent('เสมอ 1–1 เกม');
+    expect(summary).toHaveTextContent('แต้มรวม 27–25');
+  });
+
+  it('clears draft after successful report', () => {
+    const onReported = vi.fn();
+    render(
+      <MatchResultForm
+        match={baseMatch}
+        format={bo3_21}
+        onReported={onReported}
+      />,
+    );
+
+    // Enter scores
+    const inputsA = screen.getAllByTestId('score-a');
+    const inputsB = screen.getAllByTestId('score-b');
+    fireEvent.change(inputsA[0], { target: { value: '21' } });
+    fireEvent.change(inputsB[0], { target: { value: '15' } });
+
+    const inputsAG2 = screen.getAllByTestId('score-a');
+    const inputsBG2 = screen.getAllByTestId('score-b');
+    fireEvent.change(inputsAG2[1], { target: { value: '21' } });
+    fireEvent.change(inputsBG2[1], { target: { value: '10' } });
+
+    // Draft is stored in localStorage
+    expect(loadResultDraft(baseMatch.id!)).not.toBeNull();
+
+    // Mock successful mutation
+    mockMutate.mockImplementation((payload, options) => {
+      options?.onSuccess?.({ ...baseMatch, status: 'reported' });
+    });
+
+    fireEvent.click(screen.getByTestId('result-submit'));
+    fireEvent.click(screen.getByTestId('result-confirm'));
+
+    // Draft is cleared from localStorage
+    expect(loadResultDraft(baseMatch.id!)).toBeNull();
+    expect(onReported).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'reported' }),
+    );
   });
 
   describe('MatchFormatBadge text', () => {

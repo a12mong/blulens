@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { CheckIcon } from './Icon';
 
 export type StepperProps = {
   steps: string[];
@@ -25,7 +26,6 @@ export function Stepper({ steps, current, onStepClick }: StepperProps) {
             : 'todo';
 
         const stepNumber = index + 1;
-        const marker = isDone ? '✓' : `${stepNumber}`;
 
         return (
           <li
@@ -45,7 +45,7 @@ export function Stepper({ steps, current, onStepClick }: StepperProps) {
                   data-testid="step-marker"
                   className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold"
                 >
-                  {marker}
+                  <CheckIcon className="w-5 h-5" />
                 </span>
                 <span className="truncate group-hover:underline">
                   {stepNumber}. {step}
@@ -67,7 +67,7 @@ export function Stepper({ steps, current, onStepClick }: StepperProps) {
                       : 'border border-border bg-muted text-muted-foreground'
                   }`}
                 >
-                  {marker}
+                  {stepNumber}
                 </span>
                 <span className="truncate">
                   {stepNumber}. {step}

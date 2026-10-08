@@ -164,7 +164,7 @@ export function CreateTournamentWizard({ onCreated }: { onCreated?: (t: Tourname
       )}
 
       {error && (
-        <p role="alert" data-testid="wizard-error" className="text-red-600">
+        <p role="alert" data-testid="wizard-error" className="text-destructive">
           {error}
         </p>
       )}

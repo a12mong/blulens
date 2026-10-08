@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { WarningIcon, TimerIcon } from '@/components/ui/Icon';
 import type { components } from '@/lib/api/schema';
 
 type ReviewAssignment = components['schemas']['ReviewAssignment'];
@@ -107,7 +108,7 @@ export function ReviewCard({ assignment, now = new Date() }: ReviewCardProps) {
                 : 'bg-secondary text-secondary-foreground'
             }`}
           >
-            <span aria-hidden="true">{isOverdue ? '⚠️' : '⏱️'}</span>
+            {isOverdue ? <WarningIcon className="w-4 h-4" /> : <TimerIcon className="w-4 h-4" />}
             <span>{isOverdue ? 'เกินกำหนด' : `เหลือ ${diffDays} วัน`}</span>
           </span>
           {isExpiring && (
