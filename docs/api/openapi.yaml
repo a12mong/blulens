@@ -1369,18 +1369,19 @@ components:
         status: { $ref: '#/components/schemas/AssessmentStatus' }
         subject:
           type: object
-          required: [userId, displayName]
+          required: [userId, displayName, clubNames]
           description: 'who is assessed: ALWAYS filled in list + detail (never sent to reviewers, who only get blind ReviewAssignment)'
           properties:
             userId: { type: string, format: uuid }
             displayName: { type: string }
+            clubNames: { type: array, items: { type: string }, description: 'names of the active team memberships, de-duplicated and sorted' }
         event:
           oneOf:
             - type: object
-              required: [id, name, tournamentName]
+              required: [id, discipline, tournamentName]
               properties:
                 id: { type: string, format: uuid }
-                name: { type: string }
+                discipline: { type: string, enum: [MS, WS, MD, WD, XD], description: 'an event has no name of its own; the web labels it "<tournamentName> · <discipline in Thai>"' }
                 tournamentName: { type: string }
             - { type: 'null' }
           description: 'the event an A13 fresh assessment is bound to; null for a standalone request (web shows "ประเมินทั่วไป")'
@@ -1414,15 +1415,14 @@ components:
         computedBy: { type: [string, 'null'], format: uuid, description: null for computed }
     AssignmentProgressRow:
       type: object
-      required: [assignmentId, reviewerId, reviewerName, state, dueAt]
+      required: [id, reviewerId, reviewerName, state, dueAt]
       properties:
-        assignmentId: { type: string, format: uuid }
+        id: { type: string, format: uuid, description: assignment id }
         reviewerId: { type: string, format: uuid }
         reviewerName: { type: string }
         state: { type: string, enum: [open, submitted, expired, declined] }
         dueAt: { type: string, format: date-time }
         submittedAt: { type: [string, 'null'], format: date-time }
-        abstained: { type: boolean, description: 'submitted but marked every criterion "cannot assess" (counts as not valid for aggregation)' }
     ReviewerScoreRow:
       type: object
       description: Committee-only view of one reviewer's contribution
