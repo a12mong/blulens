@@ -1280,7 +1280,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Assignment detail with clip view URLs and the rubric (never other reviewers' scores) */
+        /**
+         * Assignment detail with clip view URLs and the rubric (never other reviewers' scores)
+         * @description Only the assigned reviewer (404 for anyone else, to not leak task ids). Used by /review/tasks/[id]. Clip viewUrl is a fresh 15-min presigned GET; when it expires the web calls /clips/{clipId}/playback-url.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -1301,6 +1304,7 @@ export interface paths {
                         "application/json": components["schemas"]["ReviewAssignmentDetail"];
                     };
                 };
+                404: components["responses"]["NotFound"];
             };
         };
         /** Submit the review (once; immutable after submit) */
@@ -3648,15 +3652,18 @@ export interface components {
         };
         Clip: {
             /** Format: uuid */
-            id?: string;
-            /** @enum {string} */
-            status?: "pending_upload" | "uploaded" | "rejected";
+            id: string;
+            /**
+             * @description uploaded = playable (there is no separate ready state in v1; no transcoding)
+             * @enum {string}
+             */
+            status: "pending_upload" | "uploaded" | "rejected";
             /**
              * Format: uri
-             * @description presigned GET
+             * @description presigned GET (15 min); null unless status = uploaded
              */
-            viewUrl?: string;
-            durationSec?: number;
+            viewUrl: string | null;
+            durationSec?: number | null;
         };
         Rubric: {
             methodVersion: string;
@@ -3708,9 +3715,10 @@ export interface components {
             submittedAt?: string | null;
         };
         ReviewAssignmentDetail: components["schemas"]["ReviewAssignment"] & {
-            clips?: components["schemas"]["Clip"][];
-            rubric?: components["schemas"]["Rubric"];
-            myScores?: components["schemas"]["CriterionScore"][];
+            clips: components["schemas"]["Clip"][];
+            rubric: components["schemas"]["Rubric"];
+            /** @description empty while state = open; the submitted scores after submit */
+            myScores: components["schemas"]["CriterionScore"][];
         };
         AgreementValue: {
             /** @description null when below minimum shared subjects */
@@ -4023,6 +4031,8 @@ export interface components {
             /** Format: date-time */
             confirmedAt?: string | null;
             flags?: ("UMPIRE_TEAM_CONFLICT" | "COMMITTEE_DIRECT_ENTRY" | "CORRECTED")[];
+            /** @description the scoring rules of this match, resolved server-side from the event format: stage group -> groupMatchFormat, knockout | third_place -> knockoutMatchFormat (missing -> preset group_2x15 / bo3_21). Always present in every Match response, so the umpire form and score validation never guess (Andy 2026-10-08). */
+            readonly format?: components["schemas"]["MatchFormat"];
         };
         EventUmpire: {
             /** Format: uuid */
