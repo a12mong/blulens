@@ -30,6 +30,10 @@ export interface EventMatchesQuery {
   round?: number;
 }
 
+export interface UmpireMatchesQuery {
+  status?: 'scheduled' | 'reported' | 'confirmed';
+}
+
 export interface PutMatchResultInput {
   outcome: 'played' | 'walkover_a' | 'walkover_b';
   games?: { a: number; b: number }[];
@@ -167,6 +171,124 @@ export class MatchesService {
     };
 
     return matches.map((m) => this.mapMatch(m, entryMap, formats[m.stage] ?? knockoutFormat));
+  }
+
+  async getUmpireMatches(query: UmpireMatchesQuery, caller: AuthUser) {
+    // 1. Fetch caller's EventUmpire rows
+    const eventUmpires = await this.prisma.eventUmpire.findMany({
+      where: { userId: caller.id },
+    });
+
+    // 2. Build assignment OR conditions
+    const assignmentConditions: Prisma.MatchWhereInput[] = [{ umpireId: caller.id }];
+
+    const allCourtsEventIds = eventUmpires
+      .filter((eu) => eu.courts.length === 0)
+      .map((eu) => eu.eventId);
+
+    if (allCourtsEventIds.length > 0) {
+      assignmentConditions.push({ eventId: { in: allCourtsEventIds } });
+    }
+
+    for (const eu of eventUmpires) {
+      if (eu.courts.length > 0) {
+        assignmentConditions.push({
+          eventId: eu.eventId,
+          court: { in: eu.courts },
+        });
+      }
+    }
+
+    // 3. Exclude matches where caller is one of the players
+    const playerEntries = await this.prisma.entryPlayer.findMany({
+      where: { userId: caller.id },
+      select: { entryId: true },
+    });
+    const playerEntryIds = Array.from(new Set(playerEntries.map((e) => e.entryId)));
+
+    const playerExclusion: Prisma.MatchWhereInput =
+      playerEntryIds.length > 0
+        ? {
+            NOT: [
+              { topEntryId: { in: playerEntryIds } },
+              { bottomEntryId: { in: playerEntryIds } },
+            ],
+          }
+        : {};
+
+    // 4. Query matches
+    const where: Prisma.MatchWhereInput = {
+      draw: { status: 'published' },
+      OR: assignmentConditions,
+      ...(query.status ? { status: query.status } : {}),
+      ...playerExclusion,
+    };
+
+    const matches = await this.prisma.match.findMany({
+      where,
+      orderBy: [{ eventId: 'asc' }, { stage: 'asc' }, { round: 'asc' }, { matchNo: 'asc' }],
+    });
+
+    if (matches.length === 0) {
+      return [];
+    }
+
+    // Double-check player exclusion in memory
+    const eligibleMatches =
+      playerEntryIds.length > 0
+        ? matches.filter(
+            (m) =>
+              !(m.topEntryId && playerEntryIds.includes(m.topEntryId)) &&
+              !(m.bottomEntryId && playerEntryIds.includes(m.bottomEntryId)),
+          )
+        : matches;
+
+    if (eligibleMatches.length === 0) {
+      return [];
+    }
+
+    // 5. Load formats once per event (no N+1)
+    const eventIds = Array.from(new Set(eligibleMatches.map((m) => m.eventId)));
+    const events = await this.prisma.event.findMany({
+      where: { id: { in: eventIds } },
+      select: { id: true, format: true },
+    });
+
+    const eventFormatMap = new Map<
+      string,
+      { group: MatchFormat; knockout: MatchFormat; third_place: MatchFormat }
+    >();
+    for (const ev of events) {
+      const groupFormat = resolveMatchFormat(ev.format, 'group');
+      const knockoutFormat = resolveMatchFormat(ev.format, 'knockout');
+      eventFormatMap.set(ev.id, {
+        group: groupFormat,
+        knockout: knockoutFormat,
+        third_place: knockoutFormat,
+      });
+    }
+
+    // 6. Load entries in single query
+    const entryIds = Array.from(
+      new Set(
+        eligibleMatches
+          .flatMap((m) => [m.topEntryId, m.bottomEntryId])
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    );
+    const entryMap = await this.loadEntryMap(this.prisma, entryIds);
+
+    // 7. Map and return
+    return eligibleMatches.map((m) => {
+      const formats = eventFormatMap.get(m.eventId);
+      let format: MatchFormat;
+      if (formats) {
+        format = m.stage === 'group' ? formats.group : formats.knockout;
+      } else {
+        format = resolveMatchFormat(null, m.stage);
+      }
+      return this.mapMatch(m, entryMap, format);
+    });
   }
 
   private handleTransitionError(
