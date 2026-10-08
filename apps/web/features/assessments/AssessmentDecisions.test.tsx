@@ -30,6 +30,7 @@ describe('AssessmentDecisions', () => {
     subject: {
       userId: 'user-1',
       displayName: 'สมชาย',
+      clubNames: [],
     },
     latestResultVersion: 2,
     latestResult: {

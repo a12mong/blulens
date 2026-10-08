@@ -3580,12 +3580,25 @@ export interface components {
              */
             eventId?: string | null;
             status: components["schemas"]["AssessmentStatus"];
-            /** @description who is assessed (never sent to reviewers, who only get blind ReviewAssignment) */
+            /** @description who is assessed: ALWAYS filled in list + detail (never sent to reviewers, who only get blind ReviewAssignment) */
             subject?: {
                 /** Format: uuid */
-                userId?: string;
-                displayName?: string;
+                userId: string;
+                displayName: string;
+                /** @description names of the active team memberships, de-duplicated and sorted */
+                clubNames: string[];
             };
+            /** @description the event an A13 fresh assessment is bound to; null for a standalone request (web shows "ประเมินทั่วไป") */
+            event?: {
+                /** Format: uuid */
+                id: string;
+                /**
+                 * @description an event has no name of its own; the web labels it "<tournamentName> · <discipline in Thai>"
+                 * @enum {string}
+                 */
+                discipline: "MS" | "WS" | "MD" | "WD" | "XD";
+                tournamentName: string;
+            } | null;
             /** @description grade of the latest result version (list rows show its label without loading the detail) */
             latestGrade?: components["schemas"]["GradeView"] | null;
             latestResultVersion?: number | null;
@@ -3629,6 +3642,22 @@ export interface components {
              */
             computedBy?: string | null;
         };
+        AssignmentProgressRow: {
+            /**
+             * Format: uuid
+             * @description assignment id
+             */
+            id: string;
+            /** Format: uuid */
+            reviewerId: string;
+            reviewerName: string;
+            /** @enum {string} */
+            state: "open" | "submitted" | "expired" | "declined";
+            /** Format: date-time */
+            dueAt: string;
+            /** Format: date-time */
+            submittedAt?: string | null;
+        };
         /** @description Committee-only view of one reviewer's contribution */
         ReviewerScoreRow: {
             /** Format: uuid */
@@ -3649,6 +3678,8 @@ export interface components {
             latestResult?: components["schemas"]["AssessmentResult"] | null;
             /** @description Committee only */
             reviewerRows?: components["schemas"]["ReviewerScoreRow"][];
+            /** @description Committee/Admin only ([] for the subject Member): who is assigned and whether they have submitted, so an in_review request shows progress. NO scores here (scores appear in reviewerRows only after aggregation), so the panel stays independent. Ordered by the assignment createdAt. */
+            assignments?: components["schemas"]["AssignmentProgressRow"][];
         };
         Clip: {
             /** Format: uuid */

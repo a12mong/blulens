@@ -23,6 +23,7 @@ describe('AssessmentDetailView', () => {
     subject: {
       userId: 'user-1',
       displayName: 'สมชาย ใจดี',
+      clubNames: [],
     },
     latestResult: {
       version: 1,
