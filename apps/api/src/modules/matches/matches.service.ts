@@ -1389,14 +1389,20 @@ export class MatchesService {
         throw ApiException.notFound('ไม่พบแมตช์ที่ต้องการ', 'MATCH_NOT_FOUND');
       }
 
-      // 3. Check stage confirmed -> 409 STAGE_CONFIRMED
+      // 3. Check stage confirmed or result confirmed -> 409 MATCH_LOCKED
+      if (match.status === 'confirmed') {
+        throw ApiException.conflict(
+          'MATCH_LOCKED',
+          'ผลการแข่งขันได้รับการยืนยันแล้ว ไม่สามารถแก้ไขได้',
+        );
+      }
       if (match.groupId) {
         const standingsCount = await tx.groupStanding.count({
           where: { groupId: match.groupId },
         });
         if (standingsCount > 0) {
           throw ApiException.conflict(
-            'STAGE_CONFIRMED',
+            'MATCH_LOCKED',
             'รอบแบ่งกลุ่มได้รับการยืนยันผลแล้ว ไม่สามารถแก้ไขได้',
           );
         }
@@ -1417,9 +1423,8 @@ export class MatchesService {
           umpireUser.deletedAt !== null ||
           !umpireUser.roles.some((r) => r.role === 'Umpire')
         ) {
-          throw new ApiException(
-            HttpStatus.UNPROCESSABLE_ENTITY,
-            'UMPIRE_INVALID',
+          throw ApiException.conflict(
+            'UMPIRE_NOT_ELIGIBLE',
             'กรรมการไม่ถูกต้อง หรือไม่มีสิทธิ์ทำหน้าที่กรรมการ',
           );
         }
@@ -1437,9 +1442,8 @@ export class MatchesService {
             },
           });
           if (isPlayer) {
-            throw new ApiException(
-              HttpStatus.UNPROCESSABLE_ENTITY,
-              'UMPIRE_OWN_MATCH',
+            throw ApiException.conflict(
+              'UMPIRE_IS_PLAYER',
               'กรรมการเป็นผู้เล่นในแมตช์นี้ ไม่สามารถทำหน้าที่ได้',
             );
           }

@@ -412,38 +412,38 @@ describe('match-assignment (bl-25-16)', () => {
     expect(matchIds).toContain(match1Id);
   });
 
-  it('umpireId of a Member without Umpire role -> 422', async () => {
+  it('umpireId of a Member without Umpire role -> 409 UMPIRE_NOT_ELIGIBLE', async () => {
     const res = await http()
       .patch(`/api/v1/matches/${match1Id}/assignment`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
       .send({ umpireId: memberId })
-      .expect(422);
+      .expect(409);
 
     expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('UMPIRE_INVALID');
+    expect(res.body.error.code).toBe('UMPIRE_NOT_ELIGIBLE');
   });
 
-  it('umpireId of a disabled user with Umpire role -> 422', async () => {
+  it('umpireId of a disabled user with Umpire role -> 409 UMPIRE_NOT_ELIGIBLE', async () => {
     const res = await http()
       .patch(`/api/v1/matches/${match1Id}/assignment`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
       .send({ umpireId: disabledUmpireId })
-      .expect(422);
+      .expect(409);
 
     expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('UMPIRE_INVALID');
+    expect(res.body.error.code).toBe('UMPIRE_NOT_ELIGIBLE');
   });
 
-  it('a player as umpire -> 422 UMPIRE_OWN_MATCH', async () => {
+  it('a player as umpire -> 409 UMPIRE_IS_PLAYER', async () => {
     // player1Id is a player in entry 1 (topEntry of match1)
     const res = await http()
       .patch(`/api/v1/matches/${match1Id}/assignment`)
       .set('Cookie', cookieFor(committeeId, ['Committee']))
       .send({ umpireId: player1Id })
-      .expect(422);
+      .expect(409);
 
     expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('UMPIRE_OWN_MATCH');
+    expect(res.body.error.code).toBe('UMPIRE_IS_PLAYER');
   });
 
   it('unsetting court with empty string -> 200 court is null', async () => {
@@ -481,7 +481,7 @@ describe('match-assignment (bl-25-16)', () => {
     expect(res.body.data.umpireId).toBe(umpire2Id);
   });
 
-  it('confirmed stage -> 409', async () => {
+  it('confirmed stage -> 409 MATCH_LOCKED', async () => {
     // Confirm group stage for groupA by creating a GroupStanding row
     await prisma.groupStanding.create({
       data: {
@@ -508,6 +508,6 @@ describe('match-assignment (bl-25-16)', () => {
       .expect(409);
 
     expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('STAGE_CONFIRMED');
+    expect(res.body.error.code).toBe('MATCH_LOCKED');
   });
 });
