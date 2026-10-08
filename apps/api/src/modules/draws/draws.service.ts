@@ -119,115 +119,125 @@ export class DrawsService {
 
     const inputHash = this.computeInputHash(approvedEntries.map((e) => e.id));
 
-    return this.prisma.$transaction(async (tx) => {
-      const lastDraw = await tx.draw.findFirst({
-        where: { eventId, kind: 'group' },
-        orderBy: { version: 'desc' },
-        select: { version: true },
-      });
-      const version = (lastDraw?.version ?? 0) + 1;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const lastDraw = await tx.draw.findFirst({
+          where: { eventId, kind: 'group' },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        const version = (lastDraw?.version ?? 0) + 1;
 
-      const conflicts = plan.sameTeamPairs.map(([a, b]) => ({ entryIds: [a, b] }));
+        const conflicts = plan.sameTeamPairs.map(([a, b]) => ({ entryIds: [a, b] }));
 
-      const draw = await tx.draw.create({
-        data: {
-          eventId,
-          kind: 'group',
-          version,
-          status: 'preview',
-          seed,
-          seedSource,
-          inputHash,
-          snapshot: {
-            entries: drawEntries.map((d) => ({
-              id: d.id,
-              teamIds: [...d.teamIds],
-              seedScore: d.seedScore,
-            })),
-          } as Prisma.InputJsonObject,
-          rulesetVersion: DRAW_RULESET_VERSION,
-          prngId: DRAW_PRNG_ID,
-          size: drawEntries.length,
-          seedsCount: 0,
-          sameTeamR1Count: plan.sameTeamPairs.length,
-          minimumPossibleConflicts: plan.sameTeamPairs.length,
-          conflicts: conflicts as Prisma.InputJsonValue,
-          createdBy: user.id,
-        },
-      });
-
-      let globalMatchNo = 1;
-
-      for (let i = 0; i < plan.groups.length; i++) {
-        const groupEntries = plan.groups[i]!;
-        const label = String.fromCharCode(65 + i);
-
-        const group = await tx.group.create({
+        const draw = await tx.draw.create({
           data: {
             eventId,
-            drawId: draw.id,
-            label,
+            kind: 'group',
+            version,
+            status: 'preview',
+            seed,
+            seedSource,
+            inputHash,
+            snapshot: {
+              entries: drawEntries.map((d) => ({
+                id: d.id,
+                teamIds: [...d.teamIds],
+                seedScore: d.seedScore,
+              })),
+            } as Prisma.InputJsonObject,
+            rulesetVersion: DRAW_RULESET_VERSION,
+            prngId: DRAW_PRNG_ID,
+            size: drawEntries.length,
+            seedsCount: 0,
+            sameTeamR1Count: plan.sameTeamPairs.length,
+            minimumPossibleConflicts: plan.sameTeamPairs.length,
+            conflicts: conflicts as Prisma.InputJsonValue,
+            createdBy: user.id,
           },
         });
 
-        for (let j = 0; j < groupEntries.length; j++) {
-          const entryId = groupEntries[j]!;
-          await tx.groupMember.create({
+        let globalMatchNo = 1;
+
+        for (let i = 0; i < plan.groups.length; i++) {
+          const groupEntries = plan.groups[i]!;
+          const label = String.fromCharCode(65 + i);
+
+          const group = await tx.group.create({
             data: {
-              groupId: group.id,
-              entryId,
-              seedInGroup: j + 1,
-              pot: j + 1,
+              eventId,
+              drawId: draw.id,
+              label,
             },
           });
-        }
 
-        const schedule = roundRobinSchedule(groupEntries.length);
-        for (const roundItem of schedule) {
-          for (const [posA, posB] of roundItem.matches) {
-            const topEntryId = groupEntries[posA - 1]!;
-            const bottomEntryId = groupEntries[posB - 1]!;
-            const matchNo = globalMatchNo++;
-
-            await tx.match.create({
+          for (let j = 0; j < groupEntries.length; j++) {
+            const entryId = groupEntries[j]!;
+            await tx.groupMember.create({
               data: {
-                eventId,
-                drawId: draw.id,
                 groupId: group.id,
-                stage: 'group',
-                round: roundItem.round,
-                matchNo,
-                court: null,
-                status: 'scheduled',
-                topEntryId,
-                bottomEntryId,
+                entryId,
+                seedInGroup: j + 1,
+                pot: j + 1,
               },
             });
           }
+
+          const schedule = roundRobinSchedule(groupEntries.length);
+          for (const roundItem of schedule) {
+            for (const [posA, posB] of roundItem.matches) {
+              const topEntryId = groupEntries[posA - 1]!;
+              const bottomEntryId = groupEntries[posB - 1]!;
+              const matchNo = globalMatchNo++;
+
+              await tx.match.create({
+                data: {
+                  eventId,
+                  drawId: draw.id,
+                  groupId: group.id,
+                  stage: 'group',
+                  round: roundItem.round,
+                  matchNo,
+                  court: null,
+                  status: 'scheduled',
+                  topEntryId,
+                  bottomEntryId,
+                },
+              });
+            }
+          }
         }
-      }
 
-      await this.audit.record(
-        {
-          actorId: user.id,
-          action: 'draw.preview',
-          entityType: 'draw',
-          entityId: draw.id,
-          after: {
-            id: draw.id,
-            eventId: draw.eventId,
-            version: draw.version,
-            status: draw.status,
-            kind: draw.kind,
-            seed: draw.seed,
-            size: draw.size,
+        await this.audit.record(
+          {
+            actorId: user.id,
+            action: 'draw.preview',
+            entityType: 'draw',
+            entityId: draw.id,
+            after: {
+              id: draw.id,
+              eventId: draw.eventId,
+              version: draw.version,
+              status: draw.status,
+              kind: draw.kind,
+              seed: draw.seed,
+              size: draw.size,
+            },
           },
-        },
-        tx,
-      );
+          tx,
+        );
 
-      return this.toDrawResponse(draw);
-    });
+        return this.toDrawResponse(draw);
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw ApiException.conflict(
+          'DRAW_VERSION_CONFLICT',
+          'มีการสร้างตัวอย่างการจับสลากพร้อมกัน กรุณาลองใหม่',
+        );
+      }
+      throw err;
+    }
   }
 
   async publishDraw(drawId: string, body: PublishDrawInput, user: AuthUser) {

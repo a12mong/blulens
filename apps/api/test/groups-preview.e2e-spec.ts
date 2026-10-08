@@ -395,10 +395,40 @@ describe('groups-preview (bl-25-8)', () => {
     );
   });
 
+  it('concurrent preview calls -> statuses are 201 or 409 DRAW_VERSION_CONFLICT, never 500', async () => {
+    const [resA, resB] = await Promise.all([
+      http()
+        .post(`/api/v1/events/${groupEventId}/groups/preview`)
+        .set('Cookie', cookieFor(committeeId, ['Committee']))
+        .send({}),
+      http()
+        .post(`/api/v1/events/${groupEventId}/groups/preview`)
+        .set('Cookie', cookieFor(adminId, ['Admin']))
+        .send({}),
+    ]);
+
+    const statuses = [resA.status, resB.status].sort();
+    expect([
+      [201, 409],
+      [201, 201],
+    ]).toContainEqual(statuses);
+
+    if (resA.status === 409) {
+      expect(resA.body.error.code).toBe('DRAW_VERSION_CONFLICT');
+    }
+    if (resB.status === 409) {
+      expect(resB.body.error.code).toBe('DRAW_VERSION_CONFLICT');
+    }
+  });
+
   it('published draw exists -> 409 DRAW_ALREADY_LOCKED', async () => {
-    // Mark the latest draw as published
-    await prisma.draw.updateMany({
-      where: { eventId: groupEventId, version: 2 },
+    // Mark the latest draw for this event as published
+    const latest = await prisma.draw.findFirst({
+      where: { eventId: groupEventId },
+      orderBy: { version: 'desc' },
+    });
+    await prisma.draw.update({
+      where: { id: latest!.id },
       data: { status: 'published' },
     });
 
