@@ -3,3 +3,4 @@ export * from './match-score';
 export * from './match-result';
 export * from './groups';
 export * from './knockout-seed';
+export * from './standings';
