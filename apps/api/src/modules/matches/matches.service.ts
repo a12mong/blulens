@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Match, Prisma } from '@prisma/client';
 import type { AuthUser } from '../../common/auth/auth.types';
@@ -1497,5 +1498,178 @@ export class MatchesService {
 
       return this.mapMatch(updated, entryMap, format, userNames);
     });
+  }
+
+  async getEventUmpires(eventId: string, user: AuthUser) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { tournament: { select: { status: true } } },
+    });
+
+    if (!event) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    const umpires = await this.prisma.eventUmpire.findMany({
+      where: { eventId },
+    });
+
+    if (umpires.length === 0) {
+      return [];
+    }
+
+    const userIds = umpires.map((u) => u.userId);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, displayName: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.displayName]));
+
+    return umpires
+      .map((u) => ({
+        userId: u.userId,
+        displayName: userMap.get(u.userId) || '',
+        courts: [...u.courts].sort(),
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
+
+  async putEventUmpires(eventId: string, body: unknown, user: AuthUser) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    // Parse and validate body
+    const putUmpireSchema = z.object({
+      userId: z.string().uuid(),
+      // readOnly in the contract: clients may echo it back from GET or leave it out
+      displayName: z.string().optional(),
+      courts: z
+        .array(z.string().trim().min(1).max(20))
+        .default([])
+        .transform((arr) => [...new Set(arr)]),
+    });
+
+    const bodySchema = z
+      .array(putUmpireSchema)
+      .refine((arr) => new Set(arr.map((u) => u.userId)).size === arr.length, {
+        message: 'Duplicate user IDs',
+        path: [],
+      });
+
+    const parsed = bodySchema.safeParse(body);
+    if (!parsed.success) {
+      throw ApiException.badRequest('VALIDATION_FAILED', parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
+    }
+
+    const newUmpires = parsed.data;
+
+    // Get before state for audit
+    const beforeUmpireRows = await this.prisma.eventUmpire.findMany({
+      where: { eventId },
+    });
+
+    // Fetch user displayNames for before state
+    const beforeUserIds = beforeUmpireRows.map((u) => u.userId);
+    const beforeUsers =
+      beforeUserIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: beforeUserIds } },
+            select: { id: true, displayName: true },
+          })
+        : [];
+    const beforeUserMap = new Map(beforeUsers.map((u) => [u.id, u.displayName]));
+    const beforeUmpires = beforeUmpireRows.map((u) => ({
+      userId: u.userId,
+      displayName: beforeUserMap.get(u.userId) || '',
+      courts: [...u.courts].sort(),
+    }));
+
+    // Check all users exist and have Umpire role (one query; first offender in body order)
+    const candidates = await this.prisma.user.findMany({
+      where: { id: { in: newUmpires.map((u) => u.userId) } },
+      include: { roles: { select: { role: true } } },
+    });
+    const candidateById = new Map(candidates.map((c) => [c.id, c]));
+    for (const umpire of newUmpires) {
+      const userWithRole = candidateById.get(umpire.userId);
+
+      if (!userWithRole) {
+        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่พบ', {
+          userId: umpire.userId,
+        });
+      }
+
+      if (userWithRole.status === 'disabled') {
+        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่สามารถใช้ได้', {
+          userId: umpire.userId,
+        });
+      }
+
+      const hasUmpireRole = userWithRole.roles.some((r: any) => r.role === 'Umpire');
+      if (!hasUmpireRole) {
+        throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่มีบทบาท', {
+          userId: umpire.userId,
+        });
+      }
+    }
+
+    // Update in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Get IDs to keep
+      const keepUserIds = new Set(newUmpires.map((u) => u.userId));
+
+      // Delete umpires not in new list
+      await tx.eventUmpire.deleteMany({
+        where: {
+          eventId,
+          userId: { notIn: Array.from(keepUserIds) as string[] },
+        },
+      });
+
+      // Upsert new umpires
+      const upserted = [];
+      for (const umpire of newUmpires) {
+        const result = await tx.eventUmpire.upsert({
+          where: { eventId_userId: { eventId, userId: umpire.userId } },
+          create: {
+            eventId,
+            userId: umpire.userId,
+            courts: umpire.courts,
+          },
+          update: {
+            courts: umpire.courts,
+          },
+        });
+        upserted.push(result);
+      }
+
+      // displayNames come from the eligibility query above (every kept user is in it)
+      const afterUmpires = upserted.map((u) => ({
+        userId: u.userId,
+        displayName: candidateById.get(u.userId)?.displayName ?? '',
+        courts: [...u.courts].sort(),
+      }));
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'event.umpires',
+          entityType: 'event',
+          entityId: eventId,
+          before: beforeUmpires,
+          after: afterUmpires,
+        },
+        tx,
+      );
+
+      return afterUmpires;
+    });
+
+    return result.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 }
