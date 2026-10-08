@@ -7,7 +7,7 @@ import { MEMBER_AUTH_FILE } from './selectors';
 /**
  * Member result loop: member requests (real clip upload) -> reviewers score -> Committee approves -> member opens
  * /me/assessments/{id} (result visible) -> notification bell count -> /notifications -> opens the item -> lands on the detail -> read.
- * The notification steps need GET /me/notifications (Kevin) AND the web built with NEXT_PUBLIC_NOTIFICATIONS=1; they skip
+ * The notification steps need GET /me/notifications (Kevin) AND the web built with NEXT_PUBLIC_NOTIFICATIONS=1 (default-on since ad63ee9); the bell/page/read flow is gated in slice-notifications.spec.ts; the API step skips
  * themselves (with the reason) while either is missing. MinIO must be up. SQL: read-only lookups on blulens_e2e.
  * See docs/qa/slice-member-loop-e2e.md.
  */
@@ -114,23 +114,6 @@ test.describe.serial('member result loop', () => {
       expect(n, 'assessment_approved notification with the detail link').toBeTruthy();
       expect(n.readAt).toBeNull();
       expect(list.unreadCount).toBeGreaterThan(unreadBefore);
-    });
-
-    test('L6 bell shows the unread count; opening the notification lands on the detail and marks it read', async ({ page }) => {
-      test.skip(!notificationsApi, 'GET /me/notifications not available yet (Kevin)');
-      await page.goto('/events');
-      const bell = page.getByTestId('notification-bell');
-      test.skip(!(await bell.isVisible({ timeout: 15000 }).catch(() => false)), 'web built without NEXT_PUBLIC_NOTIFICATIONS=1');
-      await expect(page.getByTestId('notification-badge')).toBeVisible({ timeout: 70000 });
-      await bell.click();
-      await expect(page).toHaveURL(/\/notifications/, { timeout: 20000 });
-      const item = page.locator('[data-testid="notif-item"][data-unread="true"]').filter({ hasText: /./ }).first();
-      await expect(item).toBeVisible({ timeout: 20000 });
-      const unreadText = await page.getByTestId('notif-unread').innerText();
-      await item.click();
-      await expect(page).toHaveURL(new RegExp(`/me/assessments/${id}$`), { timeout: 20000 });
-      await page.goto('/notifications');
-      await expect(page.getByTestId('notif-unread')).not.toHaveText(unreadText, { timeout: 20000 });
     });
   });
 });
