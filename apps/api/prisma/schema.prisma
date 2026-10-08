@@ -46,7 +46,6 @@ model User {
   assessments   Assessment[]       @relation("AssessmentSubject")
   assignments   ReviewAssignment[] @relation("AssignmentReviewer")
   entryPlayers  EntryPlayer[]
-  umpireAssignments EventUmpire[]   @relation("umpireAssignments")
 
   @@map("users")
 }
@@ -614,7 +613,6 @@ model EventUmpire {
   courts    String[] @default([])
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user      User     @relation("umpireAssignments", fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([eventId, userId])
   @@map("event_umpires")

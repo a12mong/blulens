@@ -189,8 +189,8 @@ describe('GET/PUT /events/{eventId}/umpires (bl-33-5)', () => {
         ])
         .expect(409);
 
-      expect(res.body.code).toBe('UMPIRE_NOT_ELIGIBLE');
-      expect(res.body.details?.userId).toBe(memberId);
+      expect(res.body.error?.code).toBe('UMPIRE_NOT_ELIGIBLE');
+      expect(res.body.error?.details?.userId).toBe(memberId);
     });
 
     it('PUT with duplicate userIds -> 400', async () => {
@@ -211,7 +211,7 @@ describe('GET/PUT /events/{eventId}/umpires (bl-33-5)', () => {
         ])
         .expect(400);
 
-      expect(res.body.code).toBe('INVALID_REQUEST');
+      expect(res.body.error?.code).toBe('INVALID_REQUEST');
     });
 
     it('Umpire PUT -> 403', async () => {

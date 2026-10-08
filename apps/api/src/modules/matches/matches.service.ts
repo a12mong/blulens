@@ -1372,15 +1372,26 @@ export class MatchesService {
 
     const umpires = await this.prisma.eventUmpire.findMany({
       where: { eventId },
-      include: { user: { select: { displayName: true } } },
-      orderBy: { user: { displayName: 'asc' } },
     });
 
-    return umpires.map((u) => ({
-      userId: u.userId,
-      displayName: u.user.displayName,
-      courts: [...u.courts].sort(),
-    }));
+    if (umpires.length === 0) {
+      return [];
+    }
+
+    const userIds = umpires.map((u) => u.userId);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, displayName: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.displayName]));
+
+    return umpires
+      .map((u) => ({
+        userId: u.userId,
+        displayName: userMap.get(u.userId) || '',
+        courts: [...u.courts].sort(),
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
   async putEventUmpires(eventId: string, body: unknown, user: AuthUser) {
@@ -1414,10 +1425,25 @@ export class MatchesService {
     const newUmpires = parsed.data;
 
     // Get before state for audit
-    const beforeUmpires = await this.prisma.eventUmpire.findMany({
+    const beforeUmpireRows = await this.prisma.eventUmpire.findMany({
       where: { eventId },
-      include: { user: { select: { displayName: true } } },
     });
+
+    // Fetch user displayNames for before state
+    const beforeUserIds = beforeUmpireRows.map((u) => u.userId);
+    const beforeUsers =
+      beforeUserIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: beforeUserIds } },
+            select: { id: true, displayName: true },
+          })
+        : [];
+    const beforeUserMap = new Map(beforeUsers.map((u) => [u.id, u.displayName]));
+    const beforeUmpires = beforeUmpireRows.map((u) => ({
+      userId: u.userId,
+      displayName: beforeUserMap.get(u.userId) || '',
+      courts: [...u.courts].sort(),
+    }));
 
     // Check all users exist and have Umpire role
     for (const umpire of newUmpires) {
@@ -1472,39 +1498,36 @@ export class MatchesService {
           update: {
             courts: umpire.courts,
           },
-          include: { user: { select: { displayName: true } } },
         });
         upserted.push(result);
       }
 
-      // Audit
-      const afterUmpires = upserted.map((u) => ({
-        userId: u.userId,
-        displayName: u.user.displayName,
-        courts: [...u.courts].sort(),
-      }));
-
-      const beforeData = beforeUmpires.map((u) => ({
-        userId: u.userId,
-        displayName: u.user.displayName,
-        courts: [...u.courts].sort(),
-      }));
-
-      await this.audit.record(
-        {
-          actorId: user.id,
-          action: 'event.umpires',
-          entityType: 'event',
-          entityId: eventId,
-          before: beforeData,
-          after: afterUmpires,
-        },
-        tx,
-      );
-
-      return afterUmpires.sort((a, b) => a.displayName.localeCompare(b.displayName));
+      return upserted;
     });
 
-    return result;
+    // Fetch displayNames for after state (outside transaction)
+    const afterUserIds = result.map((u) => u.userId);
+    const afterUsers = await this.prisma.user.findMany({
+      where: { id: { in: afterUserIds } },
+      select: { id: true, displayName: true },
+    });
+    const afterUserMap = new Map(afterUsers.map((u) => [u.id, u.displayName]));
+    const afterUmpires = result.map((u) => ({
+      userId: u.userId,
+      displayName: afterUserMap.get(u.userId) || '',
+      courts: [...u.courts].sort(),
+    }));
+
+    // Audit (outside transaction)
+    await this.audit.record({
+      actorId: user.id,
+      action: 'event.umpires',
+      entityType: 'event',
+      entityId: eventId,
+      before: beforeUmpires,
+      after: afterUmpires,
+    });
+
+    return afterUmpires.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 }
