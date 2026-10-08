@@ -30,11 +30,11 @@ const TIER_NAMES: Record<Tier, string> = {
 };
 
 const TIER_COLORS: Record<Tier, string> = {
-  Rookie: 'bg-blue-100 hover:bg-blue-200',
-  Beginner: 'bg-cyan-100 hover:bg-cyan-200',
-  Standard: 'bg-green-100 hover:bg-green-200',
-  Neutral: 'bg-yellow-100 hover:bg-yellow-200',
-  Professional: 'bg-red-100 hover:bg-red-200',
+  Rookie: 'bg-primary/10 text-primary hover:bg-primary/20',
+  Beginner: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+  Standard: 'bg-success/15 text-success hover:bg-success/25',
+  Neutral: 'bg-warning/20 text-warning-foreground hover:bg-warning/30',
+  Professional: 'bg-destructive/15 text-destructive hover:bg-destructive/25',
 };
 
 export type GradePickerProps = {
@@ -110,7 +110,7 @@ export function GradePicker({
           const tierKeys = GRADE_KEYS.filter((_, i) => TIERS[i] === tier);
           return (
             <div key={tier}>
-              <p className="text-sm font-medium text-gray-700">{TIER_NAMES[tier as Tier]}</p>
+              <p className="text-sm font-medium text-muted-foreground">{TIER_NAMES[tier as Tier]}</p>
               <div className="flex flex-wrap gap-2">
                 {tierKeys.map((key) => (
                   <button
@@ -125,8 +125,8 @@ export function GradePicker({
                     onKeyDown={(e) => handleKeyDown(e, key)}
                     disabled={disabled}
                     data-testid={`gp-key-${key}`}
-                    className={`min-h-[44px] min-w-[44px] px-3 py-2 rounded font-medium transition-all ${
-                      value === key ? 'ring-2 ring-blue-500 bg-white' : 'bg-gray-100 hover:bg-gray-200'
+                    className={`min-h-11 min-h-[44px] min-w-11 min-w-[44px] px-3 py-2 rounded font-medium transition-all ${
+                      value === key ? 'ring-2 ring-primary bg-background text-foreground' : 'bg-muted text-foreground hover:bg-muted/80'
                     } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {key}
@@ -149,8 +149,8 @@ export function GradePicker({
             onKeyDown={(e) => handleKeyDown(e, 'NA')}
             disabled={disabled}
             data-testid="gp-na"
-            className={`w-full px-3 py-2 rounded font-medium transition-all ${
-              value === null ? 'ring-2 ring-red-500 bg-white' : 'bg-gray-100 hover:bg-gray-200'
+            className={`w-full min-h-11 min-h-[44px] px-3 py-2 rounded font-medium transition-all ${
+              value === null ? 'ring-2 ring-destructive bg-background text-foreground' : 'bg-muted text-foreground hover:bg-muted/80'
             } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >
             {value === null && <span>✓ </span>}ประเมินไม่ได้
@@ -158,7 +158,7 @@ export function GradePicker({
         )}
 
         {displayTier && anchorsByTier[displayTier as Tier] && (
-          <p data-testid="gp-anchor" className="text-sm text-gray-600 italic">
+          <p data-testid="gp-anchor" className="text-sm text-muted-foreground italic">
             {anchorsByTier[displayTier as Tier]}
           </p>
         )}
@@ -187,8 +187,8 @@ export function GradePicker({
             onClick={() => !disabled && setExpandedTier(displayTier === tier ? null : tier)}
             disabled={disabled}
             data-testid={`gp-tier-${tier}`}
-            className={`min-h-[44px] min-w-[44px] px-4 py-2 rounded font-medium transition-all ${TIER_COLORS[tier]} ${
-              displayTier === tier ? 'ring-2 ring-blue-500' : ''
+            className={`min-h-11 min-h-[44px] min-w-11 min-w-[44px] px-4 py-2 rounded font-medium transition-all ${TIER_COLORS[tier]} ${
+              displayTier === tier ? 'ring-2 ring-primary' : ''
             } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >
             {TIER_NAMES[tier]}
@@ -210,8 +210,8 @@ export function GradePicker({
               onKeyDown={(e) => handleKeyDown(e, key)}
               disabled={disabled}
               data-testid={`gp-key-${key}`}
-              className={`px-3 py-2 rounded font-medium transition-all ${
-                value === key ? 'ring-2 ring-blue-500 bg-white' : 'bg-gray-100 hover:bg-gray-200'
+              className={`min-h-11 min-h-[44px] min-w-11 min-w-[44px] px-3 py-2 rounded font-medium transition-all ${
+                value === key ? 'ring-2 ring-primary bg-background text-foreground' : 'bg-muted text-foreground hover:bg-muted/80'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               {key}
@@ -226,7 +226,7 @@ export function GradePicker({
           data-testid="gp-clear"
           onClick={() => !disabled && onChange(undefined)}
           disabled={disabled}
-          className={`min-h-[44px] px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 ${
+          className={`min-h-11 min-h-[44px] px-3 py-1 text-sm rounded bg-muted text-muted-foreground hover:bg-muted/80 ${
             disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           }`}
         >
@@ -246,8 +246,8 @@ export function GradePicker({
           onKeyDown={(e) => handleKeyDown(e, 'NA')}
           disabled={disabled}
           data-testid="gp-na"
-          className={`w-full min-h-[44px] px-3 py-2 rounded font-medium transition-all ${
-            value === null ? 'ring-2 ring-red-500 bg-white' : 'bg-gray-100 hover:bg-gray-200'
+          className={`w-full min-h-11 min-h-[44px] px-3 py-2 rounded font-medium transition-all ${
+            value === null ? 'ring-2 ring-destructive bg-background text-foreground' : 'bg-muted text-foreground hover:bg-muted/80'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           {value === null && <span>✓ </span>}ประเมินไม่ได้
@@ -255,7 +255,7 @@ export function GradePicker({
       )}
 
       {displayTier && anchorsByTier[displayTier as Tier] && (
-        <p data-testid="gp-anchor" className="text-sm text-gray-600 italic">
+        <p data-testid="gp-anchor" className="text-sm text-muted-foreground italic">
           {anchorsByTier[displayTier as Tier]}
         </p>
       )}
