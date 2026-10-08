@@ -4312,10 +4312,12 @@ export interface components {
             /** @enum {string} */
             source: "computed" | "override";
             /**
-             * @description approval state of this result row
+             * @description Status of this result row (= DB ResultStatus). PUBLISHED to the member = approved | overridden.
+             *     provisional = single-reviewer result (grading.md 12.2): the member may see it only with the label "ชั่วคราว · กรรมการ 1 คน"; not usable for entry/seeding until confirmed.
+             *     needs_reviewers | pending_approval | disputed = NOT published: the web shows "รอคณะกรรมการ" and no grade.
              * @enum {string}
              */
-            status?: "pending" | "approved" | "superseded";
+            status: "needs_reviewers" | "provisional" | "pending_approval" | "disputed" | "approved" | "overridden";
             grade: components["schemas"]["GradeView"];
             /** @description valid reviews used after exclusion */
             nRaters: number;
@@ -4369,6 +4371,7 @@ export interface components {
         };
         AssessmentDetail: components["schemas"]["Assessment"] & {
             clips?: components["schemas"]["Clip"][];
+            /** @description For the subject Member (non-Committee caller) this is null unless the latest row status is approved | overridden | provisional, so an unpublished grade never reaches the member's browser. Committee/Admin always get the latest row. */
             latestResult?: components["schemas"]["AssessmentResult"] | null;
             /** @description Committee only */
             reviewerRows?: components["schemas"]["ReviewerScoreRow"][];

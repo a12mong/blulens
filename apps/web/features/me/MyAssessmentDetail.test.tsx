@@ -51,6 +51,25 @@ describe('MyAssessmentDetail', () => {
     expect(screen.getByTestId('myassess-pending')).toBeInTheDocument();
   });
 
+  it('labels a provisional result and treats other statuses as waiting', () => {
+    const res = (status: string) => ({ version: 1, source: 'computed', status, grade, nRaters: 1, nExcluded: 0, methodVersion: 'v1', computedAt: '2026-10-05T00:00:00Z' });
+    mock({ ...base, status: 'provisional', latestResult: res('provisional') });
+    const { unmount } = render(<MyAssessmentDetail id="a1" />);
+    expect(screen.getByTestId('myassess-provisional')).toHaveTextContent('ชั่วคราว · กรรมการ 1 คน');
+    expect(screen.getByTestId('myassess-grade')).toBeInTheDocument();
+    unmount();
+    for (const st of ['needs_reviewers', 'disputed']) {
+      mock({ ...base, status: 'in_review', latestResult: res(st) });
+      const r = render(<MyAssessmentDetail id="a1" />);
+      expect(screen.queryByTestId('myassess-grade')).toBeNull();
+      expect(screen.getByTestId('myassess-pending')).toHaveTextContent('รอคณะกรรมการ');
+      r.unmount();
+    }
+    mock({ ...base, status: 'overridden', latestResult: res('overridden') });
+    render(<MyAssessmentDetail id="a1" />);
+    expect(screen.getByTestId('myassess-grade')).toBeInTheDocument();
+  });
+
   it('shows pending wording when there is no published result', () => {
     mock({ ...base, status: 'in_review', latestResult: null, clips: [] });
     render(<MyAssessmentDetail id="a1" />);
