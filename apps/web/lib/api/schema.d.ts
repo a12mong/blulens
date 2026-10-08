@@ -3906,6 +3906,14 @@ export interface components {
             teamId?: string | null;
             /** Format: date-time */
             createdAt?: string;
+            /** @description displayName of the requester; null if the user no longer exists */
+            readonly requestedByName?: string | null;
+            /** @description up to 5 ACTIVE teams whose normalised name or alias is close to the requested name (architecture A8 normalisation), so the Committee can alias instead of creating a duplicate */
+            readonly similarTeams?: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            }[];
         };
         /** @description reason-bearing input (>= 20 chars) for audited privileged actions */
         AuditedReasonInput: {
