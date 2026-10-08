@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -48,6 +49,24 @@ const putMatchResultSchema = z.object({
 export class PutMatchResultDto extends createZodDto(putMatchResultSchema) {}
 
 export class RejectMatchResultDto extends createZodDto(reasonInputSchema) {}
+
+const patchMatchAssignmentSchema = z
+  .object({
+    court: z
+      .string()
+      .trim()
+      .max(20, 'court must not exceed 20 characters')
+      .nullable()
+      .optional()
+      .transform((val) => (val === '' ? null : val)),
+    umpireId: z.string().uuid('umpireId must be a valid UUID').nullable().optional(),
+  })
+  .refine((data) => data.court !== undefined || data.umpireId !== undefined, {
+    message: 'ต้องระบุ court หรือ umpireId อย่างน้อยหนึ่งรายการ',
+    path: ['court'],
+  });
+
+export class PatchMatchAssignmentDto extends createZodDto(patchMatchAssignmentSchema) {}
 
 const uuid = new ParseUUIDPipe({ version: '4' });
 
@@ -114,5 +133,16 @@ export class MatchesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.matches.rejectMatchResult(matchId, body.reason, user);
+  }
+
+  @Roles('Committee', 'Admin')
+  @HttpCode(HttpStatus.OK)
+  @Patch('matches/:matchId/assignment')
+  patchMatchAssignment(
+    @Param('matchId', uuid) matchId: string,
+    @Body() body: PatchMatchAssignmentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.matches.patchMatchAssignment(matchId, body, user);
   }
 }

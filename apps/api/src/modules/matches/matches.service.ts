@@ -105,6 +105,11 @@ export interface PutMatchResultInput {
   reason?: string;
 }
 
+export interface PatchMatchAssignmentInput {
+  court?: string | null;
+  umpireId?: string | null;
+}
+
 const isStaff = (u?: AuthUser) => !!u?.roles.some((r) => r === 'Committee' || r === 'Admin');
 
 @Injectable()
@@ -1357,5 +1362,135 @@ export class MatchesService {
         };
       },
     );
+  }
+
+  async patchMatchAssignment(
+    matchId: string,
+    body: PatchMatchAssignmentInput,
+    caller: AuthUser,
+  ): Promise<MappedMatch> {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. SELECT the match FOR UPDATE (raw query)
+      const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM matches WHERE id = ${matchId}::uuid FOR UPDATE
+      `;
+      if (lockedRows.length === 0) {
+        throw ApiException.notFound('ไม่พบแมตช์ที่ต้องการ', 'MATCH_NOT_FOUND');
+      }
+
+      // 2. Load match with event
+      const match = await tx.match.findUnique({
+        where: { id: matchId },
+        include: {
+          event: { select: { id: true, format: true } },
+        },
+      });
+      if (!match) {
+        throw ApiException.notFound('ไม่พบแมตช์ที่ต้องการ', 'MATCH_NOT_FOUND');
+      }
+
+      // 3. Check stage confirmed -> 409 STAGE_CONFIRMED
+      if (match.groupId) {
+        const standingsCount = await tx.groupStanding.count({
+          where: { groupId: match.groupId },
+        });
+        if (standingsCount > 0) {
+          throw ApiException.conflict(
+            'STAGE_CONFIRMED',
+            'รอบแบ่งกลุ่มได้รับการยืนยันผลแล้ว ไม่สามารถแก้ไขได้',
+          );
+        }
+      }
+
+      // 4. Validate umpireId if set
+      if (body.umpireId !== undefined && body.umpireId !== null) {
+        const umpireUser = await tx.user.findUnique({
+          where: { id: body.umpireId },
+          include: {
+            roles: { select: { role: true } },
+          },
+        });
+
+        if (
+          !umpireUser ||
+          umpireUser.status === 'disabled' ||
+          umpireUser.deletedAt !== null ||
+          !umpireUser.roles.some((r) => r.role === 'Umpire')
+        ) {
+          throw new ApiException(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'UMPIRE_INVALID',
+            'กรรมการไม่ถูกต้อง หรือไม่มีสิทธิ์ทำหน้าที่กรรมการ',
+          );
+        }
+
+        // Check if umpire is a player of either entry
+        const entryIds = [match.topEntryId, match.bottomEntryId].filter(
+          (id): id is string => typeof id === 'string' && id.length > 0,
+        );
+
+        if (entryIds.length > 0) {
+          const isPlayer = await tx.entryPlayer.findFirst({
+            where: {
+              entryId: { in: entryIds },
+              userId: body.umpireId,
+            },
+          });
+          if (isPlayer) {
+            throw new ApiException(
+              HttpStatus.UNPROCESSABLE_ENTITY,
+              'UMPIRE_OWN_MATCH',
+              'กรรมการเป็นผู้เล่นในแมตช์นี้ ไม่สามารถทำหน้าที่ได้',
+            );
+          }
+        }
+      }
+
+      // 5. Update only the given fields
+      const updateData: Prisma.MatchUpdateInput = {};
+      if (body.court !== undefined) {
+        updateData.court = body.court;
+      }
+      if (body.umpireId !== undefined) {
+        updateData.umpireId = body.umpireId;
+      }
+
+      const updated = await tx.match.update({
+        where: { id: matchId },
+        data: updateData,
+      });
+
+      // 6. Record audit log
+      await this.audit.record(
+        {
+          actorId: caller.id,
+          action: 'match.assign',
+          entityType: 'match',
+          entityId: match.id,
+          before: {
+            court: match.court,
+            umpireId: match.umpireId,
+          },
+          after: {
+            court: updated.court,
+            umpireId: updated.umpireId,
+          },
+        },
+        tx,
+      );
+
+      // 7. Map and return Match
+      const entryIds = [updated.topEntryId, updated.bottomEntryId].filter(
+        (id): id is string => typeof id === 'string' && id.length > 0,
+      );
+      const entryMap = await this.loadEntryMap(tx, entryIds);
+      const userNames = await this.loadUserNames(
+        updated.reportedBy ? [updated.reportedBy] : [],
+        tx,
+      );
+      const format = resolveMatchFormat(match.event.format, match.stage);
+
+      return this.mapMatch(updated, entryMap, format, userNames);
+    });
   }
 }
