@@ -211,7 +211,22 @@ describe('GET/PUT /events/{eventId}/umpires (bl-33-5)', () => {
         ])
         .expect(400);
 
-      expect(res.body.error?.code).toBe('INVALID_REQUEST');
+      expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('PUT without displayName (readOnly) and without courts -> 200, courts [] and an audit row', async () => {
+      const res = await http()
+        .put(`/api/v1/events/${eventId}/umpires`)
+        .set('Cookie', committeeCookie)
+        .send([{ userId: umpire1Id }])
+        .expect(200);
+
+      expect(res.body.data).toEqual([{ userId: umpire1Id, displayName: umpire1Name, courts: [] }]);
+      const audit = await prisma.auditLog.findFirst({
+        where: { action: 'event.umpires', entityId: eventId },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(audit).not.toBeNull();
     });
 
     it('Umpire PUT -> 403', async () => {

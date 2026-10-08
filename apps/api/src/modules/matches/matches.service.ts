@@ -1406,8 +1406,12 @@ export class MatchesService {
     // Parse and validate body
     const putUmpireSchema = z.object({
       userId: z.string().uuid(),
-      displayName: z.string().readonly(),
-      courts: z.array(z.string().trim().min(1).max(20)).transform((arr) => [...new Set(arr)]),
+      // readOnly in the contract: clients may echo it back from GET or leave it out
+      displayName: z.string().optional(),
+      courts: z
+        .array(z.string().trim().min(1).max(20))
+        .default([])
+        .transform((arr) => [...new Set(arr)]),
     });
 
     const bodySchema = z
@@ -1419,7 +1423,7 @@ export class MatchesService {
 
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) {
-      throw new ApiException(HttpStatus.BAD_REQUEST, 'INVALID_REQUEST', 'Invalid request body');
+      throw ApiException.badRequest('VALIDATION_FAILED', parsed.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
     }
 
     const newUmpires = parsed.data;
@@ -1445,12 +1449,14 @@ export class MatchesService {
       courts: [...u.courts].sort(),
     }));
 
-    // Check all users exist and have Umpire role
+    // Check all users exist and have Umpire role (one query; first offender in body order)
+    const candidates = await this.prisma.user.findMany({
+      where: { id: { in: newUmpires.map((u) => u.userId) } },
+      include: { roles: { select: { role: true } } },
+    });
+    const candidateById = new Map(candidates.map((c) => [c.id, c]));
     for (const umpire of newUmpires) {
-      const userWithRole = await this.prisma.user.findUnique({
-        where: { id: umpire.userId },
-        include: { roles: { select: { role: true } } },
-      });
+      const userWithRole = candidateById.get(umpire.userId);
 
       if (!userWithRole) {
         throw new ApiException(HttpStatus.CONFLICT, 'UMPIRE_NOT_ELIGIBLE', 'ผู้ตัดสินไม่พบ', {
@@ -1502,32 +1508,28 @@ export class MatchesService {
         upserted.push(result);
       }
 
-      return upserted;
+      // displayNames come from the eligibility query above (every kept user is in it)
+      const afterUmpires = upserted.map((u) => ({
+        userId: u.userId,
+        displayName: candidateById.get(u.userId)?.displayName ?? '',
+        courts: [...u.courts].sort(),
+      }));
+
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'event.umpires',
+          entityType: 'event',
+          entityId: eventId,
+          before: beforeUmpires,
+          after: afterUmpires,
+        },
+        tx,
+      );
+
+      return afterUmpires;
     });
 
-    // Fetch displayNames for after state (outside transaction)
-    const afterUserIds = result.map((u) => u.userId);
-    const afterUsers = await this.prisma.user.findMany({
-      where: { id: { in: afterUserIds } },
-      select: { id: true, displayName: true },
-    });
-    const afterUserMap = new Map(afterUsers.map((u) => [u.id, u.displayName]));
-    const afterUmpires = result.map((u) => ({
-      userId: u.userId,
-      displayName: afterUserMap.get(u.userId) || '',
-      courts: [...u.courts].sort(),
-    }));
-
-    // Audit (outside transaction)
-    await this.audit.record({
-      actorId: user.id,
-      action: 'event.umpires',
-      entityType: 'event',
-      entityId: eventId,
-      before: beforeUmpires,
-      after: afterUmpires,
-    });
-
-    return afterUmpires.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return result.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 }
