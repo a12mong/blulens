@@ -31,6 +31,9 @@ const MESSAGES: Record<string, string> = {
   MATCH_ALREADY_CONFIRMED: 'แมตช์นี้ถูกยืนยันแล้ว',
   UMPIRE_NOT_ASSIGNED: 'คุณไม่ได้รับมอบหมายแมตช์นี้',
   UMPIRE_OWN_MATCH: 'ห้ามกรอกผลแมตช์ที่ตนเองเป็นผู้เล่น',
+  REVIEWER_CONFLICT_OF_INTEREST: 'ผู้ประเมินสังกัดทีมเดียวกับผู้ถูกประเมิน',
+  REVIEWER_NOT_ELIGIBLE: 'ผู้ใช้นี้ไม่มีสิทธิ์เป็นผู้ประเมิน',
+  ASSESSMENT_NOT_ASSIGNABLE: 'สถานะนี้มอบหมายผู้ประเมินเพิ่มไม่ได้',
 };
 
 function hasThai(text: string): boolean {

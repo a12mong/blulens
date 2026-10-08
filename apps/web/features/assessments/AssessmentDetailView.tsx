@@ -7,6 +7,7 @@ import { GradeBand, type GradeKey } from '@/components/ui/GradeBand';
 import { thaiError } from '@/lib/errors';
 import { AssessmentStatusBadge } from './AssessmentStatusBadge';
 import { AssessmentDecisions } from './AssessmentDecisions';
+import { AssignReviewers } from './AssignReviewers';
 import { useAssessmentDetail } from './api';
 
 export const FLAG_LABELS: Record<string, string> = {
@@ -135,6 +136,9 @@ export function AssessmentDetailView({ id }: AssessmentDetailViewProps) {
 
       {/* Decisions */}
       <AssessmentDecisions detail={data} />
+
+      {/* Assign Reviewers */}
+      <AssignReviewers detail={data} />
 
       {/* Flags */}
       <div data-testid="detail-flags" className="flex flex-col gap-2">

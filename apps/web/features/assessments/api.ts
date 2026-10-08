@@ -76,7 +76,6 @@ export function useAssessmentAction(
   });
 }
 
-
 type RaterStats = components['schemas']['RaterStats'];
 
 export const raterStatsKey = (window?: string) =>
@@ -96,3 +95,34 @@ export function useRaterStats(
     ...options,
   });
 }
+
+export type AssignReviewersPayload = {
+  reviewerIds: string[];
+  dueAt?: string;
+};
+
+export function useAssignReviewers(
+  id: string,
+  options?: Omit<
+    UseMutationOptions<AssessmentDetail, Error, AssignReviewersPayload>,
+    'mutationFn'
+  >,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    ...options,
+    mutationFn: async (payload: AssignReviewersPayload) => {
+      return apiFetch<AssessmentDetail>(`/assessments/${id}/assign`, {
+        method: 'POST',
+        body: payload,
+      });
+    },
+    onSuccess: (data, ...args) => {
+      queryClient.setQueryData(assessmentDetailKey(id), data);
+      queryClient.invalidateQueries({ queryKey: ['assessments'] });
+      (options?.onSuccess as any)?.(data, ...args);
+    },
+  });
+}
+
