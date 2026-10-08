@@ -59,6 +59,12 @@ export class MatchesController {
     return this.matches.getEventMatches(eventId, query, user);
   }
 
+  @Public()
+  @Get('events/:eventId/standings')
+  getEventStandings(@Param('eventId', uuid) eventId: string, @CurrentUser() user?: AuthUser) {
+    return this.matches.getEventStandings(eventId, user);
+  }
+
   @Roles('Umpire', 'Committee', 'Admin')
   @Put('matches/:matchId/result')
   putMatchResult(

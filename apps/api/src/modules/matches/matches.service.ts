@@ -5,10 +5,13 @@ import { AuditService } from '../../common/audit/audit.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
+  computeGroupStandings,
+  eventFormatSchema,
   matchResultTransition,
   resolveMatchFormat,
   validateMatchScore,
   walkoverGames,
+  type GroupMatch,
   type MatchFlag,
   type MatchFormat,
   type ResultAction,
@@ -32,6 +35,24 @@ export interface EventMatchesQuery {
 
 export interface UmpireMatchesQuery {
   status?: 'scheduled' | 'reported' | 'confirmed';
+}
+
+export interface EventGroupStanding {
+  groupId: string;
+  entryId: string;
+  entry: EntryRef | null;
+  rank: number;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  points: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  diff: number;
+  tiebreakNote: string | null;
+  qualification: 'qualified' | 'best_third' | 'best_third_contender' | 'out';
+  confirmed: boolean;
 }
 
 export interface PutMatchResultInput {
@@ -171,6 +192,160 @@ export class MatchesService {
     };
 
     return matches.map((m) => this.mapMatch(m, entryMap, formats[m.stage] ?? knockoutFormat));
+  }
+
+  async getEventStandings(eventId: string, user?: AuthUser): Promise<EventGroupStanding[]> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      include: { tournament: { select: { status: true } } },
+    });
+
+    if (!event || (event.tournament.status === 'draft' && !isStaff(user))) {
+      throw ApiException.notFound('ไม่พบประเภทการแข่งที่ต้องการ', 'EVENT_NOT_FOUND');
+    }
+
+    const draw = await this.prisma.draw.findFirst({
+      where: { eventId, kind: 'group', status: 'published' },
+    });
+
+    if (!draw) {
+      return [];
+    }
+
+    // Parse format once with defaults on failure
+    let advancePerGroup = 2;
+    let bestThirds = 0;
+    let pointsCfg = { win: 3, draw: 1, loss: 0 };
+
+    const parsed = eventFormatSchema.safeParse(event.format);
+    if (parsed.success) {
+      advancePerGroup = parsed.data.advancePerGroup;
+      bestThirds = parsed.data.bestThirds;
+      if (parsed.data.points) {
+        pointsCfg = parsed.data.points;
+      }
+    } else if (event.format && typeof event.format === 'object') {
+      const raw = event.format as Record<string, unknown>;
+      if (typeof raw.advancePerGroup === 'number') advancePerGroup = raw.advancePerGroup;
+      if (typeof raw.bestThirds === 'number') bestThirds = raw.bestThirds;
+      if (raw.points && typeof raw.points === 'object') {
+        const rawPts = raw.points as Record<string, unknown>;
+        pointsCfg = {
+          win: typeof rawPts.win === 'number' ? rawPts.win : 3,
+          draw: typeof rawPts.draw === 'number' ? rawPts.draw : 1,
+          loss: typeof rawPts.loss === 'number' ? rawPts.loss : 0,
+        };
+      }
+    }
+
+    // Query groups ordered by label
+    const groups = await this.prisma.group.findMany({
+      where: { drawId: draw.id },
+      orderBy: { label: 'asc' },
+      include: {
+        members: { select: { entryId: true } },
+        standings: { orderBy: { rank: 'asc' } },
+        matches: {
+          select: {
+            id: true,
+            topEntryId: true,
+            bottomEntryId: true,
+            status: true,
+            games: true,
+          },
+        },
+      },
+    });
+
+    if (groups.length === 0) {
+      return [];
+    }
+
+    // Load all entry IDs in one query (no N+1)
+    const allEntryIds = Array.from(
+      new Set(
+        groups.flatMap((g) => [
+          ...g.members.map((m) => m.entryId),
+          ...g.standings.map((s) => s.entryId),
+        ]),
+      ),
+    );
+    const entryMap = await this.loadEntryMap(this.prisma, allEntryIds);
+
+    const result: EventGroupStanding[] = [];
+
+    for (const group of groups) {
+      if (group.standings.length > 0) {
+        // Snapshot exists: map confirmed standings
+        for (const s of group.standings) {
+          result.push({
+            groupId: group.id,
+            entryId: s.entryId,
+            entry: entryMap.get(s.entryId) ?? null,
+            rank: s.rank,
+            played: s.played,
+            won: s.won,
+            drawn: s.drawn,
+            lost: s.lost,
+            points: s.points,
+            pointsFor: s.pointsFor,
+            pointsAgainst: s.pointsAgainst,
+            diff: s.diff,
+            tiebreakNote: s.tiebreakNote,
+            qualification: s.qualification,
+            confirmed: true,
+          });
+        }
+      } else {
+        // Live calculation: compute live standings from matches
+        const entryIds = group.members.map((m) => m.entryId);
+        const groupMatches: GroupMatch[] = group.matches.map((m) => ({
+          a: m.topEntryId ?? '',
+          b: m.bottomEntryId ?? '',
+          status: m.status as GroupMatch['status'],
+          games: Array.isArray(m.games)
+            ? (m.games as Array<{ a: number; b: number }>).map(
+                (g) => [g.a, g.b] as [number, number],
+              )
+            : [],
+        }));
+
+        const liveRows = computeGroupStandings(entryIds, groupMatches, pointsCfg, draw.seed);
+
+        for (const row of liveRows) {
+          let qualification: 'qualified' | 'best_third_contender' | 'out';
+          if (row.rank <= advancePerGroup) {
+            qualification = 'qualified';
+          } else if (row.rank === advancePerGroup + 1 && bestThirds > 0) {
+            qualification = 'best_third_contender';
+          } else {
+            qualification = 'out';
+          }
+
+          const tiebreakNote = row.decidedBy === 'points' || !row.decidedBy ? null : row.decidedBy;
+
+          result.push({
+            groupId: group.id,
+            entryId: row.entryId,
+            entry: entryMap.get(row.entryId) ?? null,
+            rank: row.rank,
+            played: row.played,
+            won: row.won,
+            drawn: row.drawn,
+            lost: row.lost,
+            points: row.points,
+            pointsFor: row.pointsFor,
+            pointsAgainst: row.pointsAgainst,
+            diff: row.diff,
+            tiebreakNote,
+            qualification,
+            confirmed: false,
+          });
+        }
+      }
+    }
+
+    return result;
   }
 
   async getUmpireMatches(query: UmpireMatchesQuery, caller: AuthUser) {
