@@ -66,6 +66,13 @@ export interface ListAssessmentsParams {
   sort?: string;
 }
 
+/** Result statuses a subject Member may see (openapi AssessmentResult.status description). */
+const MEMBER_VISIBLE_RESULT_STATUSES: ResultStatus[] = [
+  ResultStatus.approved,
+  ResultStatus.overridden,
+  ResultStatus.provisional,
+];
+
 @Injectable()
 export class AssessmentsService {
   constructor(
@@ -230,7 +237,12 @@ export class AssessmentsService {
     let latestResult = null;
     let reviewerRows: any[] = [];
 
-    if (latestResultRow) {
+    // openapi AssessmentDetail.latestResult: the subject Member only ever receives a PUBLISHED row
+    // (approved | overridden, or provisional with its label); an unpublished grade never reaches their browser.
+    const visibleToMember =
+      latestResultRow !== null && MEMBER_VISIBLE_RESULT_STATUSES.includes(latestResultRow.status);
+
+    if (latestResultRow && (isStaff || visibleToMember)) {
       latestResult = {
         version: latestResultRow.version,
         source: latestResultRow.source,

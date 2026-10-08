@@ -314,7 +314,7 @@ describe('GET /api/v1/assessments/:assessmentId (bl-26-2 detail)', () => {
     expect(row2.criteria).toHaveLength(6);
   });
 
-  it('subject Member gets 200 with reviewerRows []', async () => {
+  it('subject Member gets 200 with reviewerRows [] and NO latestResult while it is pending_approval (unpublished)', async () => {
     const res = await http()
       .get(`/api/v1/assessments/${assessmentId}`)
       .set('Cookie', subjectCookie)
@@ -324,8 +324,8 @@ describe('GET /api/v1/assessments/:assessmentId (bl-26-2 detail)', () => {
     const data = res.body.data;
     expect(data.id).toBe(assessmentId);
     expect(data.clips).toHaveLength(2);
-    expect(data.latestResult).not.toBeNull();
-    expect(data.latestResult.version).toBe(1);
+    // bl-37 L2: the row is pending_approval, so the member must not receive the grade yet
+    expect(data.latestResult).toBeNull();
     expect(data.reviewerRows).toEqual([]);
   });
 
@@ -369,5 +369,23 @@ describe('GET /api/v1/assessments/:assessmentId (bl-26-2 detail)', () => {
 
     expect(res.body.success).toBe(false);
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('after the Committee approves, the subject Member receives latestResult with status approved and the grade', async () => {
+    await http()
+      .post(`/api/v1/assessments/${assessmentId}/approve`)
+      .set('Cookie', committeeCookie)
+      .send({})
+      .expect(200);
+
+    const res = await http()
+      .get(`/api/v1/assessments/${assessmentId}`)
+      .set('Cookie', subjectCookie)
+      .expect(200);
+    expect(res.body.data.latestResult).toMatchObject({ status: 'approved', version: 2 });
+    expect(res.body.data.latestResult.grade).toEqual(
+      expect.objectContaining({ center: expect.any(String) }),
+    );
+    expect(res.body.data.reviewerRows).toEqual([]);
   });
 });
