@@ -171,15 +171,16 @@ describe('AdminEntryForm', () => {
       </QueryClientProvider>,
     );
 
-    const player1Btn = screen.getByTestId('player-picker-0').querySelector('button');
-    const player2Btn = screen.getByTestId('player-picker-1').querySelector('button');
-    const team1Btn = screen.getByTestId('team-combobox-0').querySelector('button');
-    const team2Btn = screen.getByTestId('team-combobox-1').querySelector('button');
+    const player1Btn = screen.getAllByText('Select Player')[0]!;
+    fireEvent.click(player1Btn); // player1 = u1
 
-    fireEvent.click(player1Btn!); // player1 = u1
-    fireEvent.click(player2Btn!); // player2 = u1 (duplicate!)
-    fireEvent.click(team1Btn!);
-    fireEvent.click(team2Btn!);
+    const player2Btn = screen.getAllByText('Select Player')[1]!;
+    fireEvent.click(player2Btn); // player2 = u1 (duplicate!)
+
+    const team1Btn = screen.getAllByText('Select Team')[0]!;
+    const team2Btn = screen.getAllByText('Select Team')[1]!;
+    fireEvent.click(team1Btn);
+    fireEvent.click(team2Btn);
 
     // Error message should appear
     const errorDiv = screen.getByText('เลือกผู้เล่นซ้ำกัน');
@@ -409,4 +410,65 @@ describe('AdminEntryForm', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledWith(forwardedResult);
   });
+
+  it('club field is disabled with hint until player is chosen, and label shows player name', () => {
+    const queryClient = createQueryClient();
+
+    mockCreateEntry.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+    mockForwardEntry.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AdminEntryForm eventId="EV1" />
+      </QueryClientProvider>,
+    );
+
+    // Verify card headings
+    expect(screen.getByRole('heading', { level: 2, name: 'ผู้เล่นที่ 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'ผู้เล่นที่ 2' })).toBeInTheDocument();
+
+    // Verify multi-club help text appears exactly once
+    expect(screen.getAllByText('ควรเลือกสโมสร เพราะกติกาจับสายใช้ทีม')).toHaveLength(1);
+
+    // Initial state: both club inputs disabled with placeholder 'เลือกผู้เล่นก่อน'
+    const team1Container = screen.getByTestId('entry-team-1');
+    const input1 = team1Container.querySelector('input')!;
+    expect(input1).toBeDisabled();
+    expect(input1).toHaveAttribute('placeholder', 'เลือกผู้เล่นก่อน');
+    expect(team1Container).toHaveTextContent('เลือกผู้เล่นก่อน');
+
+    const team2Container = screen.getByTestId('entry-team-2');
+    const input2 = team2Container.querySelector('input')!;
+    expect(input2).toBeDisabled();
+    expect(input2).toHaveAttribute('placeholder', 'เลือกผู้เล่นก่อน');
+    expect(team2Container).toHaveTextContent('เลือกผู้เล่นก่อน');
+
+    // Pick Player 1
+    const p1Btn = screen.getAllByText('Select Player')[0]!;
+    fireEvent.click(p1Btn);
+
+    // Player 1 club is now active TeamCombobox with label 'สโมสรของ Player 1'
+    expect(screen.getByText('Select Team')).toBeInTheDocument();
+    expect(screen.getByText('สโมสรของ Player 1')).toBeInTheDocument();
+
+    // Player 2 club remains disabled
+    const input2AfterP1 = screen.getByTestId('entry-team-2').querySelector('input')!;
+    expect(input2AfterP1).toBeDisabled();
+
+    // Pick Player 2
+    const p2Btn = screen.getAllByText('Select Player')[1]!;
+    fireEvent.click(p2Btn);
+
+    // Player 2 club is now active TeamCombobox with label for Player 2
+    const teamBtns = screen.getAllByText('Select Team');
+    expect(teamBtns).toHaveLength(2);
+    expect(screen.getByTestId('entry-team-2')).toHaveTextContent(/สโมสรของ Player/);
+  });
 });
+
