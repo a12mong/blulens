@@ -5,7 +5,7 @@ GOAL: after the browser's PUT, the server checks the object in MinIO and marks t
 STATE: branch dev/bl-36-clip-complete from origin/develop after bl-36-2 merges. StorageService (global):
   head(objectKey) -> { sizeBytes, contentType } | null; viewUrl(status, objectKey) -> string | null;
   CLIP_MAX_DURATION_SEC = 300. bl-36-2 stores the declared contentType + sizeBytes on the Clip row.
-SOURCES: openapi POST /clips/{clipId}/complete (Jim adds it per Kevin k201; if not yet on develop, build to this text):
+SOURCES: openapi POST /clips/{clipId}/complete (pinned by Jim in 5dabaa0):
   x-roles Member (owner of the DRAFT assessment); body { durationSec: integer 1..300 } (client-measured);
   200 -> Clip { id, status, viewUrl, durationSec, ... as the Clip schema }; idempotent when already uploaded.
 SPEC (files ONLY: apps/api/src/modules/assessments/clips.controller.ts NEW (@Controller() with route
@@ -14,7 +14,7 @@ SPEC (files ONLY: apps/api/src/modules/assessments/clips.controller.ts NEW (@Con
   - @Roles('Member') @HttpCode(200). zod { durationSec: int 1..100000 } -> 400 VALIDATION_FAILED; then
     durationSec > CLIP_MAX_DURATION_SEC -> 422 CLIP_TOO_LONG (ApiException with HttpStatus.UNPROCESSABLE_ENTITY).
   - ONE $transaction: lock the clip FOR UPDATE; clip missing, or its assessment's subjectUserId !== caller -> 404
-    CLIP_NOT_FOUND; assessment status !== 'draft' -> 409 ASSESSMENT_NOT_DRAFT; status 'uploaded' -> return it
+    CLIP_NOT_FOUND; assessment status !== 'draft' -> 404 CLIP_NOT_FOUND (openapi 5dabaa0); status 'uploaded' -> return it
     unchanged (idempotent); status 'rejected' -> 409 CLIP_REJECTED.
     obj = await storage.head(objectKey): null -> 409 CLIP_NOT_UPLOADED; obj.sizeBytes !== Number(clip.sizeBytes) or
     obj.contentType !== clip.contentType -> 422 CLIP_MISMATCH.

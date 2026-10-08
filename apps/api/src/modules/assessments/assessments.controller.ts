@@ -4,6 +4,7 @@ import { Roles, CurrentUser } from '../../common/auth/decorators';
 import { createZodDto } from '../../common/zod/zod';
 import { z } from 'zod';
 import { GRADES } from '@blulens/shared';
+import { CLIP_CONTENT_TYPES, CLIP_MAX_BYTES } from '../../common/storage/storage.service';
 import { AssessmentsService } from './assessments.service';
 import type { AuthUser } from '../../common/auth/auth.types';
 
@@ -80,6 +81,14 @@ const OverrideAssessmentSchema = z.object({
 
 class OverrideAssessmentDto extends createZodDto(OverrideAssessmentSchema) {}
 
+const UploadClipUrlSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  contentType: z.enum(CLIP_CONTENT_TYPES),
+  sizeBytes: z.number().int().min(1).max(CLIP_MAX_BYTES),
+});
+
+class UploadClipUrlDto extends createZodDto(UploadClipUrlSchema) {}
+
 @Controller('assessments')
 export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
@@ -103,6 +112,17 @@ export class AssessmentsController {
   @Roles('Member')
   async create(@Body() body: CreateAssessmentDto, @CurrentUser() user: AuthUser) {
     return this.assessmentsService.create(user, body);
+  }
+
+  @Post(':assessmentId/clips/upload-url')
+  @HttpCode(200)
+  @Roles('Member')
+  async getClipUploadUrl(
+    @Param('assessmentId', uuid) assessmentId: string,
+    @Body() body: UploadClipUrlDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.assessmentsService.getClipUploadUrl(assessmentId, body, user);
   }
 
   @Post(':assessmentId/submit')

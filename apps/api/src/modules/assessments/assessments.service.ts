@@ -4,9 +4,16 @@ import type { Assessment, AssessmentResult } from '@prisma/client';
 import { GRADE_KEYS, GRADES, gradeIndex, projectGrade, type GradeKey } from '@blulens/shared';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../../common/audit/audit.service';
+import {
+  CLIP_MAX_DURATION_SEC,
+  StorageService,
+  assessmentClipKey,
+  type ClipContentType,
+} from '../../common/storage/storage.service';
 import { ApiException } from '../../common/errors/api.exception';
 import { toGradeView } from '../../common/grades';
 import type { AuthUser } from '../../common/auth/auth.types';
+import { randomUUID } from 'node:crypto';
 
 export interface DecideOptions {
   allowedFrom: AssessmentStatus[];
@@ -60,6 +67,7 @@ export class AssessmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   async list(actor: AuthUser, query: ListAssessmentsParams) {
@@ -206,12 +214,14 @@ export class AssessmentsService {
       },
     });
 
-    const clips = assessment.clips.map((c) => ({
-      id: c.id,
-      status: c.status,
-      viewUrl: this.computeViewUrl(c.status, c.objectKey),
-      durationSec: c.durationSec,
-    }));
+    const clips = await Promise.all(
+      assessment.clips.map(async (c) => ({
+        id: c.id,
+        status: c.status,
+        viewUrl: await this.storage.viewUrl(c.status, c.objectKey),
+        durationSec: c.durationSec,
+      })),
+    );
 
     const latestResultRow = await this.prisma.assessmentResult.findFirst({
       where: { assessmentId },
@@ -318,19 +328,6 @@ export class AssessmentsService {
     };
   }
 
-  private computeViewUrl(status: string, objectKey: string): string | null {
-    if (status !== 'uploaded') {
-      return null;
-    }
-    if (
-      objectKey.startsWith('/') ||
-      objectKey.startsWith('http://') ||
-      objectKey.startsWith('https://')
-    ) {
-      return objectKey;
-    }
-    return null;
-  }
   async create(
     actor: AuthUser,
     body: {
@@ -1023,5 +1020,159 @@ export class AssessmentsService {
       createdAt: assessment.createdAt,
       updatedAt: assessment.updatedAt,
     };
+  }
+
+  async getClipUploadUrl(
+    assessmentId: string,
+    body: { fileName: string; contentType: ClipContentType; sizeBytes: number },
+    user: AuthUser,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // Lock assessment FOR UPDATE
+      const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM assessments WHERE id = ${assessmentId}::uuid FOR UPDATE
+      `;
+      if (lockedRows.length === 0) {
+        throw ApiException.notFound('ไม่พบคำขอประเมินที่ต้องการ', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      // Fetch assessment with clips
+      const assessment = await tx.assessment.findUnique({
+        where: { id: assessmentId },
+        include: { clips: { select: { status: true } } },
+      });
+
+      if (!assessment) {
+        throw ApiException.notFound('ไม่พบคำขอประเมินที่ต้องการ', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      // Check subject is caller
+      if (assessment.subjectUserId !== user.id) {
+        throw ApiException.notFound('ไม่พบคำขอประเมินที่ต้องการ', 'ASSESSMENT_NOT_FOUND');
+      }
+
+      // Check status is draft
+      if (assessment.status !== 'draft') {
+        throw ApiException.conflict('ASSESSMENT_NOT_DRAFT', 'อัปโหลดคลิปได้เฉพาะคำขอที่ยังเป็นฉบับร่าง');
+      }
+
+      // Check clip limit (max 3 non-rejected clips)
+      const activeClips = assessment.clips.filter((c) => c.status !== 'rejected').length;
+      if (activeClips >= 3) {
+        throw ApiException.conflict('CLIP_LIMIT_REACHED', 'อัปโหลดคลิปได้สูงสุด 3 คลิปต่อคำขอ');
+      }
+
+      // Create clip and presign URL
+      const clipId = randomUUID();
+      const objectKey = assessmentClipKey(assessmentId, clipId, body.contentType);
+      const now = new Date();
+      const presign = await this.storage.presignPut(objectKey, body.contentType, now);
+
+      await tx.clip.create({
+        data: {
+          id: clipId,
+          assessmentId,
+          objectKey,
+          status: 'pending_upload',
+          contentType: body.contentType,
+          sizeBytes: BigInt(body.sizeBytes),
+          uploadExpiresAt: presign.expiresAt,
+        },
+      });
+
+      return {
+        clipId,
+        uploadUrl: presign.url,
+        expiresAt: presign.expiresAt,
+      };
+    });
+  }
+
+  /** Presign flow step 3: the browser's PUT is done; verify the object and mark the clip playable. */
+  async completeClip(clipId: string, durationSec: number, user: AuthUser) {
+    if (durationSec > CLIP_MAX_DURATION_SEC) {
+      throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, 'CLIP_TOO_LONG', 'คลิปยาวได้ไม่เกิน 5 นาที');
+    }
+    const clip = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM clips WHERE id = ${clipId}::uuid FOR UPDATE
+      `;
+      const row =
+        locked.length > 0
+          ? await tx.clip.findUnique({
+              where: { id: clipId },
+              include: { assessment: { select: { subjectUserId: true, status: true } } },
+            })
+          : null;
+      // non-owner or no longer a draft: 404, so clip ids of other members do not leak
+      if (!row || row.assessment.subjectUserId !== user.id || row.assessment.status !== 'draft') {
+        throw ApiException.notFound('ไม่พบคลิปที่ต้องการ', 'CLIP_NOT_FOUND');
+      }
+      if (row.status === 'uploaded') return row;
+      if (row.status === 'rejected') {
+        throw ApiException.conflict('CLIP_REJECTED', 'คลิปนี้ถูกปฏิเสธแล้ว กรุณาอัปโหลดคลิปใหม่');
+      }
+
+      const stored = await this.storage.head(row.objectKey);
+      if (!stored) {
+        throw ApiException.conflict('CLIP_NOT_UPLOADED', 'ยังไม่พบไฟล์คลิปที่อัปโหลด');
+      }
+      if (stored.sizeBytes !== Number(row.sizeBytes) || stored.contentType !== row.contentType) {
+        throw new ApiException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'CLIP_MISMATCH',
+          'ไฟล์ที่อัปโหลดไม่ตรงกับขนาดหรือชนิดที่แจ้งไว้',
+        );
+      }
+
+      const updated = await tx.clip.update({
+        where: { id: clipId },
+        data: { status: 'uploaded', durationSec, uploadExpiresAt: null },
+      });
+      await this.audit.record(
+        {
+          actorId: user.id,
+          action: 'clip.complete',
+          entityType: 'clip',
+          entityId: clipId,
+          before: { status: row.status },
+          after: { status: updated.status, durationSec, sizeBytes: stored.sizeBytes },
+        },
+        tx,
+      );
+      return updated;
+    });
+
+    return {
+      id: clip.id,
+      status: clip.status,
+      viewUrl: await this.storage.viewUrl(clip.status, clip.objectKey),
+      durationSec: clip.durationSec,
+    };
+  }
+
+  /** Fresh 15-min presigned GET for a member clip: owner, an assigned reviewer, or Committee/Admin. */
+  async clipPlaybackUrl(clipId: string, user: AuthUser) {
+    const clip = await this.prisma.clip.findUnique({
+      where: { id: clipId },
+      include: { assessment: { select: { subjectUserId: true } } },
+    });
+    if (!clip) {
+      throw ApiException.notFound('ไม่พบคลิปที่ต้องการ', 'CLIP_NOT_FOUND');
+    }
+    const isStaff = user.roles.some((r) => r === 'Committee' || r === 'Admin');
+    const allowed =
+      isStaff ||
+      clip.assessment.subjectUserId === user.id ||
+      (await this.prisma.reviewAssignment.count({
+        where: { assessmentId: clip.assessmentId, reviewerId: user.id, kind: 'assessment' },
+      })) > 0;
+    if (!allowed) {
+      throw ApiException.forbidden('ไม่มีสิทธิ์ดูคลิปนี้', 'CLIP_FORBIDDEN');
+    }
+    if (clip.status !== 'uploaded') {
+      throw ApiException.conflict('CLIP_NOT_UPLOADED', 'คลิปนี้ยังอัปโหลดไม่เสร็จ');
+    }
+    return this.storage.presignGet(clip.objectKey);
   }
 }
