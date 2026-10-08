@@ -62,6 +62,7 @@ export interface MappedMatch {
   court: string | null;
   umpireId: string | null;
   reportedBy: string | null;
+  reportedByName: string | null;
   reportedAt: string | null;
   confirmedBy: string | null;
   confirmedAt: string | null;
@@ -165,7 +166,36 @@ export class MatchesService {
     return entryMap;
   }
 
-  private mapMatch(m: Match, entryMap: Map<string, EntryRef>, format: MatchFormat): MappedMatch {
+  private async loadUserNames(
+    userIds: string[],
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Map<string, string>> {
+    const validIds = Array.from(
+      new Set(userIds.filter((id): id is string => typeof id === 'string' && id.length > 0)),
+    );
+    if (validIds.length === 0) {
+      return new Map();
+    }
+
+    const users = await client.user.findMany({
+      where: { id: { in: validIds } },
+      select: { id: true, displayName: true },
+    });
+
+    const userMap = new Map<string, string>();
+    for (const u of users) {
+      userMap.set(u.id, u.displayName);
+    }
+    return userMap;
+  }
+
+  private mapMatch(
+    m: Match,
+    entryMap: Map<string, EntryRef>,
+    format: MatchFormat,
+    userNames?: Map<string, string>,
+  ): MappedMatch {
+    const reportedByName = m.reportedBy && userNames ? (userNames.get(m.reportedBy) ?? null) : null;
     return {
       id: m.id,
       stage: m.stage,
@@ -181,6 +211,7 @@ export class MatchesService {
       court: m.court ?? null,
       umpireId: m.umpireId ?? null,
       reportedBy: m.reportedBy ?? null,
+      reportedByName,
       reportedAt: m.reportedAt ? m.reportedAt.toISOString() : null,
       confirmedBy: m.confirmedBy ?? null,
       confirmedAt: m.confirmedAt ? m.confirmedAt.toISOString() : null,
@@ -263,6 +294,11 @@ export class MatchesService {
     );
 
     const entryMap = await this.loadEntryMap(this.prisma, entryIds);
+    const userNames = await this.loadUserNames(
+      matches
+        .map((m) => m.reportedBy)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
 
     const groupFormat = resolveMatchFormat(event.format, 'group');
     const knockoutFormat = resolveMatchFormat(event.format, 'knockout');
@@ -272,7 +308,9 @@ export class MatchesService {
       third_place: knockoutFormat,
     };
 
-    return matches.map((m) => this.mapMatch(m, entryMap, formats[m.stage] ?? knockoutFormat));
+    return matches.map((m) =>
+      this.mapMatch(m, entryMap, formats[m.stage] ?? knockoutFormat, userNames),
+    );
   }
 
   async getEventStandings(eventId: string, user?: AuthUser): Promise<EventGroupStanding[]> {
@@ -477,6 +515,13 @@ export class MatchesService {
     );
 
     const entryMap = await this.loadEntryMap(this.prisma, allEntryIds);
+    const userNames = await this.loadUserNames(
+      groups.flatMap((g) =>
+        g.matches
+          .map((m) => m.reportedBy)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    );
     const groupFormat = resolveMatchFormat(event.format, 'group');
 
     return groups.map((g) => ({
@@ -488,7 +533,7 @@ export class MatchesService {
         pot: m.pot,
         entry: entryMap.get(m.entryId) ?? null,
       })),
-      matches: g.matches.map((m) => this.mapMatch(m, entryMap, groupFormat)),
+      matches: g.matches.map((m) => this.mapMatch(m, entryMap, groupFormat, userNames)),
     }));
   }
 
@@ -853,6 +898,11 @@ export class MatchesService {
       ),
     );
     const entryMap = await this.loadEntryMap(this.prisma, entryIds);
+    const userNames = await this.loadUserNames(
+      eligibleMatches
+        .map((m) => m.reportedBy)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
 
     // 7. Map and return
     return eligibleMatches.map((m) => {
@@ -863,7 +913,7 @@ export class MatchesService {
       } else {
         format = resolveMatchFormat(null, m.stage);
       }
-      return this.mapMatch(m, entryMap, format);
+      return this.mapMatch(m, entryMap, format, userNames);
     });
   }
 
@@ -1136,7 +1186,11 @@ export class MatchesService {
 
       // 11. Return mapped Match
       const entryMap = await this.loadEntryMap(tx, entryIds);
-      return this.mapMatch(updated, entryMap, format);
+      const userNames = await this.loadUserNames(
+        updated.reportedBy ? [updated.reportedBy] : [],
+        tx,
+      );
+      return this.mapMatch(updated, entryMap, format, userNames);
     });
   }
 

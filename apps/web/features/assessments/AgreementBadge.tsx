@@ -1,3 +1,4 @@
+import { WarningIcon } from '@/components/ui/Icon';
 import { type components } from '@/lib/api/schema';
 
 type AgreementValue = components['schemas']['AgreementValue'];
@@ -42,7 +43,7 @@ export function AgreementBadge({ value }: AgreementBadgeProps) {
   return (
     <span data-testid="agreement-badge" data-band={band}>
       {kappaText} {bandText}
-      {hasWarning && ' ⚠'}
+      {hasWarning && <WarningIcon className="w-4 h-4 ml-1 inline" />}
     </span>
   );
 }

@@ -154,4 +154,22 @@ describe('ReviewCard', () => {
     expect(dueEl).toHaveTextContent('เหลือ');
     expect(dueEl).toHaveTextContent('เหลือ 2 วัน');
   });
+
+  it('due badge contains an svg icon and no emoji', () => {
+    const now = new Date('2026-10-08T12:00:00Z');
+    const pastDueAt = '2026-10-07T12:00:00Z'; // past due
+
+    const assignment = {
+      id: 'aaaa-bbbb-0003',
+      state: 'open' as const,
+      dueAt: pastDueAt,
+      submittedAt: null,
+    };
+
+    render(<ReviewCard assignment={assignment} now={now} />);
+
+    const dueEl = screen.getByTestId('review-card-due');
+    expect(dueEl.querySelector('svg')).toBeInTheDocument();
+    expect(dueEl.textContent).not.toMatch(/[⚠️⏱️]/);
+  });
 });

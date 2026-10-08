@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { GradeBand } from '@/components/ui/GradeBand';
+import { WarningIcon } from '@/components/ui/Icon';
 import {
   DEMO_DATA,
   type DemoAssessmentPayload,
@@ -138,9 +139,11 @@ export function AssessmentResultMock({
                 : 'bg-rose-50 text-rose-900 border-rose-200'
             }`}
           >
-            <span className="text-base">
-              {activeState === 'provisional' ? 'ℹ️' : '⚠️'}
-            </span>
+            {activeState === 'provisional' ? (
+              <span className="text-base">ℹ</span>
+            ) : (
+              <WarningIcon className="w-5 h-5 flex-shrink-0" />
+            )}
             <span>{current.banner}</span>
           </div>
         ) : null}
@@ -353,7 +356,10 @@ export function AssessmentResultMock({
                             data-testid="demo-outlier-badge"
                             className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300"
                           >
-                            <span>⚑ ตัดออก (outlier)</span>
+                            <span className="inline-flex items-center gap-1">
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" /><path d="M13 7h-2v5h2z" /><path d="M13 14h-2v2h2z" /></svg>
+                              ตัดออก (outlier)
+                            </span>
                             <span className="hidden sm:inline">
                               · ค่าผิดปกติ ถูกตัดออก
                             </span>

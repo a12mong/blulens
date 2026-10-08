@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CheckIcon } from '@/components/ui/Icon';
+import { CheckIcon, TimerIcon } from '@/components/ui/Icon';
 import type { components } from '@/lib/api/schema';
 
 export type AssignmentProgressRow = components['schemas']['AssignmentProgressRow'];
@@ -49,7 +49,7 @@ function getStateIcon(state: AssignmentProgressRow['state']) {
     case 'submitted':
       return <CheckIcon className="w-4 h-4" />;
     case 'open':
-      return <span className="inline-block text-primary">⏳</span>;
+      return <TimerIcon className="w-4 h-4 text-primary" />;
     case 'expired':
       return <span className="inline-block text-destructive">✕</span>;
     case 'declined':
