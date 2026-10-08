@@ -174,6 +174,9 @@ export function Bracket({
     };
   };
 
+  const thirdPlace = bracketQuery?.data?.thirdPlace ?? null;
+  const champion = bracketQuery?.data?.champion ?? null;
+
   const activeRounds =
     rounds && rounds.length > 0 ? rounds : bracketQuery?.data?.rounds;
 
@@ -244,10 +247,9 @@ export function Bracket({
         className="hidden lg:flex gap-6 overflow-x-auto p-4 items-stretch"
       >
         {sortedRounds.map((round, rIdx) => {
-          const { title, pixelLabel } = getRoundLabels(
-            sortedRounds.length,
-            rIdx,
-          );
+          const labels = getRoundLabels(sortedRounds.length, rIdx);
+          const pixelLabel = labels.pixelLabel;
+          const title = (round as { nameTh?: string }).nameTh || labels.title;
           return (
             <div
               key={round.round ?? rIdx}
@@ -281,10 +283,9 @@ export function Bracket({
       {/* Mobile layout: accordion list per round */}
       <div data-testid="bracket-list" className="lg:hidden flex flex-col gap-4 p-4">
         {sortedRounds.map((round, rIdx) => {
-          const { title, pixelLabel } = getRoundLabels(
-            sortedRounds.length,
-            rIdx,
-          );
+          const labels = getRoundLabels(sortedRounds.length, rIdx);
+          const pixelLabel = labels.pixelLabel;
+          const title = (round as { nameTh?: string }).nameTh || labels.title;
           return (
             <details
               key={round.round ?? rIdx}
@@ -311,6 +312,35 @@ export function Bracket({
           );
         })}
       </div>
+      {champion && (
+        <div
+          data-testid="bracket-champion"
+          className="mx-4 mb-4 border-2 border-night-line bg-night-panel p-3 font-sans"
+        >
+          <span className="font-pixel text-xs text-night-muted">แชมป์</span>{' '}
+          <span className="font-semibold text-night-foreground">
+            {champion.displayName ?? champion.entryId}
+          </span>
+        </div>
+      )}
+
+      {thirdPlace && (
+        <div
+          data-testid="bracket-third-place"
+          className="mx-4 mb-4 border-2 border-night-line bg-night-panel p-3"
+        >
+          <h3 className="font-sans text-sm font-semibold text-night-foreground pb-2">
+            ชิงที่ 3
+          </h3>
+          <MatchCard
+            match={{
+              ...toMatchCardData(thirdPlace, thirdPlace.round ?? 0),
+              isThirdPlace: true,
+            }}
+            highlightEntryId={highlightEntryId}
+          />
+        </div>
+      )}
     </section>
   );
 }
