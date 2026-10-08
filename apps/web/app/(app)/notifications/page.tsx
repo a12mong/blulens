@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { NotificationsPage } from '@/features/notifications/NotificationsPage';
 
 export default function Page() {
-  if (process.env.NEXT_PUBLIC_NOTIFICATIONS !== '1') {
+  if (process.env.NEXT_PUBLIC_NOTIFICATIONS === '0') {
     notFound();
   }
   return (

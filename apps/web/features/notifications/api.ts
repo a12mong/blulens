@@ -9,7 +9,7 @@ export type NotificationPage = components['schemas']['NotificationPage'];
 
 export const NOTIFICATIONS_POLL_MS = 60_000;
 
-export const notificationsEnabled = () => process.env.NEXT_PUBLIC_NOTIFICATIONS === '1';
+export const notificationsEnabled = () => process.env.NEXT_PUBLIC_NOTIFICATIONS !== '0';
 
 export const unreadCountKey = ['notifications', 'unread-count'] as const;
 export const notificationsKey = ['notifications', 'list'] as const;
