@@ -81,6 +81,13 @@ export class MatchesController {
     return this.matches.getEventGroups(eventId, query, user);
   }
 
+  @Roles('Committee', 'Admin')
+  @HttpCode(HttpStatus.OK)
+  @Post('events/:eventId/groups/confirm')
+  confirmEventGroups(@Param('eventId', uuid) eventId: string, @CurrentUser() user: AuthUser) {
+    return this.matches.confirmEventGroups(eventId, user);
+  }
+
   @Roles('Umpire', 'Committee', 'Admin')
   @Put('matches/:matchId/result')
   putMatchResult(
