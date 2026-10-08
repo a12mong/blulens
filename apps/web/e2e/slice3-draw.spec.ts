@@ -164,16 +164,20 @@ test.describe.serial('slice 3: committee group draw', () => {
     });
   });
 
-  test('D3b KNOWN ISSUE (test.fail): reloading the groups page after a preview exists must not break "จับกลุ่ม"', async ({ browser }) => {
-    test.fail(true, 'FE keeps the preview only in page state: after a reload, pressing จับกลุ่ม sends a reason-less re-preview and the page shows "ข้อมูลไม่ถูกต้อง" (400). FE should load the latest preview or ask for a reason.');
+  test('D3b reload with an existing preview: "จับกลุ่ม" asks for a reason (no reason-less 400) and creates a new preview', async ({ browser }) => {
     const ev = await setupEvent('reload');
     expect((await committeeCtx.post(`events/${ev}/groups/preview`, { data: {} })).status()).toBe(201);
     const ctx = await browser.newContext({ storageState: COMMITTEE_AUTH_FILE, baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3190' });
     const pg = await ctx.newPage();
     await pg.goto(`/committee/events/${ev}/groups`);
-    await expect(pg.getByTestId('draw-summary').or(pg.getByTestId('draw-preview'))).toBeVisible({ timeout: 20000 });
-    if (await pg.getByTestId('draw-preview').isVisible()) await pg.getByTestId('draw-preview').click();
-    await expect(pg.getByTestId('draw-summary'), 'an existing preview must be shown, not an error').toBeVisible({ timeout: 8000 });
+    await expect(pg.getByTestId('draw-preview')).toBeVisible({ timeout: 20000 });
+    await pg.getByTestId('draw-preview').click();
+    await pg.getByTestId('reason-input').fill('สุ่มใหม่หลังรีโหลดหน้า');
+    const resp = pg.waitForResponse((r) => r.url().includes(`/events/${ev}/groups/preview`) && r.request().method() === 'POST');
+    await pg.getByTestId('reason-submit').click();
+    expect((await resp).status()).toBe(201);
+    await expect(pg.getByTestId('draw-summary')).toBeVisible({ timeout: 20000 });
+    await expect(pg.getByTestId('draw-error')).toHaveCount(0);
     await ctx.close();
   });
 
